@@ -8,6 +8,11 @@ import { FollowUpsService } from "./follow-ups.service";
 export class FollowUpsController {
   constructor(private readonly followUpsService: FollowUpsService) {}
 
+  @Get("overdue-count")
+  overdueCount(@CurrentUser() user: RequestUser) {
+    return this.followUpsService.countDueSoonOpen(user);
+  }
+
   @Get()
   list(@CurrentUser() user: RequestUser, @Query("status") status?: string) {
     return this.followUpsService.list(user, status);

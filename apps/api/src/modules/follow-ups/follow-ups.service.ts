@@ -1,16 +1,27 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { FollowUpTaskStatus } from "@oem-crm/shared";
+import { EventEmitter2 } from "@nestjs/event-emitter";
+import { CustomerStage, FollowUpTaskStatus } from "@oem-crm/shared";
 import { RequestUser } from "../../common/auth/current-user.decorator";
 import { buildCustomerDataScopeWhere } from "../../common/query/data-scope";
 import { PrismaService } from "../../prisma/prisma.service";
+import { CustomerStageService } from "../customers/customer-stage.service";
 import { CreateFollowUpTaskDto } from "./dto/create-follow-up-task.dto";
+import { FollowUpRulesService } from "./follow-up-rules.service";
+import { FOLLOW_UP_STAGE_RULES } from "./follow-up-stage-rules";
 import { UpdateFollowUpTaskDto } from "./dto/update-follow-up-task.dto";
+import { SSE_EVENTS, FollowUpTaskChangedPayload } from "../../common/events/event-types";
 
 @Injectable()
 export class FollowUpsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly followUpRules: FollowUpRulesService,
+    private readonly eventEmitter: EventEmitter2,
+    private readonly customerStageService: CustomerStageService
+  ) {}
 
-  list(user: RequestUser, status?: string) {
+  async list(user: RequestUser, status?: string) {
+    await this.followUpRules.syncExpiredFollowUps();
     return this.prisma.followUpTask.findMany({
       where: {
         ...(status ? { status: status as never } : {}),
@@ -24,12 +35,23 @@ export class FollowUpsService {
     });
   }
 
+  async countDueSoonOpen(user: RequestUser) {
+    await this.followUpRules.syncExpiredFollowUps();
+    const count = await this.prisma.followUpTask.count({
+      where: {
+        status: FollowUpTaskStatus.Open as never,
+        customer: buildCustomerDataScopeWhere(user)
+      }
+    });
+    return { count };
+  }
+
   async create(user: RequestUser, dto: CreateFollowUpTaskDto) {
-    await this.ensureCustomerVisible(user, dto.customerId);
+    const customer = await this.ensureCustomerVisible(user, dto.customerId);
     return this.prisma.followUpTask.create({
       data: {
         customerId: dto.customerId,
-        ownerId: dto.ownerId ?? user.id,
+        ownerId: dto.ownerId ?? customer.ownerId ?? user.id,
         type: dto.type as never,
         title: dto.title,
         description: dto.description,
@@ -53,14 +75,42 @@ export class FollowUpsService {
   }
 
   async complete(user: RequestUser, id: string) {
-    await this.ensureVisibleTask(user, id);
-    return this.prisma.followUpTask.update({
+    const task = await this.ensureVisibleTask(user, id);
+
+    const completedTask = await this.prisma.followUpTask.update({
       where: { id },
       data: {
         status: FollowUpTaskStatus.Completed as never,
         completedAt: new Date()
       }
     });
+
+    const nextStage = this.getNextStageForCompletedTask(task.type);
+    if (nextStage) {
+      await this.customerStageService.advanceCustomerStage({
+        customerId: task.customerId,
+        toStage: nextStage as CustomerStage,
+        changedById: user.id,
+        reason: `Task completed: ${task.type}`
+      });
+    }
+
+    const overdueCount = await this.prisma.followUpTask.count({
+      where: {
+        status: "OPEN" as never,
+        customer: { organizationId: user.organizationId }
+      }
+    });
+    this.eventEmitter.emit(SSE_EVENTS.FOLLOW_UP_TASK_COMPLETED, {
+      orgId: user.organizationId,
+      targetUserIds: [user.id],
+      taskId: id,
+      customerId: task.customerId,
+      type: task.type,
+      overdueCount
+    } satisfies FollowUpTaskChangedPayload);
+
+    return completedTask;
   }
 
   async createByRule(input: {
@@ -103,5 +153,9 @@ export class FollowUpsService {
       throw new NotFoundException("Customer not found");
     }
     return customer;
+  }
+
+  private getNextStageForCompletedTask(taskType: string) {
+    return FOLLOW_UP_STAGE_RULES[taskType]?.nextStage ?? null;
   }
 }

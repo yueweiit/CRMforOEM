@@ -3,12 +3,16 @@ import { CustomerStage } from "@oem-crm/shared";
 import { RequestUser } from "../../common/auth/current-user.decorator";
 import { buildCustomerDataScopeWhere } from "../../common/query/data-scope";
 import { PrismaService } from "../../prisma/prisma.service";
+import { CustomerStageService } from "../customers/customer-stage.service";
 import { CreateQuoteDto } from "./dto/create-quote.dto";
 import { CreateSampleRequestDto } from "./dto/create-sample-request.dto";
 
 @Injectable()
 export class CommercialService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly customerStageService: CustomerStageService
+  ) {}
 
   listQuotes(user: RequestUser, customerId?: string) {
     return this.prisma.quote.findMany({
@@ -35,9 +39,16 @@ export class CommercialService {
         status: "SENT" as never
       }
     });
-    await this.prisma.customer.update({
-      where: { id: dto.customerId },
-      data: { stage: CustomerStage.Quoting as never }
+    await this.customerStageService.advanceCustomerStage({
+      customerId: dto.customerId,
+      toStage: CustomerStage.Quoting,
+      changedById: user.id,
+      reason: "Quote created",
+      expectedFromStages: [
+        CustomerStage.Replied,
+        CustomerStage.RequirementConfirming,
+        CustomerStage.Quoting
+      ]
     });
     return quote;
   }
@@ -65,9 +76,15 @@ export class CommercialService {
         status: (dto.status ?? "REQUESTED") as never
       }
     });
-    await this.prisma.customer.update({
-      where: { id: dto.customerId },
-      data: { stage: CustomerStage.Sampling as never }
+    await this.customerStageService.advanceCustomerStage({
+      customerId: dto.customerId,
+      toStage: CustomerStage.Sampling,
+      changedById: user.id,
+      reason: "Sample request created",
+      expectedFromStages: [
+        CustomerStage.Quoting,
+        CustomerStage.Sampling
+      ]
     });
     return sample;
   }

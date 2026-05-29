@@ -3,15 +3,16 @@ import { CurrentUser, RequestUser } from "../../common/auth/current-user.decorat
 import { ApproveEmailDraftDto } from "./dto/approve-email-draft.dto";
 import { CreateEmailAccountDto } from "./dto/create-email-account.dto";
 import { GenerateEmailDraftDto } from "./dto/generate-email-draft.dto";
+import { UpdateEmailAccountDto } from "./dto/update-email-account.dto";
 import { UpdateEmailDraftDto } from "./dto/update-email-draft.dto";
 import { EmailsService } from "./emails.service";
-import { ImapSyncService } from "./imap-sync.service";
+import { ImapIdleService } from "./imap-idle.service";
 
 @Controller()
 export class EmailsController {
   constructor(
     private readonly emailsService: EmailsService,
-    private readonly imapSyncService: ImapSyncService
+    private readonly imapIdleService: ImapIdleService
   ) {}
 
   @Get("email-accounts")
@@ -25,7 +26,7 @@ export class EmailsController {
   }
 
   @Patch("email-accounts/:id")
-  updateAccount(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: Partial<CreateEmailAccountDto>) {
+  updateAccount(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: UpdateEmailAccountDto) {
     return this.emailsService.updateAccount(user, id, dto);
   }
 
@@ -95,6 +96,6 @@ export class EmailsController {
 
   @Post("email-sync/run")
   runSync(@CurrentUser() user: RequestUser) {
-    return this.imapSyncService.syncForUser(user);
+    return this.imapIdleService.manualSyncForUser(user.id);
   }
 }

@@ -2,9 +2,11 @@ import { BullModule } from "@nestjs/bullmq";
 import { Module } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
 import { ConfigModule, ConfigService } from "@nestjs/config";
+import { EventEmitterModule } from "@nestjs/event-emitter";
 import { JwtAuthGuard } from "./common/guards/jwt-auth.guard";
 import { PermissionsGuard } from "./common/guards/permissions.guard";
 import { RolesGuard } from "./common/guards/roles.guard";
+import { SseModule } from "./common/sse/sse.module";
 import { AiModule } from "./modules/ai/ai.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { CommercialModule } from "./modules/commercial/commercial.module";
@@ -33,7 +35,9 @@ import { PrismaModule } from "./prisma/prisma.module";
         }
       })
     }),
+    EventEmitterModule.forRoot(),
     PrismaModule,
+    SseModule,
     AuthModule,
     CommercialModule,
     CustomersModule,

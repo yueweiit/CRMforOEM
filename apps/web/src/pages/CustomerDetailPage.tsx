@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bot, Globe2, MailPlus, NotebookTabs, Star } from "lucide-react";
 import { NavLink, useParams } from "react-router-dom";
 import { apiGet, apiPatch, apiPost } from "../api/http";
+import { showClientToast } from "../components/Toast";
 
 type CustomerDetail = {
   id: string;
@@ -494,23 +495,62 @@ function ScorePanel({ customer }: { customer: CustomerDetail }) {
 
 function EmailPanel({ customer, customerId, onChanged }: { customer: CustomerDetail; customerId: string; onChanged: () => void }) {
   const queryClient = useQueryClient();
-  const [draftForm, setDraftForm] = useState({ purpose: "FIRST_OUTREACH", toEmail: customer.contacts[0]?.email ?? "", emailAccountId: "", userInstructions: "" });
+  const contactOptions = customer.contacts.filter((contact) => Boolean(contact.email));
+  const [draftForm, setDraftForm] = useState({ purpose: "FIRST_OUTREACH", toEmail: contactOptions[0]?.email ?? "", emailAccountId: "", userInstructions: "" });
   const [editDraft, setEditDraft] = useState<Record<string, string>>({});
   const { data: accounts = [] } = useQuery({ queryKey: ["email-accounts"], queryFn: () => apiGet<EmailAccount[]>("/email-accounts") });
-  const { data: drafts = [] } = useQuery({ queryKey: ["email-drafts", customerId], queryFn: () => apiGet<EmailDraft[]>(`/customers/${customerId}/email-drafts`) });
+  const { data: drafts = [] } = useQuery({
+    queryKey: ["email-drafts", customerId],
+    queryFn: () => apiGet<EmailDraft[]>(`/customers/${customerId}/email-drafts`),
+    refetchInterval: (query) => {
+      const data = query.state.data as EmailDraft[] | undefined;
+      const hasGenerating = data?.some((draft) => !draft.body);
+      return hasGenerating ? 3000 : false;
+    }
+  });
   const { data: threads = [] } = useQuery({ queryKey: ["email-threads", customerId], queryFn: () => apiGet<EmailThread[]>(`/customers/${customerId}/email-threads`) });
-  const generate = useMutation({ mutationFn: () => apiPost<EmailDraft>(`/customers/${customerId}/email-drafts/generate`, cleanPayload(draftForm)), onSuccess: () => invalidateEmail(queryClient, customerId, onChanged) });
+  const generate = useMutation({
+    mutationFn: () => apiPost<{ id: string; status: string; message: string }>(`/customers/${customerId}/email-drafts/generate`, cleanPayload(draftForm)),
+    onSuccess: () => {
+      invalidateEmail(queryClient, customerId, onChanged);
+    }
+  });
   const update = useMutation({ mutationFn: (draft: EmailDraft) => apiPatch(`/email-drafts/${draft.id}`, cleanPayload({ subject: editDraft[`subject:${draft.id}`] ?? draft.subject, body: editDraft[`body:${draft.id}`] ?? draft.body, emailAccountId: editDraft[`account:${draft.id}`] ?? draft.emailAccountId })), onSuccess: () => invalidateEmail(queryClient, customerId, onChanged) });
   const approve = useMutation({ mutationFn: (draftId: string) => apiPost(`/email-drafts/${draftId}/approve`, { reviewComment: "Approved in customer detail" }), onSuccess: () => invalidateEmail(queryClient, customerId, onChanged) });
-  const send = useMutation({ mutationFn: (draftId: string) => apiPost(`/email-drafts/${draftId}/send`), onSuccess: () => invalidateEmail(queryClient, customerId, onChanged) });
+  const send = useMutation({
+    mutationFn: (draftId: string) => apiPost(`/email-drafts/${draftId}/send`),
+    onSuccess: () => {
+      if(draftForm.purpose === 'SAMPLE_FOLLOW_UP'){
+        showClientToast({
+          type: "success", 
+          title: "样品跟进邮件已发送",
+          message: "请前往“样品”页更新样品状态，并继续跟进客户。" 
+        });
+      }else{
+        showClientToast({
+          type: "success",
+          title: "邮件已发送",
+          message: "邮件已成功发送给客户。"
+      });
+      invalidateEmail(queryClient, customerId, onChanged);
+      }
+    },
+    onError: (error) => {
+      showClientToast({
+        type: "error",
+        title: "邮件发送失败",
+        message: error instanceof Error ? error.message : "邮件发送失败"
+      });
+    }
+  });
 
   return (
     <div className="page-stack">
       <section className="panel">
         <div className="panel-title"><h2>AI邮件生成</h2><span>只生成草稿，人工审核后发送</span></div>
         <div className="form-grid">
-          <label><span>邮件类型</span><select value={draftForm.purpose} onChange={(event) => setDraftForm({ ...draftForm, purpose: event.target.value })}><option value="FIRST_OUTREACH">首封开发邮件</option><option value="SECOND_FOLLOW_UP">未回复跟进</option><option value="QUOTE_FOLLOW_UP">报价跟进</option><option value="SAMPLE_FOLLOW_UP">样品推进</option></select></label>
-          <Field label="收件人" value={draftForm.toEmail} onChange={(toEmail) => setDraftForm({ ...draftForm, toEmail })} />
+          <label><span>邮件类型</span><select value={draftForm.purpose} onChange={(event) => setDraftForm({ ...draftForm, purpose: event.target.value })}><option value="FIRST_OUTREACH">首封开发邮件</option><option value="SECOND_FOLLOW_UP">未回复跟进</option><option value="THIRD_FOLLOW_UP">产品补充跟进</option><option value="REQUIREMENT_CONFIRMATION">需求确认</option><option value="QUOTE_FOLLOW_UP">报价跟进</option><option value="SAMPLE_FOLLOW_UP">样品推进</option></select></label>
+          <label><span>收件人</span><select value={draftForm.toEmail} onChange={(event) => setDraftForm({ ...draftForm, toEmail: event.target.value })}><option value="">选择联系人邮箱</option>{contactOptions.map((contact) => <option value={contact.email} key={contact.id}>{contact.name || contact.email} · {contact.email}</option>)}</select></label>
           <label><span>发件邮箱</span><select value={draftForm.emailAccountId} onChange={(event) => setDraftForm({ ...draftForm, emailAccountId: event.target.value })}><option value="">发送时自动选择</option>{accounts.map((account) => <option value={account.id} key={account.id}>{account.name} · {account.email} {account.scope === "SHARED" ? "(共享)" : ""}</option>)}</select></label>
           <label className="wide-field"><span>补充要求</span><textarea value={draftForm.userInstructions} onChange={(event) => setDraftForm({ ...draftForm, userInstructions: event.target.value })} /></label>
           <div className="wide-field"><button className="primary-button" disabled={!draftForm.toEmail || generate.isPending} onClick={() => generate.mutate()}>{generate.isPending ? "生成中..." : "生成AI草稿"}</button></div>
@@ -522,7 +562,11 @@ function EmailPanel({ customer, customerId, onChanged }: { customer: CustomerDet
           <div className="draft-editor" key={draft.id}>
             <div className="panel-title"><h2>{draft.subject}</h2><span className="status-pill">{draft.status}</span></div>
             <input value={editDraft[`subject:${draft.id}`] ?? draft.subject} onChange={(event) => setEditDraft({ ...editDraft, [`subject:${draft.id}`]: event.target.value })} />
-            <textarea value={editDraft[`body:${draft.id}`] ?? draft.body} onChange={(event) => setEditDraft({ ...editDraft, [`body:${draft.id}`]: event.target.value })} />
+            {draft.body ? (
+              <textarea value={editDraft[`body:${draft.id}`] ?? draft.body} onChange={(event) => setEditDraft({ ...editDraft, [`body:${draft.id}`]: event.target.value })} />
+            ) : (
+              <div className="loading-state">⏳ 稿件生成中，请稍候...</div>
+            )}
             <div className="toolbar">
               <button className="secondary-button" onClick={() => update.mutate(draft)}>保存修改</button>
               <button className="secondary-button" onClick={() => approve.mutate(draft.id)}>审核通过</button>

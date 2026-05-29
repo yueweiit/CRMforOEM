@@ -1,9 +1,9 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { KeyRound, ListChecks, Mail, Shield, SlidersHorizontal, Users } from "lucide-react";
+import { KeyRound, ListChecks, LogOut, Mail, Shield, SlidersHorizontal, Users } from "lucide-react";
 import { NavLink, useParams } from "react-router-dom";
-import { apiGet, apiPatch, apiPost } from "../api/http";
+import { apiGet, apiPatch, apiPost, clearSessionAndRedirect } from "../api/http";
 
 const settings = [
   { key: "users", label: "用户管理", icon: Users },
@@ -13,7 +13,8 @@ const settings = [
   { key: "ai", label: "AI配置", icon: KeyRound },
   { key: "scoring", label: "评分权重", icon: SlidersHorizontal },
   { key: "blacklist", label: "黑名单", icon: ListChecks },
-  { key: "audit-logs", label: "操作日志", icon: ListChecks }
+  { key: "audit-logs", label: "操作日志", icon: ListChecks },
+  { key: "logout", label: "登出", icon: LogOut }
 ];
 
 type UserRow = { id: string; email: string; name: string; title?: string; isActive: boolean; team?: { name: string }; userRoles: Array<{ role: { code: string; name: string } }> };
@@ -42,7 +43,7 @@ export function SettingsPage() {
           <h2><Icon size={18} />{current.label}</h2>
           <span>私有化部署配置</span>
         </div>
-        {section === "roles" ? <RolesPanel /> : section === "customer-dictionaries" ? <CustomerDictionariesPanel /> : section === "blacklist" ? <BlacklistPanel /> : section === "audit-logs" ? <AuditPanel /> : section === "email-accounts" ? <EmailSettingsHint /> : section === "ai" ? <AiPanel /> : section === "scoring" ? <ScoringPanel /> : <UsersPanel />}
+        {section === "roles" ? <RolesPanel /> : section === "customer-dictionaries" ? <CustomerDictionariesPanel /> : section === "blacklist" ? <BlacklistPanel /> : section === "audit-logs" ? <AuditPanel /> : section === "email-accounts" ? <EmailSettingsHint /> : section === "ai" ? <AiPanel /> : section === "scoring" ? <ScoringPanel /> : section === "logout" ? <LogoutPanel /> : <UsersPanel />}
       </section>
     </section>
   );
@@ -180,6 +181,42 @@ function AiPanel() {
 
 function ScoringPanel() {
   return <div className="empty-state">当前评分权重以内置规则运行：产品、市场、价格、品牌、官网、联系人、机会和风险。后续可扩展为数据库配置。</div>;
+}
+
+function LogoutPanel() {
+  const logout = useMutation({
+    mutationFn: () => apiPost("/auth/logout"),
+    onSettled: () => clearSessionAndRedirect()
+  });
+  const currentUser = (() => {
+    try {
+      const raw = localStorage.getItem("currentUser");
+      return raw ? JSON.parse(raw) as { name?: string; email?: string } : null;
+    } catch {
+      return null;
+    }
+  })();
+  return (
+    <div className="page-stack" style={{ alignItems: "center", paddingBlock: 40 }}>
+      <div style={{ textAlign: "center", maxWidth: 360 }}>
+        {currentUser ? (
+          <>
+            <p style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>{currentUser.name}</p>
+            <p style={{ color: "var(--color-muted)", marginBlock: 4 }}>{currentUser.email}</p>
+          </>
+        ) : null}
+        <p style={{ color: "var(--color-muted)", marginBlock: 16 }}>确认要登出当前账号吗？</p>
+        <button
+          className="primary-button"
+          style={{ background: "var(--color-danger, #dc2626)", borderColor: "var(--color-danger, #dc2626)" }}
+          disabled={logout.isPending}
+          onClick={() => logout.mutate()}
+        >
+          {logout.isPending ? "登出中..." : "确认登出"}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function Field(props: { label: string; value: string; onChange: (value: string) => void }) {

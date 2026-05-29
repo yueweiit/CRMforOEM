@@ -41,7 +41,15 @@ async function apiRequest<T>(path: string, init: RequestInit, allowRefresh = tru
     clearSessionAndRedirect();
   }
   if (!response.ok) {
-    throw new Error(await response.text());
+    const raw = await response.text();
+    let message = "";
+    try {
+      const parsed = JSON.parse(raw) as { message?: string | string[] };
+      message = Array.isArray(parsed.message) ? parsed.message.join("\n") : (parsed.message ?? "");
+    } catch {
+      message = "";
+    }
+    throw new Error(message || raw || `Request failed with status ${response.status}`);
   }
   if (response.status === 204) {
     return undefined as T;
@@ -68,7 +76,8 @@ async function refreshAccessToken() {
   }
 }
 
-function clearSessionAndRedirect() {
+export function clearSessionAndRedirect() {
+  import("../hooks/useSse").then(({ closeSse }) => closeSse());
   localStorage.removeItem("accessToken");
   localStorage.removeItem("refreshToken");
   localStorage.removeItem("currentUser");

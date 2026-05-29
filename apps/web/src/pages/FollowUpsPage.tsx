@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarClock, CheckCircle2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { apiGet, apiPatch, apiPost } from "../api/http";
+import { useSse } from "../hooks/useSse";
 
 type FollowUpTask = {
   id: string;
@@ -21,15 +22,39 @@ export function FollowUpsPage() {
   const queryClient = useQueryClient();
   const [status, setStatus] = useState("OPEN");
   const [form, setForm] = useState({ customerId: "", title: "", type: "CUSTOM", dueAt: new Date().toISOString().slice(0, 16), description: "" });
-  const { data = [], isLoading } = useQuery({ queryKey: ["follow-ups", status], queryFn: () => apiGet<FollowUpTask[]>(`/follow-ups${status ? `?status=${status}` : ""}`) });
+  const { data = [], isLoading } = useQuery({ queryKey: ["follow-up-tasks", status], queryFn: () => apiGet<FollowUpTask[]>(`/follow-up-tasks${status ? `?status=${status}` : ""}`) });
   const { data: customers = [] } = useQuery({ queryKey: ["customers", "task-options"], queryFn: () => apiGet<Customer[]>("/customers") });
-  const complete = useMutation({ mutationFn: (id: string) => apiPost(`/follow-ups/${id}/complete`), onSuccess: () => queryClient.invalidateQueries({ queryKey: ["follow-ups"] }) });
-  const cancel = useMutation({ mutationFn: (id: string) => apiPatch(`/follow-ups/${id}`, { status: "CANCELLED" }), onSuccess: () => queryClient.invalidateQueries({ queryKey: ["follow-ups"] }) });
+
+  useSse("follow-up.task.created", () => {
+    queryClient.invalidateQueries({ queryKey: ["follow-up-tasks"] });
+  });
+  useSse("follow-up.task.completed", () => {
+    queryClient.invalidateQueries({ queryKey: ["follow-up-tasks"] });
+  });
+  useSse("follow-up.task.cancelled", () => {
+    queryClient.invalidateQueries({ queryKey: ["follow-up-tasks"] });
+  });
+
+  const complete = useMutation({
+    mutationFn: (id: string) => apiPost(`/follow-up-tasks/${id}/complete`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["follow-up-tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["nav-follow-up-overdue-count"] });
+    }
+  });
+  const cancel = useMutation({
+    mutationFn: (id: string) => apiPatch(`/follow-up-tasks/${id}`, { status: "CANCELLED" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["follow-up-tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["nav-follow-up-overdue-count"] });
+    }
+  });
   const create = useMutation({
-    mutationFn: () => apiPost("/follow-ups", { ...form, dueAt: new Date(form.dueAt).toISOString() }),
+    mutationFn: () => apiPost("/follow-up-tasks", { ...form, dueAt: new Date(form.dueAt).toISOString() }),
     onSuccess: () => {
       setForm({ customerId: "", title: "", type: "CUSTOM", dueAt: new Date().toISOString().slice(0, 16), description: "" });
-      queryClient.invalidateQueries({ queryKey: ["follow-ups"] });
+      queryClient.invalidateQueries({ queryKey: ["follow-up-tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["nav-follow-up-overdue-count"] });
     }
   });
 
@@ -70,7 +95,7 @@ export function FollowUpsPage() {
           <CalendarClock size={18} />
           <div>
             <strong>自动跟进规则</strong>
-            <span>首封邮件3天未回复、报价后、样品寄出后会自动生成提醒任务。</span>
+            <span>首封邮件发送后 3 天未回复、报价后、样品寄出后时，系统会自动生成提醒任务，提醒业务员人工跟进任务。</span>
           </div>
           <span className="status-pill">ACTIVE</span>
         </div>
