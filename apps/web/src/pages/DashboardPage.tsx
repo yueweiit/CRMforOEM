@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { ArrowUpRight, CalendarClock, Clock, MailCheck, Target, UsersRound } from "lucide-react";
 import { apiGet } from "../api/http";
+import { useSse } from "../hooks/useSse";
 
 type PersonalDashboard = {
   summary: {
@@ -17,14 +18,25 @@ type PersonalDashboard = {
     month_sample_customers: number;
     month_won_customers: number;
     overdue_tasks: number;
+    won_metric_source?: string;
+    reply_metric_source?: string;
+    generated_at?: string;
   };
   high_priority_customers: CustomerRow[];
   stage_distribution: Array<{ stage: string; count: number }>;
-  email_trend: Array<{ bucket: string; sent: number; replied: number }>;
+  email_trend: Array<{
+    bucket: string;
+    sent: number;
+    replied: number;
+    sent_message_count?: number;
+    replied_message_count?: number;
+  }>;
   followup_tasks: Array<{
     id: string;
     title: string;
     dueAt: string;
+    is_overdue?: boolean;
+    task_type?: string;
     customer: { id: string; name: string; stage: string };
   }>;
 };
@@ -46,6 +58,9 @@ type CustomerRow = {
   quote_amount?: number;
   next_task_due_at?: string | null;
   updated_at?: string;
+  priority_level?: "A" | "B" | "C";
+  priority_reason?: string;
+  priority_tags?: string[];
 };
 
 const fallback: PersonalDashboard = {
@@ -74,8 +89,22 @@ const fallback: PersonalDashboard = {
 };
 
 export function DashboardPage() {
+  const queryClient = useQueryClient();
   const [filters, setFilters] = useState(defaultPersonalFilters());
   const queryString = useMemo(() => toQueryString(filters), [filters]);
+
+  useSse("inbound-mail.received", () => {
+    queryClient.invalidateQueries({ queryKey: ["dashboard", "me"] });
+  });
+  useSse("follow-up.task.created", () => {
+    queryClient.invalidateQueries({ queryKey: ["dashboard", "me"] });
+  });
+  useSse("follow-up.task.completed", () => {
+    queryClient.invalidateQueries({ queryKey: ["dashboard", "me"] });
+  });
+  useSse("follow-up.task.cancelled", () => {
+    queryClient.invalidateQueries({ queryKey: ["dashboard", "me"] });
+  });
   const { data: filterOptions } = useQuery({
     queryKey: ["dashboard-filter-options", "personal"],
     queryFn: () => apiGet<DashboardFilterOptions>("/dashboards/filter-options"),
@@ -154,11 +183,17 @@ export function DashboardPage() {
           <div className="task-list">
             {data.followup_tasks.length ? (
               data.followup_tasks.map((task) => (
-                <div className="task-row" key={task.id}>
+                <div
+                  className={`task-row ${task.is_overdue ? "overdue" : ""}`}
+                  key={task.id}
+                >
                   <Clock size={18} />
                   <div>
                     <strong>{task.title}</strong>
-                    <span>{task.customer.name} · {formatDateTime(task.dueAt)}</span>
+                    <span>
+                      {task.customer.name} · {formatDateTime(task.dueAt)}
+                      {task.task_type ? ` · ${taskTypeLabel(task.task_type)}` : ""}
+                    </span>
                   </div>
                   <span className="status-pill">{stageLabel(task.customer.stage)}</span>
                 </div>
@@ -169,6 +204,12 @@ export function DashboardPage() {
           </div>
         </section>
       </div>
+
+      {data.summary.generated_at ? (
+        <div className="data-timestamp">
+          数据更新于 {formatDateTime(data.summary.generated_at)}
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -247,18 +288,31 @@ function BarList(props: { data: Array<{ label: string; value: number }> }) {
   );
 }
 
-function TrendBars(props: { data: Array<{ bucket: string; sent: number; replied: number }> }) {
-  const max = Math.max(1, ...props.data.flatMap((item) => [item.sent, item.replied]));
+function TrendBars(props: {
+  data: Array<{
+    bucket: string;
+    sent: number;
+    replied: number;
+    sent_message_count?: number;
+    replied_message_count?: number;
+  }>;
+}) {
+  const resolved = props.data.map((item) => ({
+    ...item,
+    sentVal: item.sent_message_count ?? item.sent,
+    repliedVal: item.replied_message_count ?? item.replied
+  }));
+  const max = Math.max(1, ...resolved.flatMap((item) => [item.sentVal, item.repliedVal]));
   return (
     <div className="trend-bars">
-      {props.data.length ? props.data.map((item) => (
+      {resolved.length ? resolved.map((item) => (
         <div className="trend-row" key={item.bucket}>
           <span>{item.bucket}</span>
           <div className="trend-stack">
-            <i className="sent" style={{ width: `${Math.max(3, item.sent / max * 100)}%` }} title={`发送 ${item.sent}`} />
-            <i className="replied" style={{ width: `${Math.max(3, item.replied / max * 100)}%` }} title={`回复 ${item.replied}`} />
+            <i className="sent" style={{ width: `${Math.max(3, item.sentVal / max * 100)}%` }} title={`发送 ${item.sentVal}`} />
+            <i className="replied" style={{ width: `${Math.max(3, item.repliedVal / max * 100)}%` }} title={`回复 ${item.repliedVal}`} />
           </div>
-          <strong>{item.sent}/{item.replied}</strong>
+          <strong>{item.sentVal}/{item.repliedVal}</strong>
         </div>
       )) : <div className="empty-state">暂无邮件趋势数据。</div>}
     </div>
@@ -273,6 +327,7 @@ function CustomerTable({ rows }: { rows: CustomerRow[] }) {
     <table>
       <thead>
         <tr>
+          <th>优先级</th>
           <th>客户</th>
           <th>国家</th>
           <th>阶段</th>
@@ -284,7 +339,24 @@ function CustomerTable({ rows }: { rows: CustomerRow[] }) {
       <tbody>
         {rows.map((customer) => (
           <tr key={customer.id}>
-            <td>{customer.name}</td>
+            <td>
+              <span
+                className={`priority-pill ${(customer.priority_level ?? "C").toLowerCase()}`}
+                title={customer.priority_reason}
+              >
+                {customer.priority_level ?? "-"}
+              </span>
+            </td>
+            <td>
+              {customer.name}
+              {customer.priority_tags && customer.priority_tags.length > 0 ? (
+                <div className="inline-tags">
+                  {customer.priority_tags.map((tag) => (
+                    <span className="mini-tag" key={tag}>{tag}</span>
+                  ))}
+                </div>
+              ) : null}
+            </td>
             <td>{customer.country ?? "-"}</td>
             <td><span className="status-pill">{stageLabel(customer.stage)}</span></td>
             <td>{customer.score ?? "-"} {customer.grade ? `(${customer.grade})` : ""}</td>
@@ -345,4 +417,21 @@ const stageLabels: Record<string, string> = {
 
 function stageLabel(stage: string) {
   return stageLabels[stage] ?? stage;
+}
+
+const taskTypeLabels: Record<string, string> = {
+  COMPLETE_RESEARCH: "完成背调",
+  GENERATE_EMAIL: "生成邮件",
+  REVIEW_EMAIL: "审核邮件",
+  SECOND_FOLLOW_UP: "二次跟进",
+  THIRD_FOLLOW_UP: "三次跟进",
+  REQUIREMENT_CONFIRMATION: "需求确认",
+  QUOTE_FOLLOW_UP: "报价跟进",
+  SAMPLE_FOLLOW_UP: "样品跟进",
+  STAGE_STALE_REMINDER: "阶段停滞提醒",
+  CUSTOM: "自定义任务"
+};
+
+function taskTypeLabel(type: string) {
+  return taskTypeLabels[type] ?? type;
 }

@@ -113,28 +113,6 @@ export class FollowUpsService {
     return completedTask;
   }
 
-  async createByRule(input: {
-    customerId: string;
-    ownerId: string;
-    type: string;
-    title: string;
-    trigger: string;
-    dueAt: Date;
-    description?: string;
-  }) {
-    return this.prisma.followUpTask.create({
-      data: {
-        customerId: input.customerId,
-        ownerId: input.ownerId,
-        type: input.type as never,
-        title: input.title,
-        description: input.description,
-        trigger: input.trigger,
-        dueAt: input.dueAt
-      }
-    });
-  }
-
   private async ensureVisibleTask(user: RequestUser, id: string) {
     const task = await this.prisma.followUpTask.findFirst({
       where: { id, customer: buildCustomerDataScopeWhere(user) }

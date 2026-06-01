@@ -203,7 +203,10 @@ export class DashboardsService {
       month_quoted_customers: monthQuotedCustomers.length,
       month_sample_customers: monthSampleCustomers.length,
       month_won_customers: monthWonCustomers,
-      overdue_tasks: overdueTasks
+      overdue_tasks: overdueTasks,
+      won_metric_source: "customer_stage_updated_at" as const,
+      reply_metric_source: "email_thread_inbound_distinct_customer" as const,
+      generated_at: new Date().toISOString()
     };
   }
 
@@ -416,14 +419,32 @@ export class DashboardsService {
       select: { direction: true, sentAt: true, receivedAt: true }
     });
 
-    const buckets = new Map<string, { bucket: string; sent: number; replied: number }>();
+    const buckets = new Map<string, {
+      bucket: string;
+      sent: number;
+      replied: number;
+      sent_message_count: number;
+      replied_message_count: number;
+    }>();
     for (const message of messages) {
       const date = message.direction === "OUTBOUND" ? message.sentAt : message.receivedAt;
       if (!date) continue;
       const key = formatBucket(date, range.groupBy);
-      const current = buckets.get(key) ?? { bucket: key, sent: 0, replied: 0 };
-      if (message.direction === "OUTBOUND") current.sent += 1;
-      if (message.direction === "INBOUND") current.replied += 1;
+      const current = buckets.get(key) ?? {
+        bucket: key,
+        sent: 0,
+        replied: 0,
+        sent_message_count: 0,
+        replied_message_count: 0
+      };
+      if (message.direction === "OUTBOUND") {
+        current.sent += 1;
+        current.sent_message_count += 1;
+      }
+      if (message.direction === "INBOUND") {
+        current.replied += 1;
+        current.replied_message_count += 1;
+      }
       buckets.set(key, current);
     }
     return Array.from(buckets.values()).sort((a, b) => a.bucket.localeCompare(b.bucket));
@@ -491,7 +512,7 @@ export class DashboardsService {
     const customers = await this.prisma.customer.findMany({
       where: {
         ...customerWhere,
-        stage: { notIn: [CustomerStage.BLACKLISTED, CustomerStage.INVALID] }
+        stage: { notIn: [CustomerStage.BLACKLISTED, CustomerStage.INVALID, CustomerStage.WON] }
       } as never,
       take: 200,
       orderBy: { updatedAt: "desc" },
@@ -511,6 +532,13 @@ export class DashboardsService {
       .map((customer) => {
         const latestScore = customer.oemFitScores[0];
         const quoteAmount = customer.quotes.reduce((sum, quote) => sum + Number(quote.amount), 0);
+        const nextTaskDueAt = customer.followUpTasks[0]?.dueAt ?? null;
+        const priority = computePriority(
+          customer.stage,
+          latestScore?.score ?? null,
+          quoteAmount,
+          nextTaskDueAt
+        );
         return {
           id: customer.id,
           name: customer.name,
@@ -520,12 +548,20 @@ export class DashboardsService {
           score: latestScore?.score ?? null,
           grade: latestScore?.grade ?? null,
           quote_amount: quoteAmount,
-          next_task_due_at: customer.followUpTasks[0]?.dueAt ?? null,
-          updated_at: customer.updatedAt
+          next_task_due_at: nextTaskDueAt,
+          updated_at: customer.updatedAt,
+          priority_level: priority.level,
+          priority_reason: priority.reason,
+          priority_tags: priority.tags
         };
       })
-      .filter((customer) => HIGH_VALUE_STAGES.includes(customer.stage) || customer.score !== null && customer.score >= 60 || ["A", "B"].includes(customer.grade ?? ""))
-      .sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || b.quote_amount - a.quote_amount || b.updated_at.getTime() - a.updated_at.getTime())
+      .filter((customer) => customer.priority_level !== "C")
+      .sort(
+        (a, b) =>
+          priorityRank(a.priority_level) - priorityRank(b.priority_level) ||
+          (b.score ?? -1) - (a.score ?? -1) ||
+          b.quote_amount - a.quote_amount
+      )
       .slice(0, 20);
   }
 
@@ -605,7 +641,7 @@ export class DashboardsService {
   }
 
   private async getTodayFollowupTasks(user: RequestUser, customerWhere: CustomerWhere) {
-    return this.prisma.followUpTask.findMany({
+    const tasks = await this.prisma.followUpTask.findMany({
       where: {
         ownerId: user.id,
         status: "OPEN",
@@ -618,6 +654,13 @@ export class DashboardsService {
         customer: { select: { id: true, name: true, stage: true } }
       }
     });
+
+    const now = new Date();
+    return tasks.map((task) => ({
+      ...task,
+      is_overdue: task.dueAt < now,
+      task_type: task.type
+    }));
   }
 
   private async buildCustomerWhere(
@@ -760,4 +803,76 @@ function formatBucket(date: Date, groupBy: "day" | "week" | "month") {
     return weekStart.toISOString().slice(0, 10);
   }
   return value.toISOString().slice(0, 10);
+}
+
+function computePriority(
+  stage: CustomerStage,
+  score: number | null,
+  quoteAmount: number,
+  nextTaskDueAt: Date | null
+): { level: "A" | "B" | "C"; reason: string; tags: string[] } {
+  const now = new Date();
+  const threeDays = new Date(now.getTime() + 3 * 86_400_000);
+  const sevenDays = new Date(now.getTime() + 7 * 86_400_000);
+
+  const reasons: string[] = [];
+  const tags: string[] = [];
+
+  // A-level
+  const isNegotiating = stage === CustomerStage.NEGOTIATING;
+  const hasHighScore = score !== null && score >= 80;
+  const hasQuoteAndUrgent =
+    quoteAmount > 0 && nextTaskDueAt !== null && nextTaskDueAt <= threeDays;
+
+  if (isNegotiating) {
+    reasons.push("处于订单谈判阶段");
+    tags.push("谈判中");
+  }
+  if (hasHighScore) {
+    reasons.push(`OEM 评分 ${score} 分`);
+    tags.push("高评分");
+  }
+  if (hasQuoteAndUrgent) {
+    reasons.push("有报价且任务临期");
+    tags.push("报价中");
+    tags.push("任务临期");
+  }
+
+  if (isNegotiating || hasHighScore || hasQuoteAndUrgent) {
+    return { level: "A", reason: reasons.join("，"), tags };
+  }
+
+  // B-level
+  const isQuotingOrSampling =
+    stage === CustomerStage.QUOTING || stage === CustomerStage.SAMPLING;
+  const hasMediumScore = score !== null && score >= 60 && score < 80;
+  const hasTaskSoon = nextTaskDueAt !== null && nextTaskDueAt <= sevenDays;
+
+  if (isQuotingOrSampling) {
+    reasons.push(
+      stage === CustomerStage.QUOTING ? "处于报价阶段" : "处于样品阶段"
+    );
+    tags.push(stage === CustomerStage.QUOTING ? "报价中" : "样品中");
+  }
+  if (hasMediumScore) {
+    reasons.push(`OEM 评分 ${score} 分`);
+    tags.push("中等评分");
+  }
+  if (hasTaskSoon) {
+    reasons.push("7 天内有跟进任务");
+    tags.push("任务临期");
+  }
+
+  if (isQuotingOrSampling || hasMediumScore || hasTaskSoon) {
+    return { level: "B", reason: reasons.join("，"), tags };
+  }
+
+  // C-level
+  return { level: "C", reason: "常规推进客户", tags: ["常规推进"] };
+}
+
+function priorityRank(level: string): number {
+  if (level === "A") return 0;
+  if (level === "B") return 1;
+  return 2;
 }

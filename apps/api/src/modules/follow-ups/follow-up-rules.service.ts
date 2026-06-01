@@ -73,9 +73,9 @@ export class FollowUpRulesService {
 
     const customer = await this.prisma.customer.findUnique({
       where: { id: customerId },
-      select: { ownerId: true }
+      select: { ownerId: true ,stage: true}
     });
-    if (!customer?.ownerId) return;
+    if (!customer?.ownerId || customer.stage !== "REPLIED") return;
 
     const orgId = await this.getOrgIdByCustomer(customerId);
     const targetUserIds = Array.from(
@@ -92,7 +92,6 @@ export class FollowUpRulesService {
         overdueCount
       } satisfies FollowUpTaskChangedPayload);
     }
-
     const existingRequirementTask = await this.prisma.followUpTask.findFirst({
       where: {
         customerId,
