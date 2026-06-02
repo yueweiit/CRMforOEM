@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiGet, apiPatch, apiPost } from "../api/http";
 import { showClientToast } from "../components/Toast";
+import { Switch } from "../components/Switch";
 import { useSse } from "../hooks/useSse";
 
 type EmailAccount = {
@@ -67,7 +68,7 @@ export function EmailCenterPage() {
   });
 
   const sync = useMutation({
-    mutationFn: () => apiPost<{ syncedAccounts?: number }>("/email-sync/run"),
+    mutationFn: () => apiPost<{ syncedAccounts?: number }>("/email-sync/run", undefined, { toast: false }),
     onSuccess: (result) => {
       showClientToast({
         type: "success",
@@ -150,8 +151,8 @@ export function EmailCenterPage() {
           <div className="form-grid">
             {accountFields.map(([key, label]) => <Field key={key} label={label} value={accountForm[key]} onChange={(value) => setAccountForm({ ...accountForm, [key]: value })} />)}
             <label><span>账号范围</span><select value={accountForm.scope} onChange={(event) => setAccountForm({ ...accountForm, scope: event.target.value })}><option value="PERSONAL">个人邮箱</option><option value="SHARED">共享企业邮箱</option></select></label>
-            <label><span>SMTP SSL</span><select value={accountForm.smtpSecure} onChange={(event) => setAccountForm({ ...accountForm, smtpSecure: event.target.value })}><option value="true">启用</option><option value="false">关闭</option></select></label>
-            <label><span>IMAP SSL</span><select value={accountForm.imapSecure} onChange={(event) => setAccountForm({ ...accountForm, imapSecure: event.target.value })}><option value="true">启用</option><option value="false">关闭</option></select></label>
+            <label><span>SMTP SSL</span><Switch checked={accountForm.smtpSecure === "true"} onChange={(checked) => setAccountForm({ ...accountForm, smtpSecure: String(checked) })} /></label>
+            <label><span>IMAP SSL</span><Switch checked={accountForm.imapSecure === "true"} onChange={(checked) => setAccountForm({ ...accountForm, imapSecure: String(checked) })} /></label>
             {editingId ? <div className="wide-field empty-state">密码/授权码留空表示不修改。</div> : null}
             <div className="wide-field toolbar"><button className="primary-button" disabled={createAccount.isPending || updateAccount.isPending} onClick={submitAccount}>{createAccount.isPending || updateAccount.isPending ? "保存中..." : editingId ? "保存修改" : "保存邮箱"}</button>{editingId ? <button className="secondary-button" onClick={cancelEdit}>取消编辑</button> : null}</div>
           </div>
@@ -173,7 +174,7 @@ function ThreadList({ threads }: { threads: EmailThread[] }) {
 
 function AccountTable({ rows, onEdit, onTest, onToggle }: { rows: EmailAccount[]; onEdit: (account: EmailAccount) => void; onTest: (id: string) => void; onToggle: (account: EmailAccount) => void }) {
   if (!rows.length) return <div className="empty-state">暂无邮箱账号。</div>;
-  return <table><thead><tr><th>名称</th><th>邮箱</th><th>范围</th><th>SMTP/IMAP</th><th>上限</th><th>状态</th><th>操作</th></tr></thead><tbody>{rows.map((account) => <tr key={account.id}><td>{account.name}</td><td>{account.email}</td><td>{account.scope === "SHARED" ? "共享" : "个人"}</td><td>{account.smtpHost}:{account.smtpPort} / {account.imapHost}:{account.imapPort}</td><td>{account.hourlySendLimit}/小时 · {account.dailySendLimit}/天</td><td><span className="status-pill">{account.isActive ? "启用" : "停用"}</span></td><td><div className="toolbar"><button className="secondary-button" onClick={() => onEdit(account)}>编辑</button><button className="secondary-button" onClick={() => onTest(account.id)}>测试</button><button className="secondary-button" onClick={() => onToggle(account)}>{account.isActive ? "停用" : "启用"}</button></div></td></tr>)}</tbody></table>;
+  return <table><thead><tr><th>名称</th><th>邮箱</th><th>范围</th><th>SMTP/IMAP</th><th>上限</th><th>状态</th><th>操作</th></tr></thead><tbody>{rows.map((account) => <tr key={account.id}><td>{account.name}</td><td>{account.email}</td><td>{account.scope === "SHARED" ? "共享" : "个人"}</td><td>{account.smtpHost}:{account.smtpPort} / {account.imapHost}:{account.imapPort}</td><td>{account.hourlySendLimit}/小时 · {account.dailySendLimit}/天</td><td><Switch checked={account.isActive} onChange={() => onToggle(account)} /></td><td><div className="toolbar"><button className="secondary-button" onClick={() => onEdit(account)}>编辑</button><button className="secondary-button" onClick={() => onTest(account.id)}>测试</button></div></td></tr>)}</tbody></table>;
 }
 
 function MiniMetric(props: { icon: ReactNode; label: string; value: string }) {

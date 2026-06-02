@@ -15,6 +15,7 @@ import { DashboardsModule } from "./modules/dashboards/dashboards.module";
 import { EmailsModule } from "./modules/emails/emails.module";
 import { FollowUpsModule } from "./modules/follow-ups/follow-ups.module";
 import { KnowledgeModule } from "./modules/knowledge/knowledge.module";
+import { UploadModule } from "./modules/upload/upload.module";
 import { ResearchModule } from "./modules/research/research.module";
 import { ScoringModule } from "./modules/scoring/scoring.module";
 import { SettingsModule } from "./modules/settings/settings.module";
@@ -42,6 +43,7 @@ import { PrismaModule } from "./prisma/prisma.module";
     CommercialModule,
     CustomersModule,
     KnowledgeModule,
+    UploadModule,
     AiModule,
     WebsiteAnalysisModule,
     ResearchModule,

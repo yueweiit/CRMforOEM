@@ -424,6 +424,9 @@ model CompanyProfile {
   displayName    String
   websiteUrl     String?
   summary        String?
+  foundedAt      DateTime?
+  factoryAddress String?
+  productionScale String?
   markets        String[] @default([])
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -436,16 +439,18 @@ model CompanyProfile {
   caseStudies   CaseStudy[]
   emailMaterials EmailMaterial[]
 
-  @@index([organizationId])
+  @@unique([organizationId])
   @@map("company_profiles")
 }
 
 model Brand {
   id               String   @id @default(cuid())
   companyProfileId String
-  name             String
-  positioning      String?
-  targetMarkets    String[] @default([])
+  name                  String
+  positioning           String?
+  websiteUrl            String?
+  competitiveAdvantage  String?
+  targetMarkets         String[] @default([])
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -462,8 +467,9 @@ model OemCapability {
   description      String?
   moq              String?
   leadTime         String?
-  certifications   String[] @default([])
-  supportedMarkets String[] @default([])
+  certifications          String[] @default([])
+  packagingCustomization  String?
+  supportedMarkets        String[] @default([])
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -480,9 +486,13 @@ model Product {
   name             String
   category         String
   description      String?
+  specifications   Json?
+  material         String?
   priceMin         Decimal?
   priceMax         Decimal?
   currency         String?
+  targetMarkets    String[] @default([])
+  imageAssetIds    String[] @default([])
   tags             String[] @default([])
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -497,9 +507,12 @@ model Certificate {
   id               String   @id @default(cuid())
   companyProfileId String
   name             String
+  certType         String
   issuer           String?
   validUntil       DateTime?
+  /// @deprecated Use fileAssetIds instead
   fileAssetId      String?
+  fileAssetIds     String[] @default([])
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -512,11 +525,15 @@ model CaseStudy {
   id               String   @id @default(cuid())
   companyProfileId String
   title            String
+  clientName       String?
   market           String?
   category         String?
   summary          String
   result           String?
+  cooperationDate  DateTime?
+  /// @deprecated Use fileAssetIds instead
   fileAssetId      String?
+  fileAssetIds     String[] @default([])
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -931,6 +948,7 @@ model FileAsset {
   storageDriver  String
   bucket         String?
   objectKey      String
+  thumbnailKey   String?
   originalName   String
   mimeType       String?
   sizeBytes      Int?

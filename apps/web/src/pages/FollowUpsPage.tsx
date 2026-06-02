@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarClock, CheckCircle2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { apiGet, apiPatch, apiPost } from "../api/http";
+import { notifyMutationStep } from "../components/Toast";
 import { useSse } from "../hooks/useSse";
 
 type FollowUpTask = {
@@ -37,25 +38,34 @@ export function FollowUpsPage() {
 
   const complete = useMutation({
     mutationFn: (id: string) => apiPost(`/follow-up-tasks/${id}/complete`),
+    onMutate: (id) => notifyMutationStep({ phase: "loading", title: "处理中", message: "正在完成跟进任务。", dedupeKey: `followup-complete:${id}` }),
     onSuccess: () => {
+      notifyMutationStep({ phase: "success", title: "操作成功", message: "跟进任务已完成。" });
       queryClient.invalidateQueries({ queryKey: ["follow-up-tasks"] });
       queryClient.invalidateQueries({ queryKey: ["nav-follow-up-overdue-count"] });
-    }
+    },
+    onError: (error, id) => notifyMutationStep({ phase: "error", title: "操作失败", message: error instanceof Error ? error.message : "完成跟进任务失败。", dedupeKey: `followup-complete:${id}:error` })
   });
   const cancel = useMutation({
     mutationFn: (id: string) => apiPatch(`/follow-up-tasks/${id}`, { status: "CANCELLED" }),
+    onMutate: (id) => notifyMutationStep({ phase: "loading", title: "处理中", message: "正在取消跟进任务。", dedupeKey: `followup-cancel:${id}` }),
     onSuccess: () => {
+      notifyMutationStep({ phase: "success", title: "操作成功", message: "跟进任务已取消。" });
       queryClient.invalidateQueries({ queryKey: ["follow-up-tasks"] });
       queryClient.invalidateQueries({ queryKey: ["nav-follow-up-overdue-count"] });
-    }
+    },
+    onError: (error, id) => notifyMutationStep({ phase: "error", title: "操作失败", message: error instanceof Error ? error.message : "取消跟进任务失败。", dedupeKey: `followup-cancel:${id}:error` })
   });
   const create = useMutation({
     mutationFn: () => apiPost("/follow-up-tasks", { ...form, dueAt: new Date(form.dueAt).toISOString() }),
+    onMutate: () => notifyMutationStep({ phase: "loading", title: "处理中", message: "正在创建跟进任务。", dedupeKey: `followup-create:${form.customerId}:${form.title}` }),
     onSuccess: () => {
+      notifyMutationStep({ phase: "success", title: "操作成功", message: "跟进任务已创建。" });
       setForm({ customerId: "", title: "", type: "CUSTOM", dueAt: new Date().toISOString().slice(0, 16), description: "" });
       queryClient.invalidateQueries({ queryKey: ["follow-up-tasks"] });
       queryClient.invalidateQueries({ queryKey: ["nav-follow-up-overdue-count"] });
-    }
+    },
+    onError: (error) => notifyMutationStep({ phase: "error", title: "操作失败", message: error instanceof Error ? error.message : "创建跟进任务失败。", dedupeKey: `followup-create:${form.customerId}:${form.title}:error` })
   });
 
   return (

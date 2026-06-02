@@ -66,6 +66,7 @@ export function AppShell() {
       type: config.type,
       title: config.title,
       message: config.message,
+      persistent: true,
       dedupeKey: `task:${data.customerId}:${data.type}`,
       actionHref: config.actionHref?.(data.customerId),
       actionLabel: config.actionLabel
@@ -89,6 +90,7 @@ export function AppShell() {
       type: config.type,
       title: typeof config.title === "function" ? config.title(data) : config.title,
       message: typeof config.message === "function" ? config.message(data) : config.message,
+      persistent: true,
       dedupeKey: config.dedupeKey?.(data),
       actionHref: config.actionHref?.(data),
       actionLabel: config.actionLabel

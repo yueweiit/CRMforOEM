@@ -124,10 +124,6 @@ export function DashboardPage() {
           <p className="eyebrow">Personal Pipeline</p>
           <h1>OEM 客户开发工作台</h1>
         </div>
-        <button className="primary-button">
-          <ArrowUpRight size={16} />
-          新增客户
-        </button>
       </header>
 
       <DashboardFilterBar filters={filters} options={filterOptions} onChange={setFilters} />

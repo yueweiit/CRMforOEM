@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Filter, Plus, Search } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { apiGet, apiPost } from "../api/http";
+import { notifyMutationStep } from "../components/Toast";
 
 type Customer = {
   id: string;
@@ -50,10 +51,13 @@ export function CustomersPage({ mode }: { mode?: "create" }) {
   });
   const createMutation = useMutation({
     mutationFn: (payload: Record<string, unknown>) => apiPost<Customer>("/customers", payload),
+    onMutate: () => notifyMutationStep({ phase: "loading", title: "处理中", message: "正在创建客户。", dedupeKey: `customer-create:${form.name}` }),
     onSuccess: (customer) => {
+      notifyMutationStep({ phase: "success", title: "操作成功", message: "客户已创建。" });
       queryClient.invalidateQueries({ queryKey: ["customers"] });
       navigate(`/customers/${customer.id}/overview`);
-    }
+    },
+    onError: (error) => notifyMutationStep({ phase: "error", title: "操作失败", message: error instanceof Error ? error.message : "创建客户失败。", dedupeKey: `customer-create:${form.name}:error` })
   });
   const hasSources = Boolean(options?.sources.length);
   const hasTypes = Boolean(options?.types.length);

@@ -116,4 +116,65 @@ export class UpsertKnowledgeDto {
   @IsOptional()
   @IsString()
   fileAssetId?: string;
+
+  // ── CompanyProfile ──
+
+  @IsOptional()
+  @IsDateString()
+  foundedAt?: string;
+
+  @IsOptional()
+  @IsString()
+  factoryAddress?: string;
+
+  @IsOptional()
+  @IsString()
+  productionScale?: string;
+
+  // ── Brand ──
+
+  @IsOptional()
+  @IsString()
+  competitiveAdvantage?: string;
+
+  // ── Product ──
+
+  @IsOptional()
+  specifications?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsString()
+  material?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  imageAssetIds?: string[];
+
+  // ── OemCapability ──
+
+  @IsOptional()
+  @IsString()
+  packagingCustomization?: string;
+
+  // ── Certificate ──
+
+  @IsOptional()
+  @IsString()
+  certType?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  fileAssetIds?: string[];
+
+  // ── CaseStudy ──
+
+  @IsOptional()
+  @IsString()
+  clientName?: string;
+
+  @IsOptional()
+  @IsDateString()
+  cooperationDate?: string;
 }

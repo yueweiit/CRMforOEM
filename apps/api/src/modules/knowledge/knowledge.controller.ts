@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post } from "@nestjs/common";
 import { CurrentUser, RequestUser } from "../../common/auth/current-user.decorator";
 import { UpsertKnowledgeDto } from "./dto/upsert-knowledge.dto";
 import { KnowledgeService } from "./knowledge.service";
@@ -80,5 +80,10 @@ export class KnowledgeController {
   @Patch(":entity/:id")
   update(@CurrentUser() user: RequestUser, @Param("entity") entity: string, @Param("id") id: string, @Body() dto: UpsertKnowledgeDto) {
     return this.knowledgeService.updateEntity(user, entity, id, dto);
+  }
+
+  @Delete(":entity/:id")
+  delete(@CurrentUser() user: RequestUser, @Param("entity") entity: string, @Param("id") id: string) {
+    return this.knowledgeService.deleteEntity(user, entity, id);
   }
 }

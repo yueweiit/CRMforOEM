@@ -1,8 +1,12 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Dialog } from "@alifd/next";
+import "@alifd/next/lib/dialog/style.js";
 import { Award, Boxes, BriefcaseBusiness, Factory, FileText, Plus } from "lucide-react";
 import { NavLink, useParams } from "react-router-dom";
-import { apiGet, apiPatch, apiPost } from "../api/http";
+import { apiDelete, apiGet, apiPatch, apiPost } from "../api/http";
+import { inferToastType, showClientToast } from "../components/Toast";
+import { FileUpload } from "../components/FileUpload";
 
 type CompanyProfile = {
   id: string;
@@ -11,11 +15,32 @@ type CompanyProfile = {
   websiteUrl?: string;
   summary?: string;
   markets: string[];
+  foundedAt?: string | null;
+  factoryAddress?: string | null;
+  productionScale?: string | null;
 };
 
-type KnowledgeRecord = Record<string, unknown> & { id: string; name?: string; title?: string; category?: string; updatedAt?: string };
+type KnowledgeRecord = Record<string, unknown> & {
+  id: string;
+  name?: string;
+  title?: string;
+  category?: string;
+  updatedAt?: string;
+};
 
-type Field = { key: string; label: string; type?: "textarea" | "number"; required?: boolean; placeholder?: string };
+type SpecPair = {
+  key: string;
+  value: string;
+};
+
+type Field = {
+  key: string;
+  label: string;
+  type?: "textarea" | "number" | "date" | "file";
+  required?: boolean;
+  placeholder?: string;
+  multiple?: boolean;
+};
 
 const sections = [
   { to: "company", label: "公司信息", icon: BriefcaseBusiness },
@@ -25,7 +50,7 @@ const sections = [
   { to: "certificates", label: "资质证书", icon: Award },
   { to: "cases", label: "成功案例", icon: FileText },
   { to: "email-materials", label: "邮件素材", icon: FileText }
-];
+] as const;
 
 const sectionApi: Record<string, string> = {
   brands: "brands",
@@ -36,51 +61,79 @@ const sectionApi: Record<string, string> = {
   "email-materials": "email-materials"
 };
 
+const uploadEntityTypeMap: Record<string, string> = {
+  products: "product",
+  certificates: "certificate",
+  cases: "case_study"
+};
+
 const fieldMap: Record<string, Field[]> = {
   brands: [
     { key: "name", label: "品牌名称", required: true },
     { key: "positioning", label: "品牌定位" },
-    { key: "targetMarkets", label: "目标市场", placeholder: "用逗号分隔，如 US,EU" }
+    { key: "websiteUrl", label: "品牌官网", placeholder: "https://example.com" },
+    { key: "targetMarkets", label: "目标市场", placeholder: "用逗号分隔，如 US,EU" },
+    { key: "competitiveAdvantage", label: "核心竞争优势", type: "textarea",required: true }
   ],
   products: [
     { key: "name", label: "产品名称", required: true },
     { key: "sku", label: "SKU" },
     { key: "category", label: "品类", required: true },
-    { key: "description", label: "描述", type: "textarea" },
+    { key: "material", label: "材质" },
     { key: "priceMin", label: "最低价", type: "number" },
     { key: "priceMax", label: "最高价", type: "number" },
     { key: "currency", label: "币种", placeholder: "USD" },
-    { key: "tags", label: "标签", placeholder: "用逗号分隔" }
+    { key: "targetMarkets", label: "适配市场", placeholder: "用逗号分隔" },
+    { key: "tags", label: "标签", placeholder: "用逗号分隔" },
+    { key: "specifications", label: "规格参数", type: "textarea", placeholder: '{"尺寸":"100x200mm","重量":"500g"}' },
+    { key: "description", label: "描述", type: "textarea" },
+    { key: "imageAssetIds", label: "产品图片", type: "file", multiple: true }
   ],
   "oem-capabilities": [
     { key: "name", label: "能力名称", required: true },
     { key: "category", label: "品类", required: true },
-    { key: "description", label: "能力说明", type: "textarea" },
     { key: "moq", label: "MOQ" },
     { key: "leadTime", label: "交期" },
     { key: "certifications", label: "关联认证", placeholder: "用逗号分隔" },
-    { key: "supportedMarkets", label: "适配市场", placeholder: "用逗号分隔" }
+    { key: "supportedMarkets", label: "适配市场", placeholder: "用逗号分隔" },
+    { key: "description", label: "能力说明", type: "textarea" },
+    { key: "packagingCustomization", label: "包装定制", type: "textarea" }
   ],
   certificates: [
     { key: "name", label: "证书名称", required: true },
+    { key: "certType", label: "证书类型", required: true, placeholder: "ISO / CE / FDA / OTHER" },
     { key: "issuer", label: "签发机构" },
-    { key: "validUntil", label: "有效期" },
-    { key: "fileAssetId", label: "文件ID" }
+    { key: "validUntil", label: "有效期", type: "date" },
+    { key: "fileAssetIds", label: "证书文件", type: "file", multiple: true }
   ],
   cases: [
     { key: "title", label: "案例标题", required: true },
+    { key: "clientName", label: "合作客户" },
     { key: "market", label: "市场" },
     { key: "category", label: "品类" },
+    { key: "result", label: "结果", required: true },
+    { key: "cooperationDate", label: "合作时间", type: "date" },
     { key: "summary", label: "案例摘要", type: "textarea", required: true },
-    { key: "result", label: "结果" }
+    { key: "fileAssetIds", label: "案例附件", type: "file", multiple: true }
   ],
   "email-materials": [
     { key: "name", label: "素材名称", required: true },
-    { key: "materialType", label: "素材类型", required: true, placeholder: "company_intro/signature/template" },
+    { key: "materialType", label: "素材类型", required: true, placeholder: "company_intro / signature / template" },
+    { key: "tags", label: "标签", placeholder: "用 , 分隔" },
     { key: "content", label: "内容", type: "textarea", required: true },
-    { key: "tags", label: "标签", placeholder: "用逗号分隔" }
   ]
 };
+
+const companyFields: Field[] = [
+  { key: "legalName", label: "公司全称", required: true },
+  { key: "displayName", label: "展示名称", required: true },
+  { key: "websiteUrl", label: "官网", placeholder: "https://example.com" },
+  { key: "markets", label: "出口市场", placeholder: "用逗号分隔，如 US,EU,UK" },
+  { key: "foundedAt", label: "成立时间", type: "date" },
+  { key: "factoryAddress", label: "工厂地址" },
+  { key: "productionScale", label: "生产规模" },
+  { key: "summary", label: "公司简介", type: "textarea" }
+];
 
 export function KnowledgeBasePage() {
   const { section = "company" } = useParams();
@@ -88,7 +141,9 @@ export function KnowledgeBasePage() {
   const currentSection = sectionApi[section] ? section : "company";
   const [form, setForm] = useState<Record<string, string>>({});
   const [editingId, setEditingId] = useState("");
-  const [message, setMessage] = useState("");
+  const [pendingDeleteId, setPendingDeleteId] = useState("");
+  const [specDraft, setSpecDraft] = useState<SpecPair>({ key: "", value: "" });
+  const [specPairs, setSpecPairs] = useState<SpecPair[]>([]);
 
   const companyQuery = useQuery({
     queryKey: ["knowledge", "company-profile"],
@@ -103,75 +158,175 @@ export function KnowledgeBasePage() {
   });
 
   const companyMutation = useMutation({
-    mutationFn: (payload: Record<string, unknown>) => apiPatch<CompanyProfile>("/knowledge/company-profile", payload),
+    mutationFn: (payload: Record<string, unknown>) =>
+      apiPatch<CompanyProfile>("/knowledge/company-profile", payload, { toast: false }),
     onSuccess: () => {
-      setMessage("公司资料已保存。");
+      showPageMessage("公司资料已保存。");
       setForm({});
+      setSpecDraft({ key: "", value: "" });
+      setSpecPairs([]);
       queryClient.invalidateQueries({ queryKey: ["knowledge"] });
     },
-    onError: (error) => setMessage(error instanceof Error ? error.message : "保存失败")
+    onError: (error) => showPageMessage(error instanceof Error ? error.message : "保存失败")
   });
 
   const createMutation = useMutation({
-    mutationFn: (payload: Record<string, unknown>) => apiPost<KnowledgeRecord>(`/knowledge/${sectionApi[currentSection]}`, payload),
+    mutationFn: (payload: Record<string, unknown>) =>
+      apiPost<KnowledgeRecord>(`/knowledge/${sectionApi[currentSection]}`, payload, { toast: false }),
     onSuccess: () => {
-      setMessage("资料已新增。");
+      showPageMessage("资料已新增。");
       setForm({});
+      setSpecDraft({ key: "", value: "" });
+      setSpecPairs([]);
       queryClient.invalidateQueries({ queryKey: ["knowledge", currentSection] });
       queryClient.invalidateQueries({ queryKey: ["knowledge", "company-profile"] });
     },
-    onError: (error) => setMessage(error instanceof Error ? error.message : "保存失败")
+    onError: (error) => showPageMessage(error instanceof Error ? error.message : "新增失败")
   });
 
   const updateMutation = useMutation({
-    mutationFn: (payload: Record<string, unknown>) => apiPatch<KnowledgeRecord>(`/knowledge/${sectionApi[currentSection]}/${editingId}`, payload),
+    mutationFn: (payload: Record<string, unknown>) =>
+      apiPatch<KnowledgeRecord>(`/knowledge/${sectionApi[currentSection]}/${editingId}`, payload, { toast: false }),
     onSuccess: () => {
-      setMessage("资料已更新。");
+      showPageMessage("资料已更新。");
       setForm({});
       setEditingId("");
+      setSpecDraft({ key: "", value: "" });
+      setSpecPairs([]);
       queryClient.invalidateQueries({ queryKey: ["knowledge", currentSection] });
       queryClient.invalidateQueries({ queryKey: ["knowledge", "company-profile"] });
     },
-    onError: (error) => setMessage(error instanceof Error ? error.message : "保存失败")
+    onError: (error) => showPageMessage(error instanceof Error ? error.message : "更新失败")
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiDelete(`/knowledge/${sectionApi[currentSection]}/${id}`, { toast: false }),
+    onSuccess: () => {
+      showPageMessage("资料已删除。");
+      queryClient.invalidateQueries({ queryKey: ["knowledge", currentSection] });
+      queryClient.invalidateQueries({ queryKey: ["knowledge", "company-profile"] });
+    },
+    onError: (error) => showPageMessage(error instanceof Error ? error.message : "删除失败")
   });
 
   const fields = useMemo(() => currentSection === "company" ? companyFields : fieldMap[currentSection] ?? [], [currentSection]);
   const rows = listQuery.data ?? [];
   const company = companyQuery.data;
 
+  function showPageMessage(text: string) {
+    if (!text) return;
+    showClientToast({
+      type: inferToastType(text),
+      message: text
+    });
+  }
+
   function submit() {
-    setMessage("");
-    const payload = normalizePayload(form, fields);
-    if (currentSection === "company") {
-      companyMutation.mutate(payload);
-    } else if (editingId) {
-      updateMutation.mutate(payload);
-    } else {
-      createMutation.mutate(payload);
+    try {
+      const payload = normalizePayload(form, fields, currentSection === "products" ? specPairs : undefined);
+      if (currentSection === "company") {
+        companyMutation.mutate(payload);
+      } else if (editingId) {
+        updateMutation.mutate(payload);
+      } else {
+        createMutation.mutate(payload);
+      }
+    } catch (error) {
+      showPageMessage(error instanceof Error ? error.message : "表单数据无效");
     }
   }
 
   function startEdit(row: KnowledgeRecord) {
     setEditingId(row.id);
     setForm(recordToForm(row, fields));
-    setMessage("");
+    if (currentSection === "products") {
+      setSpecPairs(extractSpecPairs(row.specifications));
+      setSpecDraft({ key: "", value: "" });
+    }
   }
 
   function cancelEdit() {
     setEditingId("");
     setForm({});
-    setMessage("");
+    setSpecDraft({ key: "", value: "" });
+    setSpecPairs([]);
+  }
+
+  function addSpecPair() {
+    const key = specDraft.key.trim();
+    const value = specDraft.value.trim();
+    if (!key || !value) {
+      showPageMessage("规格参数的名称和值都不能为空。");
+      return;
+    }
+    setSpecPairs((current) => {
+      const index = current.findIndex((item) => item.key === key);
+      if (index >= 0) {
+        const next = [...current];
+        next[index] = { key, value };
+        return next;
+      }
+      return [...current, { key, value }];
+    });
+    setSpecDraft({ key: "", value: "" });
+  }
+
+  function removeSpecPair(key: string) {
+    setSpecPairs((current) => current.filter((item) => item.key !== key));
+  }
+
+  function removeRow(id: string) {
+    setPendingDeleteId(id);
+  }
+
+  function closeDeleteDialog() {
+    if (deleteMutation.isPending) return;
+    setPendingDeleteId("");
+  }
+
+  function confirmDeleteRow() {
+    if (!pendingDeleteId) return;
+    const targetId = pendingDeleteId;
+    setPendingDeleteId("");
+    deleteMutation.mutate(targetId);
   }
 
   return (
     <section className="page-stack">
+      <Dialog
+        v2
+        className="crm-delete-dialog"
+        title="确认删除资料"
+        visible={Boolean(pendingDeleteId)}
+        footer={(
+          <div className="toolbar crm-dialog-footer">
+            <button className="secondary-button" disabled={deleteMutation.isPending} onClick={closeDeleteDialog} type="button">
+              取消
+            </button>
+            <button className="primary-button" disabled={deleteMutation.isPending} onClick={confirmDeleteRow} type="button">
+              {deleteMutation.isPending ? "删除中..." : "删除"}
+            </button>
+          </div>
+        )}
+        onClose={closeDeleteDialog}
+      >
+        确认删除这条资料吗？删除后将无法恢复。
+      </Dialog>
+
       <header className="page-header">
         <div>
           <p className="eyebrow">Knowledge Base</p>
           <h1>企业资料库</h1>
         </div>
         {currentSection !== "company" ? (
-          editingId ? <button className="secondary-button" onClick={cancelEdit}>退出编辑</button> : <button className="primary-button" onClick={submit}><Plus size={16} />新增资料</button>
+          editingId ? (
+            <button className="secondary-button" onClick={cancelEdit}>退出编辑</button>
+          ) : (
+            <button className="primary-button" onClick={submit}>
+              <Plus size={16} />
+              新增资料
+            </button>
+          )
         ) : null}
       </header>
 
@@ -186,8 +341,6 @@ export function KnowledgeBasePage() {
           );
         })}
       </nav>
-
-      {message ? <section className="panel loading-state">{message}</section> : null}
 
       <section className="panel">
         <div className="panel-title">
@@ -204,7 +357,14 @@ export function KnowledgeBasePage() {
             onChange={setForm}
             onSubmit={submit}
             onCancel={editingId ? cancelEdit : undefined}
-            busy={companyMutation.isPending || createMutation.isPending || updateMutation.isPending}
+            busy={companyMutation.isPending || createMutation.isPending || updateMutation.isPending || deleteMutation.isPending}
+            uploadEntityType={uploadEntityTypeMap[currentSection]}
+            editingId={editingId}
+            specDraft={specDraft}
+            specPairs={specPairs}
+            onSpecDraftChange={setSpecDraft}
+            onAddSpec={addSpecPair}
+            onRemoveSpec={removeSpecPair}
           />
         )}
       </section>
@@ -215,20 +375,16 @@ export function KnowledgeBasePage() {
             <h2>已维护资料</h2>
             <span>{rows.length} 条</span>
           </div>
-          {listQuery.isLoading ? <div className="empty-state">正在加载资料...</div> : <KnowledgeTable rows={rows} fields={fields} onEdit={startEdit} />}
+          {listQuery.isLoading ? (
+            <div className="empty-state">正在加载资料...</div>
+          ) : (
+            <KnowledgeTable rows={rows} fields={fields} onEdit={startEdit} onDelete={removeRow} />
+          )}
         </section>
       ) : null}
     </section>
   );
 }
-
-const companyFields: Field[] = [
-  { key: "legalName", label: "公司全称", required: true },
-  { key: "displayName", label: "展示名称", required: true },
-  { key: "websiteUrl", label: "官网", placeholder: "https://example.com" },
-  { key: "markets", label: "出口市场", placeholder: "用逗号分隔，如 US,EU,UK" },
-  { key: "summary", label: "公司简介", type: "textarea" }
-];
 
 function KnowledgeForm(props: {
   fields: Field[];
@@ -238,30 +394,125 @@ function KnowledgeForm(props: {
   onChange: (values: Record<string, string>) => void;
   onSubmit: () => void;
   onCancel?: () => void;
+  uploadEntityType?: string;
+  editingId?: string;
+  specDraft: SpecPair;
+  specPairs: SpecPair[];
+  onSpecDraftChange: (value: SpecPair) => void;
+  onAddSpec: () => void;
+  onRemoveSpec: (key: string) => void;
 }) {
   return (
     <div className="form-grid">
-      {props.fields.map((field) => (
-        <label className={field.type === "textarea" ? "wide-field" : ""} key={field.key}>
-          <span>{field.label}{field.required ? " *" : ""}</span>
-          {field.type === "textarea" ? (
-            <textarea value={props.values[field.key] ?? ""} placeholder={field.placeholder} onChange={(event) => props.onChange({ ...props.values, [field.key]: event.target.value })} />
-          ) : (
-            <input type={field.type ?? "text"} value={props.values[field.key] ?? ""} placeholder={field.placeholder} onChange={(event) => props.onChange({ ...props.values, [field.key]: event.target.value })} />
-          )}
-        </label>
-      ))}
-      <div className="wide-field">
-        <button className="primary-button" disabled={props.busy} onClick={props.onSubmit}>{props.busy ? "保存中..." : props.submitLabel}</button>
+      {props.fields.map((field) => {
+        const wrapperClassName = field.type === "textarea" || field.type === "file" ? "wide-field" : "";
+        const content = field.key === "specifications" ? (
+          <SpecificationEditor
+            draft={props.specDraft}
+            pairs={props.specPairs}
+            onDraftChange={props.onSpecDraftChange}
+            onAdd={props.onAddSpec}
+            onRemove={props.onRemoveSpec}
+          />
+        ) : field.type === "textarea" ? (
+          <textarea
+            value={props.values[field.key] ?? ""}
+            placeholder={field.placeholder}
+            onChange={(event) => props.onChange({ ...props.values, [field.key]: event.target.value })}
+          />
+        ) : field.type === "file" ? (
+          <FileUpload
+            fileIds={parseList(props.values[field.key])}
+            onChange={(ids) => props.onChange({ ...props.values, [field.key]: ids.join(",") })}
+            entityType={props.uploadEntityType ?? "misc"}
+            entityId={props.editingId}
+            multiple={field.multiple}
+          />
+        ) : (
+          <input
+            type={field.type ?? "text"}
+            value={props.values[field.key] ?? ""}
+            placeholder={field.placeholder}
+            onChange={(event) => props.onChange({ ...props.values, [field.key]: event.target.value })}
+          />
+        );
+
+        if (field.type === "file") {
+          return (
+            <div className={wrapperClassName} key={field.key}>
+              <span>{field.label}{field.required ? " *" : ""}</span>
+              {content}
+            </div>
+          );
+        }
+
+        return (
+          <label className={wrapperClassName} key={field.key}>
+            <span>{field.label}{field.required ? " *" : ""}</span>
+            {content}
+          </label>
+        );
+      })}
+      <div className="wide-field toolbar">
+        <button className="primary-button" disabled={props.busy} onClick={props.onSubmit}>
+          {props.busy ? "处理中..." : props.submitLabel}
+        </button>
         {props.onCancel ? <button className="secondary-button" onClick={props.onCancel}>取消编辑</button> : null}
       </div>
     </div>
   );
 }
 
-function KnowledgeTable({ rows, fields, onEdit }: { rows: KnowledgeRecord[]; fields: Field[]; onEdit: (row: KnowledgeRecord) => void }) {
-  if (!rows.length) return <div className="empty-state">暂无资料。</div>;
-  const visibleFields = fields.slice(0, 4);
+function SpecificationEditor(props: {
+  draft: SpecPair;
+  pairs: SpecPair[];
+  onDraftChange: (value: SpecPair) => void;
+  onAdd: () => void;
+  onRemove: (key: string) => void;
+}) {
+  return (
+    <div className="spec-editor">
+      <div className="spec-entry-fields">
+        <input
+          placeholder="如：尺寸"
+          value={props.draft.key}
+          onChange={(event) => props.onDraftChange({ ...props.draft, key: event.target.value })}
+        />
+        <input
+          placeholder="如：10x10cm"
+          value={props.draft.value}
+          onChange={(event) => props.onDraftChange({ ...props.draft, value: event.target.value })}
+        />
+        <button className="secondary-button" onClick={props.onAdd} type="button">添加参数</button>
+      </div>
+
+      {props.pairs.length ? (
+        <div className="spec-entry-list">
+          {props.pairs.map((pair) => (
+            <div className="spec-entry-row" key={pair.key}>
+              <div className="spec-entry-pair">
+                <strong>{pair.key}</strong>
+                <span>{pair.value}</span>
+              </div>
+              <button className="secondary-button" onClick={() => props.onRemove(pair.key)} type="button">删除</button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="empty-state">暂未添加规格参数。</div>
+      )}
+    </div>
+  );
+}
+
+function KnowledgeTable(props: {
+  rows: KnowledgeRecord[];
+  fields: Field[];
+  onEdit: (row: KnowledgeRecord) => void;
+  onDelete: (id: string) => void;
+}) {
+  if (!props.rows.length) return <div className="empty-state">暂无资料。</div>;
+  const visibleFields = props.fields.filter((field) => field.type !== "file").slice(0, 4);
   return (
     <table>
       <thead>
@@ -272,11 +523,16 @@ function KnowledgeTable({ rows, fields, onEdit }: { rows: KnowledgeRecord[]; fie
         </tr>
       </thead>
       <tbody>
-        {rows.map((row) => (
+        {props.rows.map((row) => (
           <tr key={row.id}>
             {visibleFields.map((field) => <td key={field.key}>{formatValue(row[field.key])}</td>)}
             <td>{row.updatedAt ? new Date(row.updatedAt).toLocaleDateString() : "-"}</td>
-            <td><button className="secondary-button" onClick={() => onEdit(row)}>编辑</button></td>
+            <td>
+              <div className="toolbar">
+                <button className="secondary-button" onClick={() => props.onEdit(row)}>编辑</button>
+                <button className="secondary-button" onClick={() => props.onDelete(row.id)}>删除</button>
+              </div>
+            </td>
           </tr>
         ))}
       </tbody>
@@ -284,18 +540,36 @@ function KnowledgeTable({ rows, fields, onEdit }: { rows: KnowledgeRecord[]; fie
   );
 }
 
-function normalizePayload(values: Record<string, string>, fields: Field[]) {
+function normalizePayload(values: Record<string, string>, fields: Field[], specPairs?: SpecPair[]) {
   const payload: Record<string, unknown> = {};
   for (const field of fields) {
-    const value = values[field.key]?.trim();
+    const raw = values[field.key] ?? "";
+    const value = raw.trim();
+
+    if (field.type === "file") {
+      if (!value) continue;
+      payload[field.key] = parseList(value);
+      continue;
+    }
+
+    if (field.key === "specifications") {
+      payload[field.key] = specPairs && specPairs.length ? Object.fromEntries(specPairs.map((item) => [item.key, item.value])) : undefined;
+      continue;
+    }
+
     if (!value) continue;
+
     if (["markets", "tags", "targetMarkets", "certifications", "supportedMarkets"].includes(field.key)) {
       payload[field.key] = splitList(value);
-    } else if (field.type === "number") {
-      payload[field.key] = Number(value);
-    } else {
-      payload[field.key] = value;
+      continue;
     }
+
+    if (field.type === "number") {
+      payload[field.key] = Number(value);
+      continue;
+    }
+
+    payload[field.key] = value;
   }
   return payload;
 }
@@ -306,7 +580,10 @@ function companyToForm(company: CompanyProfile) {
     displayName: company.displayName,
     websiteUrl: company.websiteUrl ?? "",
     summary: company.summary ?? "",
-    markets: company.markets.join(", ")
+    markets: company.markets.join(", "),
+    foundedAt: toDateInputValue(company.foundedAt),
+    factoryAddress: company.factoryAddress ?? "",
+    productionScale: company.productionScale ?? ""
   };
 }
 
@@ -314,17 +591,50 @@ function recordToForm(row: KnowledgeRecord, fields: Field[]) {
   const values: Record<string, string> = {};
   for (const field of fields) {
     const value = row[field.key];
-    values[field.key] = Array.isArray(value) ? value.join(", ") : value === null || value === undefined ? "" : String(value);
+    if (Array.isArray(value)) {
+      values[field.key] = value.join(", ");
+    } else if (field.type === "date") {
+      values[field.key] = toDateInputValue(typeof value === "string" ? value : undefined);
+    } else if (field.key === "specifications" && value && typeof value === "object") {
+      values[field.key] = JSON.stringify(value, null, 2);
+    } else {
+      values[field.key] = value === null || value === undefined ? "" : String(value);
+    }
   }
   return values;
+}
+
+function parseList(value: string | undefined) {
+  return (value ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function extractSpecPairs(value: unknown): SpecPair[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return [];
+  }
+  return Object.entries(value as Record<string, unknown>).map(([key, raw]) => ({
+    key,
+    value: raw === null || raw === undefined ? "" : String(raw)
+  }));
 }
 
 function splitList(value: string) {
   return value.split(",").map((item) => item.trim()).filter(Boolean);
 }
 
+function toDateInputValue(value?: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString().slice(0, 10);
+}
+
 function formatValue(value: unknown) {
   if (Array.isArray(value)) return value.join(", ");
+  if (value && typeof value === "object") return JSON.stringify(value);
   if (value === null || value === undefined || value === "") return "-";
   return String(value);
 }

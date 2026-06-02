@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { KeyRound, ListChecks, LogOut, Mail, Shield, SlidersHorizontal, Users } from "lucide-react";
 import { NavLink, useParams } from "react-router-dom";
 import { apiGet, apiPatch, apiPost, clearSessionAndRedirect } from "../api/http";
+import { Switch } from "../components/Switch";
 
 const settings = [
   { key: "users", label: "用户管理", icon: Users },
@@ -70,7 +71,7 @@ function UsersPanel() {
         <Field label="角色Code" value={form.roleCodes} onChange={(roleCodes) => setForm({ ...form, roleCodes })} />
         <div className="wide-field"><button className="primary-button" onClick={() => create.mutate()} disabled={!form.email || !form.name || create.isPending}>新增用户</button></div>
       </div>
-      <Table headers={["姓名", "邮箱", "角色", "团队", "状态", "操作"]} rows={data.map((user) => [user.name, user.email, user.userRoles.map((item) => item.role.name).join(", "), user.team?.name ?? "-", user.isActive ? "启用" : "停用", <button className="secondary-button" onClick={() => toggle.mutate(user)}>{user.isActive ? "停用" : "启用"}</button>])} />
+      <Table headers={["姓名", "邮箱", "角色", "团队", "状态"]} rows={data.map((user) => [user.name, user.email, user.userRoles.map((item) => item.role.name).join(", "), user.team?.name ?? "-", <Switch checked={user.isActive} onChange={() => toggle.mutate(user)} loading={toggle.isPending} />])} />
     </div>
   );
 }
@@ -135,10 +136,9 @@ function DictionaryPanel(props: { title: string; queryKey: string; path: string;
           return [
             <input className="table-input" value={draft.name} onChange={(event) => setDrafts({ ...drafts, [row.id]: { ...draft, name: event.target.value } })} />,
             <input className="table-input" value={draft.description} onChange={(event) => setDrafts({ ...drafts, [row.id]: { ...draft, description: event.target.value } })} />,
-            row.isActive ? "启用" : "停用",
+            <Switch checked={row.isActive} onChange={() => toggle.mutate(row)} loading={toggle.isPending} />,
             <div className="toolbar">
               <button className="secondary-button" disabled={!draft.name || save.isPending} onClick={() => save.mutate(row)}>保存</button>
-              <button className="secondary-button" onClick={() => toggle.mutate(row)}>{row.isActive ? "停用" : "启用"}</button>
             </div>
           ];
         })}
@@ -161,7 +161,7 @@ function BlacklistPanel() {
         <Field label="原因" value={form.reason} onChange={(reason) => setForm({ ...form, reason })} />
         <div><button className="primary-button" disabled={!form.value} onClick={() => create.mutate()}>加入黑名单</button></div>
       </div>
-      <Table headers={["类型", "值", "原因", "状态", "操作"]} rows={data.map((rule) => [rule.type, rule.value, rule.reason ?? "-", rule.isActive ? "启用" : "停用", <button className="secondary-button" onClick={() => toggle.mutate(rule)}>{rule.isActive ? "停用" : "启用"}</button>])} />
+      <Table headers={["类型", "值", "原因", "状态"]} rows={data.map((rule) => [rule.type, rule.value, rule.reason ?? "-", <Switch checked={rule.isActive} onChange={() => toggle.mutate(rule)} loading={toggle.isPending} />])} />
     </div>
   );
 }

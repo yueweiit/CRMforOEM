@@ -421,8 +421,6 @@ export class DashboardsService {
 
     const buckets = new Map<string, {
       bucket: string;
-      sent: number;
-      replied: number;
       sent_message_count: number;
       replied_message_count: number;
     }>();
@@ -432,17 +430,13 @@ export class DashboardsService {
       const key = formatBucket(date, range.groupBy);
       const current = buckets.get(key) ?? {
         bucket: key,
-        sent: 0,
-        replied: 0,
         sent_message_count: 0,
         replied_message_count: 0
       };
       if (message.direction === "OUTBOUND") {
-        current.sent += 1;
         current.sent_message_count += 1;
       }
       if (message.direction === "INBOUND") {
-        current.replied += 1;
         current.replied_message_count += 1;
       }
       buckets.set(key, current);

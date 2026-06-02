@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
-import type { CSSProperties } from "react";
-import { AlertTriangle, CheckCircle2, Info, Mail, XCircle } from "lucide-react";
+import type { ReactNode } from "react";
+import { Message, Notification } from "@alifd/next";
+import "@alifd/next/lib/message/style.js";
+import "@alifd/next/lib/notification/style.js";
 
-export type ToastType = "success" | "info" | "warning" | "error";
+export type ToastType = "success" | "info" | "warning" | "error" | "notice" | "help";
 
 export type ToastInput = {
   message: string;
@@ -15,176 +16,202 @@ export type ToastInput = {
   actionLabel?: string;
 };
 
-type ToastRecord = Required<Pick<ToastInput, "message" | "type" | "persistent">> &
-  Omit<ToastInput, "message" | "type"> & {
-    id: number;
-    createdAt: number;
-  };
+type ToastHandle = {
+  close: () => void;
+};
 
-const MAX_TOASTS = 8;
-const DEFAULT_CLIENT_TTL = 10_000;
+const DEFAULT_CLIENT_TTL = 3000;
+const DEFAULT_SERVER_TTL = 6000;
+const DEFAULT_LOADING_TTL = 0;
 const DEDUPE_WINDOW_MS = 5000;
 const MAX_DEDUPE_KEYS = 200;
 
-let toastId = 0;
-const listeners = new Set<(toast: ToastRecord) => void>();
 const recentKeys = new Map<string, number>();
-const pendingToasts: ToastRecord[] = [];
+
+Message.config({
+  top: 16,
+  maxCount: 6,
+  duration: DEFAULT_CLIENT_TTL
+});
+
+Notification.config({
+  placement: "bottomRight",
+  maxCount: 6,
+  duration: DEFAULT_SERVER_TTL,
+  offset: [16, 16]
+});
 
 export function showToast(input: ToastInput) {
-  const now = Date.now();
-  const dedupeKey = input.dedupeKey?.trim();
-  if (dedupeKey) {
-    const lastAt = recentKeys.get(dedupeKey) ?? 0;
-    if (now - lastAt < DEDUPE_WINDOW_MS) {
-      return;
-    }
-    if (recentKeys.size >= MAX_DEDUPE_KEYS) {
-      const oldest = recentKeys.keys().next().value;
-      if (oldest) recentKeys.delete(oldest);
-    }
-    recentKeys.set(dedupeKey, now);
-  }
-
-  const toast: ToastRecord = {
-    id: ++toastId,
-    type: input.type ?? "info",
-    message: input.message,
-    title: input.title,
-    ttlMs: input.persistent ? undefined : (input.ttlMs ?? DEFAULT_CLIENT_TTL),
-    persistent: input.persistent ?? false,
-    dedupeKey,
-    actionHref: input.actionHref,
-    actionLabel: input.actionLabel,
-    createdAt: now
-  };
-
-  if (!listeners.size) {
-    pendingToasts.push(toast);
-    return;
-  }
-
-  listeners.forEach((fn) => fn(toast));
+  return showClientToast(input);
 }
 
-export function showServerToast(input: Omit<ToastInput, "persistent" | "ttlMs"> & Pick<ToastInput, "ttlMs">) {
-  showToast({
-    ...input,
-    persistent: true
+export function showServerToast(input: ToastInput) {
+  const dedupeKey = rememberDedupe(input.dedupeKey);
+  if (dedupeKey === null) return undefined;
+
+  return Notification.open({
+    type: mapNotificationType(input.type ?? "notice"),
+    title: input.title,
+    content: renderServerContent(input.message, input.actionHref, input.actionLabel),
+    duration: input.persistent ? 0 : input.ttlMs ?? DEFAULT_SERVER_TTL,
+    className: `crm-notification crm-notification-${input.type ?? "notice"}`
   });
 }
 
 export function showClientToast(input: ToastInput) {
-  showToast({
-    ...input,
-    persistent: false,
-    ttlMs: input.ttlMs ?? DEFAULT_CLIENT_TTL
+  const dedupeKey = rememberDedupe(input.dedupeKey);
+  if (dedupeKey === null) return undefined;
+
+  return Message.open({
+    type: mapMessageType(input.type ?? "notice"),
+    title: normalizeClientTitle(input.type ?? "notice", input.title),
+    content: input.message,
+    duration: input.persistent ? 0 : input.ttlMs ?? DEFAULT_CLIENT_TTL,
+    closeable: true
   });
 }
 
-function toastIcon(type: ToastType, title?: string) {
-  if (type === "success") return <CheckCircle2 size={18} />;
-  if (type === "warning") return <AlertTriangle size={18} />;
-  if (type === "error") return <XCircle size={18} />;
-  if (title?.includes("邮件")) return <Mail size={18} />;
-  return <Info size={18} />;
+export function showLoadingToast(input: Omit<ToastInput, "type" | "persistent" | "ttlMs">): ToastHandle | null {
+  const dedupeKey = rememberDedupe(input.dedupeKey, false);
+  if (dedupeKey === null) return null;
+
+  return Message.open({
+    type: "loading",
+    title: input.title,
+    content: input.message,
+    duration: DEFAULT_LOADING_TTL,
+    closeable: true
+  });
 }
 
-function formatToastTime(createdAt: number) {
-  return new Date(createdAt).toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit"
+export function notifyMutationStep(input: {
+  phase: "loading" | "success" | "error";
+  title?: string;
+  message: string;
+  dedupeKey?: string;
+}) {
+  if (input.phase === "loading") {
+    return showLoadingToast({
+      title: input.title,
+      message: input.message,
+      dedupeKey: input.dedupeKey
+    });
+  }
+
+  if (input.phase === "success") {
+    return showClientToast({
+      type: "success",
+      title: input.title,
+      message: input.message,
+      dedupeKey: input.dedupeKey
+    });
+  }
+
+  return showClientToast({
+    type: "error",
+    title: input.title,
+    message: input.message,
+    dedupeKey: input.dedupeKey
   });
+}
+
+export function inferToastType(message: string): ToastType {
+  const value = message.toLowerCase();
+  if (
+    value.includes("失败") ||
+    value.includes("错误") ||
+    value.includes("无效") ||
+    value.includes("fail") ||
+    value.includes("error") ||
+    value.includes("invalid")
+  ) {
+    return "error";
+  }
+
+  if (
+    value.includes("成功") ||
+    value.includes("已") ||
+    value.includes("完成") ||
+    value.includes("提交") ||
+    value.includes("保存") ||
+    value.includes("删除") ||
+    value.includes("上传") ||
+    value.includes("success") ||
+    value.includes("completed")
+  ) {
+    return "success";
+  }
+
+  if (
+    value.includes("等待") ||
+    value.includes("处理中") ||
+    value.includes("加载") ||
+    value.includes("稍后") ||
+    value.includes("loading") ||
+    value.includes("pending")
+  ) {
+    return "warning";
+  }
+
+  return "notice";
+}
+
+function rememberDedupe(rawKey?: string, shouldTrackWindow = true) {
+  const dedupeKey = rawKey?.trim();
+  if (!dedupeKey) return undefined;
+
+  const now = Date.now();
+  const lastAt = recentKeys.get(dedupeKey) ?? 0;
+  if (shouldTrackWindow && now - lastAt < DEDUPE_WINDOW_MS) {
+    return null;
+  }
+
+  if (recentKeys.size >= MAX_DEDUPE_KEYS) {
+    const oldest = recentKeys.keys().next().value;
+    if (oldest) recentKeys.delete(oldest);
+  }
+
+  recentKeys.set(dedupeKey, now);
+  return dedupeKey;
+}
+
+function mapMessageType(type: ToastType) {
+  if (type === "success") return "success" as const;
+  if (type === "warning") return "warning" as const;
+  if (type === "error") return "error" as const;
+  if (type === "help") return "help" as const;
+  return "notice" as const;
+}
+
+function mapNotificationType(type: ToastType) {
+  if (type === "success") return "success" as const;
+  if (type === "warning") return "warning" as const;
+  if (type === "error") return "error" as const;
+  if (type === "help") return "help" as const;
+  return "notice" as const;
+}
+
+function normalizeClientTitle(type: ToastType, title?: string) {
+  if (type === "success") return "success";
+  return title;
+}
+
+function renderServerContent(message: string, actionHref?: string, actionLabel?: string): ReactNode {
+  return (
+    <div className="crm-notification-body">
+      <div className="crm-notification-message">{message}</div>
+      {actionHref && actionLabel ? (
+        <div className="crm-notification-meta">
+          <span />
+          <a className="crm-notification-link" href={actionHref}>
+            {actionLabel}
+          </a>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 export function ToastContainer() {
-  const [toasts, setToasts] = useState<ToastRecord[]>([]);
-  const [hoveredId, setHoveredId] = useState<number | null>(null);
-
-  const addToast = useCallback((toast: ToastRecord) => {
-    setToasts((prev) => {
-      const next = [...prev, toast];
-      return next.length > MAX_TOASTS ? next.slice(next.length - MAX_TOASTS) : next;
-    });
-
-    if (!toast.persistent && toast.ttlMs) {
-      setTimeout(() => {
-        setToasts((prev) => prev.filter((item) => item.id !== toast.id));
-      }, toast.ttlMs);
-    }
-  }, []);
-
-  useEffect(() => {
-    listeners.add(addToast);
-    if (pendingToasts.length) {
-      const queued = [...pendingToasts];
-      pendingToasts.length = 0;
-      queued.forEach((toast) => addToast(toast));
-    }
-    return () => {
-      listeners.delete(addToast);
-    };
-  }, [addToast]);
-
-  if (!toasts.length) return null;
-
-  const visibleToasts = toasts.slice(-MAX_TOASTS);
-  const stackHeight = 132 + Math.max(0, visibleToasts.length - 1) * 18;
-
-  return (
-    <div className="toast-container" aria-live="polite" style={{ height: `${stackHeight}px` }}>
-      {visibleToasts.map((toast, index) => {
-        const depth = Math.max(visibleToasts.length - index - 1, 0);
-        const isHovered = hoveredId === toast.id;
-        const translateX = depth * -18 + (isHovered ? -12 : 0);
-        const translateY = depth * -16 + (isHovered ? -10 : 0);
-        const scale = isHovered ? 1.02 : 1 - depth * 0.035;
-        const style = {
-          "--stack-depth": depth,
-          zIndex: isHovered ? 500 : 100 + index,
-          transform: `translate(${translateX}px, ${translateY}px) scale(${scale})`,
-          opacity: hoveredId !== null && !isHovered ? Math.max(0.56, 1 - depth * 0.14) : Math.max(0.72, 1 - depth * 0.12)
-        } as CSSProperties;
-
-        return (
-          <div
-            key={toast.id}
-            style={style}
-            className={`toast ${toast.type} ${toast.persistent ? "is-persistent" : "is-ephemeral"}`}
-            role={toast.type === "error" ? "alert" : "status"}
-            aria-live={toast.type === "error" ? "assertive" : "polite"}
-            onMouseEnter={() => setHoveredId(toast.id)}
-            onMouseLeave={() => setHoveredId((current) => (current === toast.id ? null : current))}
-          >
-            <span className="toast-icon">{toastIcon(toast.type, toast.title)}</span>
-            <div className="toast-copy">
-              <div className="toast-head">
-                {toast.title ? <strong>{toast.title}</strong> : null}
-                <time className="toast-time" dateTime={new Date(toast.createdAt).toISOString()}>
-                  {formatToastTime(toast.createdAt)}
-                </time>
-              </div>
-              <span>{toast.message}</span>
-              <div className="toast-meta">
-                <small>{toast.persistent ? "实时消息" : "本地反馈 · 10秒后自动关闭"}</small>
-                {toast.actionHref ? (
-                  <a className="toast-link" href={toast.actionHref}>
-                    {toast.actionLabel ?? "查看"}
-                  </a>
-                ) : null}
-              </div>
-            </div>
-            <button
-              type="button"
-              className="toast-close"
-              aria-label="关闭通知"
-              onClick={() => setToasts((prev) => prev.filter((item) => item.id !== toast.id))}
-            >
-              ×
-            </button>
-          </div>
-        );
-      })}
-    </div>
-  );
+  return null;
 }

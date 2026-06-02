@@ -20,9 +20,9 @@ export type EmailToastConfig = {
 
 export const EMAIL_EVENT_TOAST_CONFIG: Record<EmailToastEvent, EmailToastConfig> = {
   "inbound-mail.received": {
-    type: "info",
+    type: "notice",
     title: "收到客户回复",
-    message: (context) => `${context.customerName}：${context.subject}`,
+    message: (context) => `${context.customerName} · ${context.subject}`,
     dedupeKey: (context) => `mail:${context.customerId}:${context.subject}`,
     actionHref: (context) => `/customers/${context.customerId}/email`,
     actionLabel: "查看邮件"
