@@ -65,6 +65,21 @@ type WebsiteAiInsights = {
   suggested_next_actions?: string[];
   risk_notes?: string[];
   evidence_pages?: Array<{ title?: string; url?: string; reason?: string }>;
+  missing_categories_gap?: Array<{
+    category: string;
+    customer_has: string;
+    we_can_supply: string;
+    opportunity_score: number;
+    reason: string;
+    data_quality_note: string;
+  }>;
+  price_competitiveness?: {
+    level: "competitive" | "neutral" | "challenging" | "unknown";
+    summary: string;
+    price_nature_note: string;
+  };
+  unknown_factors?: string[];
+  our_data_quality_note?: string;
 };
 type WebsiteAnalysisPage = { id?: string; url: string; pageType: string; title?: string; textSummary?: string; headings?: unknown[]; contacts?: unknown[]; depth?: number; errorMessage?: string };
 type WebsiteAnalysisProduct = { id?: string; name: string; category?: string; description?: string; keywords?: string[]; evidenceUrls?: string[]; imageUrls?: string[]; priceSignals?: unknown; confidence?: number };
@@ -349,7 +364,6 @@ function WebsiteAnalysisPanel({ customer }: { customer: CustomerDetail }) {
   const analysis = customer.websiteAnalyses[0];
   const validPages = (analysis?.pages ?? []).filter((page) => !page.errorMessage);
   const failedPages = (analysis?.pages ?? []).filter((page) => page.errorMessage);
-  const pageCount = validPages.length || analysis?.crawledUrls?.length || 0;
   const aiInsights = getWebsiteAiInsights(analysis);
   return (
     <section className="panel">
@@ -359,13 +373,10 @@ function WebsiteAnalysisPanel({ customer }: { customer: CustomerDetail }) {
         <div className="page-stack">
           <div className="detail-grid">
             <Detail label="分析状态" value={statusText(analysis.status)} />
-            <Detail label="抓取页面" value={`${pageCount} 个页面`} />
-            <Detail label="官网语言" value={analysis.detectedLanguage || "-"} />
-            <Detail label="产品数量" value={analysis.productCount ? `${analysis.productCount} 个` : "未识别到明确数量"} />
             <Detail label="官网完整度" value={analysis.websiteCompleteness ? `${analysis.websiteCompleteness}/100` : "待判断"} />
+            <Detail label="产品数量" value={analysis.productCount ? `${analysis.productCount} 个` : "未识别到明确数量"} />
             <Detail label="价格定位" value={analysis.pricePositioning || readablePriceRange(analysis.priceRange)} />
-            <Detail label="有效证据页" value={`${validPages.length} 个`} />
-            <Detail label="需人工复核" value={failedPages.length ? `${failedPages.length} 个页面未访问成功` : "暂无明显抓取异常"} />
+            <Detail label="官网语言" value={analysis.detectedLanguage || "-"} />
           </div>
 
           {analysis.status === "QUEUED" || analysis.status === "RUNNING" ? (
@@ -373,28 +384,7 @@ function WebsiteAnalysisPanel({ customer }: { customer: CustomerDetail }) {
           ) : null}
           {analysis.status === "FAILED" ? <div className="error-state">{analysis.errorMessage ?? "官网分析失败，请检查官网是否可访问。"}</div> : null}
 
-          <WebsiteBusinessReport analysis={analysis} insights={aiInsights} />
-
-          <div className="analysis-grid">
-            <AnalysisSection title="产品线与页面证据">
-              <ProductCategoryList items={analysis.productCategories} />
-            </AnalysisSection>
-            <AnalysisSection title="公开联系方式">
-              <ContactEvidenceList items={analysis.contactEvidence} />
-            </AnalysisSection>
-            <AnalysisSection title="合作机会">
-              <InsightList items={analysis.opportunities} empty="暂未从官网自动识别出明确 OEM/ODM 合作机会，可结合产品页和背调继续判断。" />
-            </AnalysisSection>
-            <AnalysisSection title="风险提示">
-              <InsightList items={aiInsights?.risk_notes ?? analysis.risks} empty="暂未识别到明显风险。" />
-            </AnalysisSection>
-            <AnalysisSection title="有效证据页面">
-              <WebsiteEvidencePageList pages={aiInsights?.evidence_pages} fallbackPages={validPages} />
-            </AnalysisSection>
-            <AnalysisSection title="下一步建议">
-              <InsightList items={aiInsights?.suggested_next_actions} empty="建议先补充采购/产品负责人，再进入开发邮件生成。" />
-            </AnalysisSection>
-          </div>
+          <WebsiteBusinessReportV2 analysis={analysis} insights={aiInsights} />
 
           <details className="ai-versions">
             <summary>抓取异常与技术明细</summary>
@@ -418,7 +408,7 @@ function ResearchPanel({ customer }: { customer: CustomerDetail }) {
         <div className="page-stack">
           <div className="detail-grid">
             <Detail label="报告状态" value={statusText(report.status)} />
-            <Detail label="公开网络搜索" value={report.searchEnabled ? "已启用" : "未启用，基于官网与CRM资料"} />
+            <Detail label="公开网络搜索" value={researchSearchStatus(report)} />
             <Detail label="生成时间" value={new Date(report.createdAt).toLocaleString()} />
             <Detail label="报告标题" value={report.title} />
           </div>
@@ -630,35 +620,71 @@ function AnalysisSection(props: { title: string; children: ReactNode }) {
   );
 }
 
-function WebsiteBusinessReport({ analysis, insights }: { analysis: WebsiteAnalysis; insights?: WebsiteAiInsights }) {
+function WebsiteBusinessReportV2({ analysis, insights }: { analysis: WebsiteAnalysis; insights?: WebsiteAiInsights }) {
   const summary = insights?.business_summary || "官网分析已完成，但暂未生成完整客户画像。建议重新分析或补充公开搜索能力。";
+  const validPages = (analysis.pages ?? []).filter((page) => !page.errorMessage);
   return (
     <section className="analysis-report">
       <div className="analysis-report__summary">
         <span>客户分析结论</span>
         <p>{summary}</p>
+        {insights?.our_data_quality_note ? <p style={{ marginTop: 8, color: "#b45309", fontSize: 13 }}>数据质量提示：{insights.our_data_quality_note}</p> : null}
       </div>
       <div className="analysis-grid">
-        <AnalysisSection title="客户画像">
-          <p className="analysis-copy">{insights?.customer_profile || "官网未明确展示完整客户画像，需要结合公开搜索和人工判断补充。"}</p>
-        </AnalysisSection>
-        <AnalysisSection title="主营业务与产品线">
-          <p className="analysis-copy">{insights?.main_business || insights?.product_line_analysis || fallbackProductLineText(analysis.productCategories)}</p>
-        </AnalysisSection>
-        <AnalysisSection title="品牌与市场定位">
-          <p className="analysis-copy">{insights?.brand_positioning || analysis.pricePositioning || "官网未明确展示品牌或价格定位。"}</p>
-          {insights?.market_channel_signals ? <p className="analysis-copy">{insights.market_channel_signals}</p> : null}
-        </AnalysisSection>
-        <AnalysisSection title="OEM/ODM机会判断">
-          <p className="analysis-copy">{insights?.oem_opportunity_assessment || "可结合产品线、品牌页和联系人信息继续判断OEM/ODM合作机会。"}</p>
-          <InsightList items={insights?.cooperation_opportunities ?? analysis.opportunities} empty="暂未识别到明确合作机会。" />
-        </AnalysisSection>
-        <AnalysisSection title="开发切入点">
-          <InsightList items={insights?.sales_entry_points} empty="建议先引用其官网中已识别的品牌或产品线，再询问新品开发与供应链补充需求。" />
-        </AnalysisSection>
-        <AnalysisSection title="公开联系方式">
-          <ContactEvidenceList items={analysis.contactEvidence} />
-        </AnalysisSection>
+        <div className="page-stack" style={{ gap: 12 }}>
+          <AnalysisSection title="客户画像">
+            <p className="analysis-copy">{insights?.customer_profile || "官网未明确展示完整客户画像，需要结合公开搜索和人工判断补充。"}</p>
+          </AnalysisSection>
+          <AnalysisSection title="主营业务与产品线">
+            <p className="analysis-copy">{insights?.main_business || insights?.product_line_analysis || fallbackProductLineText(analysis.productCategories)}</p>
+          </AnalysisSection>
+          <AnalysisSection title="品牌定位与市场信号">
+            <p className="analysis-copy">{insights?.brand_positioning || analysis.pricePositioning || "官网未明确展示品牌或价格定位。"}</p>
+            {insights?.market_channel_signals ? <p className="analysis-copy" style={{ marginTop: 8 }}>{insights.market_channel_signals}</p> : null}
+          </AnalysisSection>
+          <AnalysisSection title="OEM/ODM机会判断">
+            <p className="analysis-copy">{insights?.oem_opportunity_assessment || "可结合产品线、品牌页和联系人信息继续判断OEM/ODM合作机会。"}</p>
+            <InsightList items={insights?.cooperation_opportunities ?? analysis.opportunities} empty="暂未识别到明确合作机会。" />
+          </AnalysisSection>
+          <AnalysisSection title="开发切入点与下一步建议">
+            {insights?.sales_entry_points?.length ? (
+              <>
+                <p className="analysis-copy" style={{ fontWeight: 600, marginBottom: 6 }}>切入话术</p>
+                <InsightList items={insights.sales_entry_points} empty="" />
+              </>
+            ) : null}
+            {insights?.suggested_next_actions?.length ? (
+              <>
+                <p className="analysis-copy" style={{ fontWeight: 600, marginTop: 10, marginBottom: 6 }}>下一步行动</p>
+                <InsightList items={insights.suggested_next_actions} empty="建议先补充采购/产品负责人，再进入开发邮件生成。" />
+              </>
+            ) : null}
+            {!insights?.sales_entry_points?.length && !insights?.suggested_next_actions?.length ? <div className="empty-state">暂无开发切入点建议。</div> : null}
+          </AnalysisSection>
+          <AnalysisSection title="风险提示">
+            <InsightList items={insights?.risk_notes ?? analysis.risks} empty="暂未识别到明显风险。" />
+          </AnalysisSection>
+        </div>
+        <div className="page-stack" style={{ gap: 12 }}>
+          <AnalysisSection title="产品分类与页面证据">
+            <ProductCategoryList items={analysis.productCategories} />
+          </AnalysisSection>
+          <AnalysisSection title="公开联系方式">
+            <ContactEvidenceList items={analysis.contactEvidence} />
+          </AnalysisSection>
+          <AnalysisSection title="缺失品类对比分析">
+            <MissingCategoriesGapList items={insights?.missing_categories_gap} />
+          </AnalysisSection>
+          <AnalysisSection title="价格竞争力">
+            <PriceCompetitivenessCard data={insights?.price_competitiveness} />
+          </AnalysisSection>
+          <AnalysisSection title="有效证据页面">
+            <WebsiteEvidencePageList pages={insights?.evidence_pages} fallbackPages={validPages} />
+          </AnalysisSection>
+          <AnalysisSection title="待补充信息">
+            <UnknownFactorsList items={insights?.unknown_factors} />
+          </AnalysisSection>
+        </div>
       </div>
     </section>
   );
@@ -766,6 +792,72 @@ function WebsiteEvidencePageList({ pages, fallbackPages }: { pages?: Array<{ tit
           <EvidenceLinks urls={page.url ? [page.url] : []} />
         </div>
       ))}
+    </div>
+  );
+}
+
+function MissingCategoriesGapList({ items }: { items?: WebsiteAiInsights["missing_categories_gap"] }) {
+  if (!items?.length) return <div className="empty-state">暂无品类对比数据。完善企业产品资料库后可自动生成。</div>;
+  return (
+    <div className="analysis-list">
+      {items.map((item, index) => {
+        const scoreTone = item.opportunity_score >= 8 ? "strong" : item.opportunity_score >= 6 ? "medium" : "weak";
+        const scoreStyle =
+          scoreTone === "strong"
+            ? { background: "#dcfce7", color: "#166534" }
+            : scoreTone === "medium"
+              ? { background: "#fef9c3", color: "#854d0e" }
+              : { background: "#fee2e2", color: "#991b1b" };
+        return (
+          <div className="analysis-row" key={`${item.category}-${index}`}>
+            <strong>{item.category || `待确认品类 ${index + 1}`}</strong>
+            <span>客户现有：{item.customer_has || "未明确展示"}</span>
+            <span>我方可供：{item.we_can_supply || "需人工确认"}</span>
+            {item.reason ? <span>{item.reason}</span> : null}
+            <span>
+              机会评分：<span className="status-pill" style={scoreStyle}>{item.opportunity_score}/10</span>
+            </span>
+            {item.data_quality_note ? <small style={{ color: "#b45309" }}>{item.data_quality_note}</small> : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function PriceCompetitivenessCard({ data }: { data?: WebsiteAiInsights["price_competitiveness"] }) {
+  const level = data?.level || "unknown";
+  const levelLabel: Record<string, string> = {
+    competitive: "有竞争力",
+    neutral: "持平",
+    challenging: "偏弱",
+    unknown: "暂无对比数据"
+  };
+  const levelColor: Record<string, string> = {
+    competitive: "#dcfce7",
+    neutral: "#fef9c3",
+    challenging: "#fee2e2",
+    unknown: "#f3f4f6"
+  };
+  return (
+    <div>
+      <p className="analysis-copy" style={{ marginBottom: 8 }}>
+        竞争力判断：<span className="status-pill" style={{ background: levelColor[level] || levelColor.unknown, color: "#1f2933" }}>{levelLabel[level] || level}</span>
+      </p>
+      <p className="analysis-copy">{data?.summary || "客户官网价格通常为零售价或MSRP，或缺少可确认的B2B/wholesale/trade价格信号，暂不进行价格竞争力判断。"}</p>
+      {data?.price_nature_note ? <small style={{ display: "block", marginTop: 6, color: "#6b7280" }}>{data.price_nature_note}</small> : null}
+    </div>
+  );
+}
+
+function UnknownFactorsList({ items }: { items?: string[] }) {
+  if (!items?.length) return <div className="empty-state">暂未列出待补充信息。</div>;
+  return (
+    <div>
+      <p className="analysis-copy" style={{ marginBottom: 8 }}>以下关键信息尚未获得，建议在开发过程中逐步补充：</p>
+      <ul className="analysis-bullets">
+        {items.map((item, index) => <li key={`${item}-${index}`} style={{ color: "#b45309" }}>{item}</li>)}
+      </ul>
     </div>
   );
 }
@@ -1031,6 +1123,12 @@ function statusText(status: string) {
   return labels[status] ?? status;
 }
 
+function researchSearchStatus(report: ResearchReport) {
+  if (isPendingStatus(report.status)) return "检测中，完成后显示是否启用";
+  if (report.status === "FAILED") return "未完成";
+  return report.searchEnabled ? "已启用" : "未启用，基于官网与CRM资料";
+}
+
 function isPendingStatus(status?: string) {
   return status === "QUEUED" || status === "RUNNING";
 }
@@ -1068,6 +1166,8 @@ function getWebsiteAiInsights(analysis?: WebsiteAnalysis): WebsiteAiInsights | u
   const raw = asRecord(analysis?.rawResult);
   const insights = asRecord(raw.aiInsights);
   if (!Object.keys(insights).length) return undefined;
+  const priceCompetitiveness = asRecord(insights.price_competitiveness);
+  const priceLevel = getText(priceCompetitiveness, "level");
   return {
     business_summary: getText(insights, "business_summary"),
     customer_profile: getText(insights, "customer_profile"),
@@ -1083,7 +1183,27 @@ function getWebsiteAiInsights(analysis?: WebsiteAnalysis): WebsiteAiInsights | u
     evidence_pages: asArray(insights.evidence_pages).map((item) => {
       const record = asRecord(item);
       return { title: getText(record, "title"), url: getText(record, "url"), reason: getText(record, "reason") };
-    })
+    }),
+    missing_categories_gap: asArray(insights.missing_categories_gap).map((item) => {
+      const record = asRecord(item);
+      const rawScore = record.opportunity_score;
+      const opportunityScore = typeof rawScore === "number" && Number.isFinite(rawScore) ? rawScore : Number(rawScore);
+      return {
+        category: getText(record, "category"),
+        customer_has: getText(record, "customer_has") || "未明确展示",
+        we_can_supply: getText(record, "we_can_supply") || "需人工确认",
+        opportunity_score: Number.isFinite(opportunityScore) ? opportunityScore : 5,
+        reason: getText(record, "reason"),
+        data_quality_note: getText(record, "data_quality_note")
+      };
+    }),
+    price_competitiveness: {
+      level: priceLevel === "competitive" || priceLevel === "neutral" || priceLevel === "challenging" || priceLevel === "unknown" ? priceLevel : "unknown",
+      summary: getText(priceCompetitiveness, "summary"),
+      price_nature_note: getText(priceCompetitiveness, "price_nature_note")
+    },
+    unknown_factors: getStringArray(insights.unknown_factors),
+    our_data_quality_note: getText(insights, "our_data_quality_note")
   };
 }
 

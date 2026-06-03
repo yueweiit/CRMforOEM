@@ -1185,6 +1185,56 @@ td small {
   color: rgba(23, 48, 66, 1);
 }
 
+.next-message .next-message-close .next-icon-close:before {
+  content: "×" !important;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+  font-size: 16px !important;
+  font-weight: 500;
+  line-height: 1 !important;
+}
+
+.next-message.next-message-success > .next-message-symbol-icon::before {
+  content: "✓" !important;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+  font-size: 18px !important;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.next-message.next-message-warning > .next-message-symbol-icon::before {
+  content: "!" !important;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+  font-size: 18px !important;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.next-message.next-message-error > .next-message-symbol-icon::before {
+  content: "×" !important;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+  font-size: 18px !important;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.next-message.next-message-notice > .next-message-symbol-icon::before,
+.next-message.next-message-help > .next-message-symbol-icon::before {
+  content: "i" !important;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+  font-size: 16px !important;
+  font-weight: 700;
+  font-style: normal;
+  line-height: 1;
+}
+
+.next-message.next-message-loading > .next-message-symbol-icon::before {
+  content: "…" !important;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+  font-size: 18px !important;
+  font-weight: 700;
+  line-height: 1;
+}
+
 .crm-notification-body {
   display: grid;
   gap: 8px;

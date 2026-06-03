@@ -26,12 +26,30 @@ export class WebsiteAnalysisService {
       throw new NotFoundException("Customer or website URL not found");
     }
 
+    const companyProfile = await this.prisma.companyProfile.findFirst({
+      where: { organizationId: user.organizationId },
+      select: {
+        id: true,
+        displayName: true,
+        products: {
+          select: { category: true, priceMin: true },
+          take: 200
+        },
+        capabilities: {
+          select: { category: true }
+        }
+      }
+    });
+    const uniqueProductCategories = [...new Set(companyProfile?.products.map((product) => product.category) ?? [])];
+    const uniqueCapabilityCategories = [...new Set(companyProfile?.capabilities.map((capability) => capability.category) ?? [])];
+    const hasPriceData = companyProfile?.products.some((product) => product.priceMin != null) ?? false;
+
     const run = await this.aiGeneration.createRun({
       organizationId: user.organizationId,
       customerId,
       type: AiGenerationType.WebsiteAnalysis,
       model: this.aiProvider.model,
-      promptVersion: "website-analysis-v1",
+      promptVersion: "website-analysis-v2",
       rawInput: {
         customer: {
           id: customer.id,
@@ -39,7 +57,18 @@ export class WebsiteAnalysisService {
           websiteUrl: customer.websiteUrl,
           country: customer.country,
           language: customer.language
-        }
+        },
+        ourProfile: companyProfile
+          ? {
+              id: companyProfile.id,
+              displayName: companyProfile.displayName,
+              productCount: companyProfile.products.length,
+              productCategories: uniqueProductCategories.slice(0, 30),
+              hasPriceData,
+              capabilityCount: companyProfile.capabilities.length,
+              capabilityCategories: uniqueCapabilityCategories
+            }
+          : null
       },
       createdById: user.id
     });

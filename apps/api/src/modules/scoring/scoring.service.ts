@@ -188,15 +188,19 @@ function calculateDimensions(context: ScoreContext): ScoreDimension[] {
   const website = context.websiteAnalysis;
   const categories = arrayFromJson<Record<string, unknown>>(website?.productCategories);
   const aiInsights = asRecord(asRecord(website?.rawResult).aiInsights);
+  const researchJson = asRecord(context.researchReport?.reportJson);
+  const researchSummary = asRecord(asRecord(researchJson.sections).summary_development_recommendations);
   const opportunities = [
     ...arrayFromJson<string>(website?.opportunities),
     ...stringArray(aiInsights.cooperation_opportunities),
-    ...stringArray(asRecord(context.researchReport?.reportJson).oem_odm_opportunities)
+    ...stringArray(researchJson.oem_odm_opportunities),
+    ...stringArray(researchSummary.cooperation_opportunities)
   ];
   const risks = [
     ...arrayFromJson<string>(website?.risks),
     ...stringArray(aiInsights.risk_notes),
-    ...stringArray(asRecord(context.researchReport?.reportJson).risks)
+    ...stringArray(researchJson.risks),
+    ...stringArray(researchSummary.potential_risks)
   ];
   const failedPageCount = website?.pages.filter((page) => page.errorMessage).length ?? 0;
   const validPageCount = website?.pages.filter((page) => !page.errorMessage).length ?? 0;
@@ -447,6 +451,20 @@ function compactWebsiteAnalysis(analysis: ScoreContext["websiteAnalysis"]) {
 function compactResearchReport(report: ScoreContext["researchReport"]) {
   if (!report) return null;
   const reportJson = asRecord(report.reportJson);
+  const sections = asRecord(reportJson.sections);
+  if (Object.keys(sections).length) {
+    const summarySection = asRecord(sections.summary_development_recommendations);
+    const rating = text(summarySection.customer_value_rating);
+    const priority = text(summarySection.development_priority);
+    return {
+      title: text(reportJson.title) || report.title,
+      summary: [rating ? `客户价值评级：${rating}` : "", priority ? `开发优先级：${priority}` : ""].filter(Boolean).join("，"),
+      opportunities: stringArray(summarySection.cooperation_opportunities),
+      risks: stringArray(summarySection.potential_risks),
+      recommendations: stringArray(summarySection.recommended_products),
+      nextActions: stringArray(summarySection.next_actions)
+    };
+  }
   return {
     title: report.title,
     summary: text(reportJson.summary),

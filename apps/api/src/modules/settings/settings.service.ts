@@ -56,7 +56,7 @@ export class SettingsService {
     await this.ensureDefaultCustomerDictionaries(user.organizationId);
     return this.prisma.customerSource.findMany({
       where: { organizationId: user.organizationId },
-      orderBy: [{ isActive: "desc" }, { name: "asc" }]
+      orderBy: { name: "asc" }
     });
   }
 
@@ -87,7 +87,7 @@ export class SettingsService {
     await this.ensureDefaultCustomerDictionaries(user.organizationId);
     return this.prisma.customerType.findMany({
       where: { organizationId: user.organizationId },
-      orderBy: [{ isActive: "desc" }, { name: "asc" }]
+      orderBy: { name: "asc" }
     });
   }
 
@@ -202,14 +202,14 @@ export class SettingsService {
       ...DEFAULT_CUSTOMER_SOURCES.map(([name, description]) =>
         this.prisma.customerSource.upsert({
           where: { organizationId_name: { organizationId, name } },
-          update: { description, isActive: true },
+          update: { description },
           create: { organizationId, name, description }
         })
       ),
       ...DEFAULT_CUSTOMER_TYPES.map(([name, description]) =>
         this.prisma.customerType.upsert({
           where: { organizationId_name: { organizationId, name } },
-          update: { description, isActive: true },
+          update: { description },
           create: { organizationId, name, description }
         })
       )
