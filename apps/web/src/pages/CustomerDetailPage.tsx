@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
+import { EMAIL_DRAFT_PURPOSES, emailDraftPurposeLabel } from "@oem-crm/shared";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { ReactNode, TextareaHTMLAttributes } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bot, Globe2, MailPlus, NotebookTabs, Star } from "lucide-react";
 import { NavLink, useParams } from "react-router-dom";
 import { apiGet, apiPatch, apiPost } from "../api/http";
+import { AppSelect } from "../components/AppSelect";
 import { showClientToast } from "../components/Toast";
 
 type CustomerDetail = {
@@ -114,7 +116,7 @@ type OemScore = {
 };
 type AiRun = { versions?: Array<{ id: string; versionType: string; content: string; createdAt: string; editReason?: string }> };
 type FollowUpTask = { id: string; title: string; status: string; dueAt: string; type: string };
-type EmailDraft = { id: string; subject: string; body: string; toEmail: string; status: string; emailAccountId?: string; customer?: { name: string }; aiGenerationRun?: AiRun; updatedAt: string };
+type EmailDraft = { id: string; purpose?: string; subject: string; body: string; toEmail: string; toNameSnapshot?: string; fromEmailSnapshot?: string; fromNameSnapshot?: string; status: string; emailAccountId?: string; emailAccount?: EmailAccount; customer?: { name: string }; aiGenerationRun?: AiRun; updatedAt: string };
 type EmailThread = { id: string; subject: string; lastMessageAt?: string; messages?: Array<{ subject: string; direction: string; status: string; createdAt: string }> };
 type EmailAccount = { id: string; name: string; email: string; scope?: string };
 type Quote = { id: string; quoteNo: string; amount: string; currency: string; status: string; createdAt: string };
@@ -295,30 +297,44 @@ function OverviewPanel({ customer, customerId, onChanged }: { customer: Customer
             <Field label="币种" value={editForm.currency} onChange={(currency) => setEditForm({ ...editForm, currency })} />
             <label>
               <span>客户来源</span>
-              <select value={editForm.sourceId} onChange={(event) => setEditForm({ ...editForm, sourceId: event.target.value })}>
-                <option value="">未选择</option>
-                {options?.sources.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-              </select>
+              <AppSelect
+                value={editForm.sourceId}
+                onChange={(sourceId) => setEditForm({ ...editForm, sourceId })}
+                options={[
+                  { value: "", label: "未选择" },
+                  ...(options?.sources.map((item) => ({ value: item.id, label: item.name })) ?? [])
+                ]}
+              />
             </label>
             <label>
               <span>客户类型</span>
-              <select value={editForm.typeId} onChange={(event) => setEditForm({ ...editForm, typeId: event.target.value })}>
-                <option value="">未选择</option>
-                {options?.types.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-              </select>
+              <AppSelect
+                value={editForm.typeId}
+                onChange={(typeId) => setEditForm({ ...editForm, typeId })}
+                options={[
+                  { value: "", label: "未选择" },
+                  ...(options?.types.map((item) => ({ value: item.id, label: item.name })) ?? [])
+                ]}
+              />
             </label>
             <label>
               <span>负责人</span>
-              <select value={editForm.ownerId} onChange={(event) => setEditForm({ ...editForm, ownerId: event.target.value })}>
-                <option value="">未选择</option>
-                {options?.users.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-              </select>
+              <AppSelect
+                value={editForm.ownerId}
+                onChange={(ownerId) => setEditForm({ ...editForm, ownerId })}
+                options={[
+                  { value: "", label: "未选择" },
+                  ...(options?.users.map((item) => ({ value: item.id, label: item.name })) ?? [])
+                ]}
+              />
             </label>
             <label>
               <span>客户阶段</span>
-              <select value={editForm.stage} onChange={(event) => setEditForm({ ...editForm, stage: event.target.value })}>
-                {(options?.stages ?? Object.keys(stageLabels)).map((stage) => <option key={stage} value={stage}>{stageLabel(stage)}</option>)}
-              </select>
+              <AppSelect
+                value={editForm.stage}
+                onChange={(stage) => setEditForm({ ...editForm, stage })}
+                options={(options?.stages ?? Object.keys(stageLabels)).map((stage) => ({ value: stage, label: stageLabel(stage) }))}
+              />
             </label>
             <Field label="标签" value={editForm.tags} onChange={(tags) => setEditForm({ ...editForm, tags })} />
             <label className="wide-field">
@@ -489,6 +505,13 @@ function EmailPanel({ customer, customerId, onChanged }: { customer: CustomerDet
   const [draftForm, setDraftForm] = useState({ purpose: "FIRST_OUTREACH", toEmail: contactOptions[0]?.email ?? "", emailAccountId: "", userInstructions: "" });
   const [editDraft, setEditDraft] = useState<Record<string, string>>({});
   const { data: accounts = [] } = useQuery({ queryKey: ["email-accounts"], queryFn: () => apiGet<EmailAccount[]>("/email-accounts") });
+  const selectableAccounts = accounts.filter((account) => !sameEmailAddress(account.email, draftForm.toEmail));
+  useEffect(() => {
+    const selectedAccount = accounts.find((account) => account.id === draftForm.emailAccountId);
+    if (selectedAccount && sameEmailAddress(selectedAccount.email, draftForm.toEmail)) {
+      setDraftForm((current) => ({ ...current, emailAccountId: "" }));
+    }
+  }, [accounts, draftForm.emailAccountId, draftForm.toEmail]);
   const { data: drafts = [] } = useQuery({
     queryKey: ["email-drafts", customerId],
     queryFn: () => apiGet<EmailDraft[]>(`/customers/${customerId}/email-drafts`),
@@ -508,22 +531,15 @@ function EmailPanel({ customer, customerId, onChanged }: { customer: CustomerDet
   const update = useMutation({ mutationFn: (draft: EmailDraft) => apiPatch(`/email-drafts/${draft.id}`, cleanPayload({ subject: editDraft[`subject:${draft.id}`] ?? draft.subject, body: editDraft[`body:${draft.id}`] ?? draft.body, emailAccountId: editDraft[`account:${draft.id}`] ?? draft.emailAccountId })), onSuccess: () => invalidateEmail(queryClient, customerId, onChanged) });
   const approve = useMutation({ mutationFn: (draftId: string) => apiPost(`/email-drafts/${draftId}/approve`, { reviewComment: "Approved in customer detail" }), onSuccess: () => invalidateEmail(queryClient, customerId, onChanged) });
   const send = useMutation({
-    mutationFn: (draftId: string) => apiPost(`/email-drafts/${draftId}/send`),
-    onSuccess: () => {
-      if(draftForm.purpose === 'SAMPLE_FOLLOW_UP'){
-        showClientToast({
-          type: "success", 
-          title: "样品跟进邮件已发送",
-          message: "请前往“样品”页更新样品状态，并继续跟进客户。" 
-        });
-      }else{
-        showClientToast({
-          type: "success",
-          title: "邮件已发送",
-          message: "邮件已成功发送给客户。"
+    mutationFn: (draft: EmailDraft) => apiPost(`/email-drafts/${draft.id}/send`, undefined, { toast: false }).then((result) => ({ result, draft })),
+    onSuccess: ({ draft }) => {
+      const isSampleFollowUp = draft.purpose === "SAMPLE_FOLLOW_UP";
+      showClientToast({
+        type: "success",
+        title: isSampleFollowUp ? "样品跟进邮件已发送" : "邮件已发送",
+        message: isSampleFollowUp ? "请前往“样品”页更新样品状态，并继续跟进客户。" : "邮件已成功发送给客户。"
       });
       invalidateEmail(queryClient, customerId, onChanged);
-      }
     },
     onError: (error) => {
       showClientToast({
@@ -539,28 +555,64 @@ function EmailPanel({ customer, customerId, onChanged }: { customer: CustomerDet
       <section className="panel">
         <div className="panel-title"><h2>AI邮件生成</h2><span>只生成草稿，人工审核后发送</span></div>
         <div className="form-grid">
-          <label><span>邮件类型</span><select value={draftForm.purpose} onChange={(event) => setDraftForm({ ...draftForm, purpose: event.target.value })}><option value="FIRST_OUTREACH">首封开发邮件</option><option value="SECOND_FOLLOW_UP">未回复跟进</option><option value="THIRD_FOLLOW_UP">产品补充跟进</option><option value="REQUIREMENT_CONFIRMATION">需求确认</option><option value="QUOTE_FOLLOW_UP">报价跟进</option><option value="SAMPLE_FOLLOW_UP">样品推进</option></select></label>
-          <label><span>收件人</span><select value={draftForm.toEmail} onChange={(event) => setDraftForm({ ...draftForm, toEmail: event.target.value })}><option value="">选择联系人邮箱</option>{contactOptions.map((contact) => <option value={contact.email} key={contact.id}>{contact.name || contact.email} · {contact.email}</option>)}</select></label>
-          <label><span>发件邮箱</span><select value={draftForm.emailAccountId} onChange={(event) => setDraftForm({ ...draftForm, emailAccountId: event.target.value })}><option value="">发送时自动选择</option>{accounts.map((account) => <option value={account.id} key={account.id}>{account.name} · {account.email} {account.scope === "SHARED" ? "(共享)" : ""}</option>)}</select></label>
+          <label>
+            <span>邮件类型</span>
+            <AppSelect
+              value={draftForm.purpose}
+              onChange={(purpose) => setDraftForm({ ...draftForm, purpose })}
+              options={EMAIL_DRAFT_PURPOSES.map((purpose) => ({ value: purpose, label: emailDraftPurposeLabel(purpose) }))}
+            />
+          </label>
+          <label>
+            <span>收件人</span>
+            <AppSelect
+              value={draftForm.toEmail}
+              onChange={(toEmail) => setDraftForm({ ...draftForm, toEmail })}
+              options={[
+                { value: "", label: "选择联系人邮箱" },
+                ...contactOptions.map((contact) => ({ value: contact.email ?? "", label: `${contact.name || contact.email} · ${contact.email}` }))
+              ]}
+            />
+          </label>
+          <label>
+            <span>发件邮箱</span>
+            <AppSelect
+              value={draftForm.emailAccountId}
+              onChange={(emailAccountId) => setDraftForm({ ...draftForm, emailAccountId })}
+              options={[
+                { value: "", label: "发送时自动选择" },
+                ...selectableAccounts.map((account) => ({ value: account.id, label: `${account.name} · ${account.email} ${account.scope === "SHARED" ? "(共享)" : ""}` }))
+              ]}
+            />
+          </label>
           <label className="wide-field"><span>补充要求</span><textarea value={draftForm.userInstructions} onChange={(event) => setDraftForm({ ...draftForm, userInstructions: event.target.value })} /></label>
-          <div className="wide-field"><button className="primary-button" disabled={!draftForm.toEmail || generate.isPending} onClick={() => generate.mutate()}>{generate.isPending ? "生成中..." : "生成AI草稿"}</button></div>
+          <div className="wide-field"><button className="primary-button" disabled={!draftForm.toEmail || !selectableAccounts.length || generate.isPending} onClick={() => generate.mutate()}>{generate.isPending ? "生成中..." : "生成AI草稿"}</button></div>
+          {!selectableAccounts.length && draftForm.toEmail ? <div className="wide-field empty-state">当前没有可用发件邮箱，或可用发件邮箱与收件人邮箱相同。</div> : null}
         </div>
       </section>
       <section className="table-panel">
         <div className="panel-title"><h2>邮件草稿</h2><span>{drafts.length} 封</span></div>
         {!drafts.length ? <div className="empty-state">暂无邮件草稿。</div> : drafts.map((draft) => (
           <div className="draft-editor" key={draft.id}>
-            <div className="panel-title"><h2>{draft.subject}</h2><span className="status-pill">{draft.status}</span></div>
+             <div className="task-row">
+              <MailPlus size={16} />
+              <div>
+                <strong>邮件类型：{emailDraftPurposeLabel(draft.purpose)}</strong>
+                <span>发件人：{formatDraftSender(draft)}</span>
+                <span>收件人：{formatDraftRecipient(draft)}</span>
+              </div>
+              <span className="status-pill">{draft.status}</span>
+            </div>
             <input value={editDraft[`subject:${draft.id}`] ?? draft.subject} onChange={(event) => setEditDraft({ ...editDraft, [`subject:${draft.id}`]: event.target.value })} />
             {draft.body ? (
-              <textarea value={editDraft[`body:${draft.id}`] ?? draft.body} onChange={(event) => setEditDraft({ ...editDraft, [`body:${draft.id}`]: event.target.value })} />
+              <AutoResizeTextarea value={editDraft[`body:${draft.id}`] ?? draft.body} onChange={(event) => setEditDraft({ ...editDraft, [`body:${draft.id}`]: event.target.value })} />
             ) : (
               <div className="loading-state">⏳ 稿件生成中，请稍候...</div>
             )}
             <div className="toolbar">
               <button className="secondary-button" onClick={() => update.mutate(draft)}>保存修改</button>
               <button className="secondary-button" onClick={() => approve.mutate(draft.id)}>审核通过</button>
-              <button className="primary-button" disabled={draft.status !== "APPROVED"} onClick={() => send.mutate(draft.id)}>发送邮件</button>
+              <button className="primary-button" disabled={draft.status !== "APPROVED"} onClick={() => send.mutate(draft)}>发送邮件</button>
             </div>
             <AiVersions run={draft.aiGenerationRun} />
           </div>
@@ -594,8 +646,31 @@ function SamplePanel({ customerId }: { customerId: string }) {
   return <CommercialPanel title="样品记录" rows={data.map((item) => ({ id: item.id, title: item.productSummary, meta: `${item.status} · ${item.trackingNo ?? "-"} · ${new Date(item.createdAt).toLocaleDateString()}` }))} form={form} setForm={(value) => setForm(value as typeof form)} onSubmit={() => create.mutate()} fields={[["productSummary", "样品/产品"], ["carrier", "物流商"], ["trackingNo", "运单号"]]} />;
 }
 
+function AutoResizeTextarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  const ref = useRef<HTMLTextAreaElement | null>(null);
+  const value = typeof props.value === "string" ? props.value : "";
+
+  useLayoutEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+
+    node.style.height = "0px";
+    node.style.height = `${node.scrollHeight}px`;
+  }, [value]);
+
+  return <textarea {...props} ref={ref} rows={1} style={{ ...(props.style ?? {}), overflow: "hidden", resize: "none" }} />;
+}
+
 function CommercialPanel(props: { title: string; rows: Array<{ id: string; title: string; meta: string }>; form: Record<string, string>; setForm: (v: Record<string, string>) => void; onSubmit: () => void; fields: string[][] }) {
   return <section className="panel"><div className="panel-title"><h2>{props.title}</h2><span>{props.rows.length} 条</span></div><SimpleRows rows={props.rows} empty={`暂无${props.title}。`} /><div className="form-grid compact-form">{props.fields.map(([key, label]) => <Field key={key} label={label} value={props.form[key]} onChange={(value) => props.setForm({ ...props.form, [key]: value })} />)}<div><button className="secondary-button" onClick={props.onSubmit}>新增</button></div></div></section>;
+}
+
+function sameEmailAddress(left?: string | null, right?: string | null) {
+  return normalizeEmailAddress(left) === normalizeEmailAddress(right);
+}
+
+function normalizeEmailAddress(value?: string | null) {
+  return (value ?? "").trim().toLowerCase();
 }
 
 function Detail({ label, value, wide }: { label: string; value: string; wide?: boolean }) {
@@ -1064,6 +1139,16 @@ function invalidateEmail(queryClient: ReturnType<typeof useQueryClient>, custome
 
 function cleanPayload(input: Record<string, string | undefined>) {
   return Object.fromEntries(Object.entries(input).filter(([, value]) => value));
+}
+
+function formatDraftSender(draft: EmailDraft) {
+  if (draft.fromEmailSnapshot) return draft.fromNameSnapshot ? `${draft.fromNameSnapshot} · ${draft.fromEmailSnapshot}` : draft.fromEmailSnapshot;
+  if (draft.emailAccount) return `${draft.emailAccount.name} · ${draft.emailAccount.email}`;
+  return "未选择发件邮箱";
+}
+
+function formatDraftRecipient(draft: EmailDraft) {
+  return draft.toNameSnapshot ? `${draft.toNameSnapshot} · ${draft.toEmail}` : draft.toEmail;
 }
 
 function scoreLabel(key: string) {

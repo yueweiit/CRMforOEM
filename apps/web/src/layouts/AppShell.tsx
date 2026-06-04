@@ -10,19 +10,27 @@ import {
   UsersRound
 } from "lucide-react";
 import { apiGet } from "../api/http";
+import { canViewReports, defaultReportPath, defaultSettingsPath, getCurrentUser, type CurrentUser } from "../auth/permissions";
 import { showServerToast, ToastContainer } from "../components/Toast";
 import { EMAIL_EVENT_TOAST_CONFIG } from "../config/email-event-toasts";
 import { TASK_TOAST_CONFIG } from "../config/follow-up-task-toasts";
 import { useSse } from "../hooks/useSse";
 
-const navItems = [
+type NavItem = {
+  to: string | ((user: CurrentUser | null) => string);
+  label: string;
+  icon: typeof BarChart3;
+  canView?: (user: CurrentUser | null) => boolean;
+};
+
+const navItems: NavItem[] = [
   { to: "/dashboard", label: "工作台", icon: BarChart3 },
   { to: "/customers", label: "客户开发", icon: Building2 },
   { to: "/email-center/inbox", label: "邮件中心", icon: Mail },
   { to: "/follow-ups", label: "跟进任务", icon: ClipboardCheck },
   { to: "/knowledge/company", label: "企业资料库", icon: BookOpen },
-  { to: "/reports/management", label: "数据看板", icon: UsersRound },
-  { to: "/settings/users", label: "系统设置", icon: Settings }
+  { to: defaultReportPath, label: "数据看板", icon: UsersRound, canView: canViewReports },
+  { to: defaultSettingsPath, label: "系统设置", icon: Settings }
 ];
 
 type NavFollowUpSummary = { count: number };
@@ -31,29 +39,17 @@ function badgeCount(value: number) {
   return value > 99 ? "99+" : String(value);
 }
 
-function currentUserId() {
-  const token = localStorage.getItem("accessToken");
-  if (!token) return "";
-
-  try {
-    const [, payload] = token.split(".");
-    if (!payload) return "";
-    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
-    const normalized = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
-    const decoded = JSON.parse(atob(normalized)) as { sub?: unknown };
-    return typeof decoded.sub === "string" ? decoded.sub : "";
-  } catch {
-    return "";
-  }
-}
-
 export function AppShell() {
   if (!localStorage.getItem("accessToken")) {
     return <Navigate to="/login" replace />;
   }
 
   const queryClient = useQueryClient();
-  const userId = currentUserId();
+  const currentUser = getCurrentUser();
+  const userId = currentUser?.id ?? "";
+  const visibleNavItems = navItems
+    .filter((item) => !item.canView || item.canView(currentUser))
+    .map((item) => ({ ...item, to: typeof item.to === "function" ? item.to(currentUser) : item.to }));
 
   useSse("follow-up.task.created", (data: { overdueCount: number; customerId: string; type: string; targetUserIds: string[] }) => {
     queryClient.setQueryData(["nav-follow-up-overdue-count"], { count: data.overdueCount });
@@ -115,7 +111,7 @@ export function AppShell() {
           </div>
         </div>
         <nav className="nav-list">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const Icon = item.icon;
             return (
               <NavLink key={item.to} to={item.to} className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}>

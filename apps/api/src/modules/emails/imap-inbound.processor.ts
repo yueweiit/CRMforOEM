@@ -44,9 +44,9 @@ export class ImapInboundProcessor extends WorkerHost {
       subject,
       receivedAt: new Date(receivedAt)
     });
-    if (!result) return;
+    if (!result || !result.created || !result.thread) return;
 
-    const { customer } = result;
+    const { customer, thread } = result;
 
     const targetUserIds = Array.from(
       new Set(
@@ -57,8 +57,8 @@ export class ImapInboundProcessor extends WorkerHost {
     this.eventEmitter.emit(SSE_EVENTS.INBOUND_MAIL_RECEIVED, {
       orgId,
       targetUserIds,
-      threadId: result.thread.id,
-      customerId: result.thread.customerId,
+      threadId: thread.id,
+      customerId: thread.customerId,
       customerName: customer?.name ?? "",
       fromEmail,
       subject

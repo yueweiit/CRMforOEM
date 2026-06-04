@@ -3,6 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { ArrowUpRight, CalendarClock, Clock, MailCheck, Target, UsersRound } from "lucide-react";
 import { apiGet } from "../api/http";
+import { getCurrentUser, isAdmin } from "../auth/permissions";
+import { AppSelect } from "../components/AppSelect";
 import { useSse } from "../hooks/useSse";
 
 type PersonalDashboard = {
@@ -90,6 +92,7 @@ const fallback: PersonalDashboard = {
 
 export function DashboardPage() {
   const queryClient = useQueryClient();
+  const isAdminWorkspace = isAdmin(getCurrentUser());
   const [filters, setFilters] = useState(defaultPersonalFilters());
   const queryString = useMemo(() => toQueryString(filters), [filters]);
 
@@ -131,7 +134,7 @@ export function DashboardPage() {
       {isFetching ? <section className="panel loading-state">正在刷新看板数据...</section> : null}
 
       <div className="metric-grid dashboard-kpis">
-        <Metric icon={<UsersRound size={18} />} label="我的客户总数" value={summary.my_customer_total} tone="teal" />
+        <Metric icon={<UsersRound size={18} />} label={isAdminWorkspace ? "全部客户总数" : "我的客户总数"} value={summary.my_customer_total} tone="teal" />
         <Metric icon={<CalendarClock size={18} />} label="今日待跟进" value={summary.today_pending_followups} tone="amber" />
         <Metric icon={<ArrowUpRight size={18} />} label="本月新增客户" value={summary.month_new_customers} tone="rose" />
         <Metric icon={<Target size={18} />} label="本月背调完成" value={summary.month_researched_customers} tone="neutral" />
@@ -148,7 +151,7 @@ export function DashboardPage() {
         <section className="panel">
           <div className="panel-title">
             <h2>客户开发阶段分布</h2>
-            <span>个人客户池</span>
+            <span>{isAdminWorkspace ? "全员客户池" : "个人客户池"}</span>
           </div>
           <BarList data={data.stage_distribution.map((item) => ({ label: stageLabel(item.stage), value: item.count }))} />
         </section>
@@ -228,30 +231,39 @@ function DashboardFilterBar(props: {
       </label>
       <label>
         <span>国家</span>
-        <select value={props.filters.country} onChange={(event) => props.onChange({ ...props.filters, country: event.target.value })}>
-          <option value="">全部国家</option>
-          {props.options?.countries?.map((country) => (
-            <option value={country} key={country}>{country}</option>
-          ))}
-        </select>
+        <AppSelect
+          variant="filter"
+          value={props.filters.country}
+          onChange={(country) => props.onChange({ ...props.filters, country })}
+          options={[
+            { value: "", label: "全部国家" },
+            ...(props.options?.countries?.map((country) => ({ value: country, label: country })) ?? [])
+          ]}
+        />
       </label>
       <label>
         <span>客户类型</span>
-        <select value={props.filters.customer_type_id} onChange={(event) => props.onChange({ ...props.filters, customer_type_id: event.target.value })}>
-          <option value="">全部类型</option>
-          {props.options?.customer_types?.map((type) => (
-            <option value={type.id} key={type.id}>{type.name}</option>
-          ))}
-        </select>
+        <AppSelect
+          variant="filter"
+          value={props.filters.customer_type_id}
+          onChange={(customer_type_id) => props.onChange({ ...props.filters, customer_type_id })}
+          options={[
+            { value: "", label: "全部类型" },
+            ...(props.options?.customer_types?.map((type) => ({ value: type.id, label: type.name })) ?? [])
+          ]}
+        />
       </label>
       <label>
         <span>阶段</span>
-        <select value={props.filters.stage} onChange={(event) => props.onChange({ ...props.filters, stage: event.target.value })}>
-          <option value="">全部阶段</option>
-          {stages.map((stage) => (
-            <option value={stage} key={stage}>{stageLabel(stage)}</option>
-          ))}
-        </select>
+        <AppSelect
+          variant="filter"
+          value={props.filters.stage}
+          onChange={(stage) => props.onChange({ ...props.filters, stage })}
+          options={[
+            { value: "", label: "全部阶段" },
+            ...stages.map((stage) => ({ value: stage, label: stageLabel(stage) }))
+          ]}
+        />
       </label>
     </section>
   );

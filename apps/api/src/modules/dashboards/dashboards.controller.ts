@@ -20,7 +20,7 @@ export class DashboardsController {
     return this.dashboardsService.team(user, query);
   }
 
-  @RequirePermissions("dashboards.management")
+  @RequirePermissions("dashboards.team")
   @Get("management")
   management(@CurrentUser() user: RequestUser, @Query() query: DashboardQueryDto) {
     return this.dashboardsService.management(user, query);

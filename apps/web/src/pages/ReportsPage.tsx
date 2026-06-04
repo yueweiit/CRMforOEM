@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { BarChart3, LineChart, PieChart, Trophy, UsersRound } from "lucide-react";
 import { useParams } from "react-router-dom";
 import { apiGet } from "../api/http";
+import { AppSelect } from "../components/AppSelect";
 
 type ManagementDashboard = {
   summary: {
@@ -100,7 +101,7 @@ export function ReportsPage() {
       <header className="page-header">
         <div>
           <p className="eyebrow">Reports</p>
-          <h1>{scope === "team" ? "团队数据看板" : "管理层数据看板"}</h1>
+          <h1>数据看板</h1>
         </div>
       </header>
 
@@ -109,7 +110,7 @@ export function ReportsPage() {
       {isFetching ? <section className="panel loading-state">正在刷新看板数据...</section> : null}
 
       <div className="metric-grid dashboard-kpis">
-        <Metric icon={<UsersRound size={18} />} label="团队客户总数" value={summary.team_customer_total} tone="teal" />
+        <Metric icon={<UsersRound size={18} />} label="客户总数" value={summary.team_customer_total} tone="teal" />
         <Metric icon={<BarChart3 size={18} />} label="背调完成数量" value={summary.researched_customers} tone="amber" />
         <Metric icon={<LineChart size={18} />} label="邮件发送数量" value={summary.sent_emails} tone="rose" />
         <Metric icon={<PieChart size={18} />} label="邮件回复率" value={`${(summary.reply_rate * 100).toFixed(1)}%`} tone="neutral" />
@@ -206,56 +207,76 @@ function ReportFilterBar(props: {
       </label>
       <label>
         <span>团队</span>
-        <select value={props.filters.team_id} onChange={(event) => props.onChange({ ...props.filters, team_id: event.target.value })}>
-          <option value="">全部团队</option>
-          {props.options?.teams?.map((team) => (
-            <option value={team.id} key={team.id}>{team.name}</option>
-          ))}
-        </select>
+        <AppSelect
+          variant="filter"
+          value={props.filters.team_id}
+          onChange={(team_id) => props.onChange({ ...props.filters, team_id })}
+          options={[
+            { value: "", label: "全部团队" },
+            ...(props.options?.teams?.map((team) => ({ value: team.id, label: team.name })) ?? [])
+          ]}
+        />
       </label>
       <label>
         <span>业务员</span>
-        <select value={props.filters.owner_id} onChange={(event) => props.onChange({ ...props.filters, owner_id: event.target.value })}>
-          <option value="">全部业务员</option>
-          {props.options?.users?.map((user) => (
-            <option value={user.id} key={user.id}>{user.name}</option>
-          ))}
-        </select>
+        <AppSelect
+          variant="filter"
+          value={props.filters.owner_id}
+          onChange={(owner_id) => props.onChange({ ...props.filters, owner_id })}
+          options={[
+            { value: "", label: "全部业务员" },
+            ...(props.options?.users?.map((user) => ({ value: user.id, label: user.name })) ?? [])
+          ]}
+        />
       </label>
       <label>
         <span>国家</span>
-        <select value={props.filters.country} onChange={(event) => props.onChange({ ...props.filters, country: event.target.value })}>
-          <option value="">全部国家</option>
-          {props.options?.countries?.map((country) => (
-            <option value={country} key={country}>{country}</option>
-          ))}
-        </select>
+        <AppSelect
+          variant="filter"
+          value={props.filters.country}
+          onChange={(country) => props.onChange({ ...props.filters, country })}
+          options={[
+            { value: "", label: "全部国家" },
+            ...(props.options?.countries?.map((country) => ({ value: country, label: country })) ?? [])
+          ]}
+        />
       </label>
       <label>
         <span>客户类型</span>
-        <select value={props.filters.customer_type_id} onChange={(event) => props.onChange({ ...props.filters, customer_type_id: event.target.value })}>
-          <option value="">全部类型</option>
-          {props.options?.customer_types?.map((type) => (
-            <option value={type.id} key={type.id}>{type.name}</option>
-          ))}
-        </select>
+        <AppSelect
+          variant="filter"
+          value={props.filters.customer_type_id}
+          onChange={(customer_type_id) => props.onChange({ ...props.filters, customer_type_id })}
+          options={[
+            { value: "", label: "全部类型" },
+            ...(props.options?.customer_types?.map((type) => ({ value: type.id, label: type.name })) ?? [])
+          ]}
+        />
       </label>
       <label>
         <span>客户阶段</span>
-        <select value={props.filters.stage} onChange={(event) => props.onChange({ ...props.filters, stage: event.target.value })}>
-          <option value="">全部阶段</option>
-          {stages.map((stage) => (
-            <option value={stage} key={stage}>{stageLabel(stage)}</option>
-          ))}
-        </select>
+        <AppSelect
+          variant="filter"
+          value={props.filters.stage}
+          onChange={(stage) => props.onChange({ ...props.filters, stage })}
+          options={[
+            { value: "", label: "全部阶段" },
+            ...stages.map((stage) => ({ value: stage, label: stageLabel(stage) }))
+          ]}
+        />
       </label>
       <label>
         <span>聚合粒度</span>
-        <select value={props.filters.group_by} onChange={(event) => props.onChange({ ...props.filters, group_by: event.target.value })}>
-          <option value="day">按天</option>
-          <option value="week">按周</option>
-          <option value="month">按月</option>
-        </select>
+        <AppSelect
+          variant="filter"
+          value={props.filters.group_by}
+          onChange={(group_by) => props.onChange({ ...props.filters, group_by })}
+          options={[
+            { value: "day", label: "按天" },
+            { value: "week", label: "按周" },
+            { value: "month", label: "按月" }
+          ]}
+        />
       </label>
     </section>
   );

@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { CustomerStage, FollowUpTaskStatus, type FollowUpTaskType } from "@prisma/client";
+import { normalizeEmailDraftPurpose } from "@oem-crm/shared";
 import { PrismaService } from "../../prisma/prisma.service";
 import { FOLLOW_UP_EMAIL_RULES, type FollowUpTaskRule } from "./follow-up-email-rules";
 import {
@@ -212,7 +213,7 @@ export class FollowUpRulesService {
 
   private getRulesForPurpose(purpose?: string): FollowUpTaskRule[] {
     if (!purpose) return [];
-    return FOLLOW_UP_EMAIL_RULES[purpose] ?? [];
+    return FOLLOW_UP_EMAIL_RULES[normalizeEmailDraftPurpose(purpose)] ?? [];
   }
 
   private resolveOwnerId(customerOwnerId: string | null, actorUserId: string) {

@@ -12,6 +12,11 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
+    resolve: {
+      alias: {
+        "@oem-crm/shared": path.resolve(__dirname, "../../packages/shared/src/index.ts")
+      }
+    },
     server: {
       port: webPort,
       strictPort: true,

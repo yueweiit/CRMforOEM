@@ -796,13 +796,17 @@ model EmailThread {
 }
 
 model EmailDraft {
-  id               String           @id @default(cuid())
+  id                String           @id @default(cuid())
   customerId        String
   emailAccountId    String?
   aiGenerationRunId String?
+  purpose           String?
   subject           String
   body              String
   toEmail           String
+  toNameSnapshot    String?
+  fromEmailSnapshot String?
+  fromNameSnapshot  String?
   ccEmails          String[]         @default([])
   bccEmails         String[]         @default([])
   status            EmailDraftStatus @default(DRAFT)
@@ -819,6 +823,7 @@ model EmailDraft {
   aiGenerationRun AiGenerationRun? @relation(fields: [aiGenerationRunId], references: [id])
 
   @@index([customerId, status])
+  @@index([customerId, purpose])
   @@map("email_drafts")
 }
 

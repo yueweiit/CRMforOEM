@@ -282,8 +282,7 @@ a {
   font-weight: 700;
 }
 
-.filter-panel input,
-.filter-panel select {
+.filter-panel input {
   width: 100%;
   min-height: 38px;
   min-width: 0;
@@ -295,10 +294,111 @@ a {
   outline: 0;
 }
 
-.filter-panel input:focus,
-.filter-panel select:focus {
+.filter-panel input:focus {
   border-color: #0f766e;
   box-shadow: 0 0 0 3px #e8f3ef;
+}
+
+.app-select.next-select {
+  width: 100%;
+  min-width: 0;
+  color: #1f2933;
+  font: inherit;
+}
+
+.app-select.next-select .next-select-inner,
+.app-select.next-select .next-select-trigger,
+.app-select.next-select .next-input {
+  width: 100%;
+  min-height: 38px;
+  border-color: #d7dcd2;
+  border-radius: 7px;
+  background: white;
+  color: #1f2933;
+  box-shadow: none;
+}
+
+.app-select.next-select .next-select-inner {
+  display: flex;
+  align-items: center;
+  padding-inline: 10px 32px;
+}
+
+.app-select.next-select .next-select-values,
+.app-select.next-select .next-select-single {
+  min-width: 0;
+  color: #1f2933;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.app-select.next-select:hover .next-select-inner,
+.app-select.next-select:hover .next-select-trigger,
+.app-select.next-select:hover .next-input {
+  border-color: #b8c1b5;
+}
+
+.app-select.next-select.next-focused .next-select-inner,
+.app-select.next-select.next-focused .next-select-trigger,
+.app-select.next-select.next-focused .next-input,
+.app-select.next-select.next-select-focused .next-select-inner,
+.app-select.next-select.next-select-focused .next-select-trigger,
+.app-select.next-select.next-select-focused .next-input {
+  border-color: #0f766e;
+  box-shadow: 0 0 0 3px #e8f3ef;
+}
+
+.app-select--toolbar.next-select {
+  width: auto;
+  min-width: 132px;
+}
+
+.app-select--toolbar.next-select .next-select-inner,
+.app-select--toolbar.next-select .next-select-trigger,
+.app-select--toolbar.next-select .next-input {
+  min-height: 38px;
+  border-radius: 7px;
+}
+
+.app-select--toolbar.next-select .next-select-inner {
+  padding-inline: 12px 34px;
+}
+
+.next-overlay-wrapper .next-select-menu,
+.next-select-menu {
+  max-height: 360px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border: 1px solid #dfe3dc;
+  border-radius: 8px;
+  background: white;
+  box-shadow: 0 12px 30px rgba(31, 41, 51, 0.14);
+  padding: 6px;
+}
+
+.next-select-menu .next-menu-item,
+.next-select-menu .next-menu-item-inner,
+.next-select-menu .next-select-menu-item {
+  min-height: 32px;
+  border-radius: 6px;
+  color: #2f3b45;
+  font-size: 14px;
+  line-height: 32px;
+}
+
+.next-select-menu .next-menu-item:hover,
+.next-select-menu .next-menu-item-inner:hover,
+.next-select-menu .next-select-menu-item:hover {
+  background: #f1f5ee;
+  color: #0f766e;
+}
+
+.next-select-menu .next-selected,
+.next-select-menu .next-menu-item.next-selected,
+.next-select-menu .next-select-menu-item.next-selected {
+  background: #e8f3ef;
+  color: #0f766e;
+  font-weight: 700;
 }
 
 .loading-state,
@@ -636,7 +736,6 @@ td small {
 }
 
 .form-grid input,
-.form-grid select,
 .form-grid textarea,
 .table-input,
 .draft-editor input,
@@ -652,7 +751,6 @@ td small {
 }
 
 .form-grid input,
-.form-grid select,
 .table-input,
 .draft-editor input {
   min-height: 38px;

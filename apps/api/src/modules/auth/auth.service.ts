@@ -71,6 +71,7 @@ export class AuthService {
         name: user.name,
         email: user.email,
         roleCodes: payload.roleCodes,
+        permissions: payload.permissions,
         dataScope
       }
     };

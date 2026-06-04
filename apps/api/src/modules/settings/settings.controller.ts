@@ -8,6 +8,7 @@ import { SettingsService } from "./settings.service";
 export class SettingsController {
   constructor(private readonly settingsService: SettingsService) {}
 
+  @RequirePermissions("settings.manage")
   @Get("settings/users")
   users(@CurrentUser() user: RequestUser) {
     return this.settingsService.users(user);
@@ -25,16 +26,19 @@ export class SettingsController {
     return this.settingsService.updateUser(user, id, dto);
   }
 
+  @RequirePermissions("settings.manage")
   @Get("settings/roles")
   roles(@CurrentUser() user: RequestUser) {
     return this.settingsService.roles(user);
   }
 
+  @RequirePermissions("settings.manage")
   @Get("settings/teams")
   teams(@CurrentUser() user: RequestUser) {
     return this.settingsService.teams(user);
   }
 
+  @RequirePermissions("settings.manage")
   @Get("settings/audit-logs")
   auditLogs(@CurrentUser() user: RequestUser) {
     return this.settingsService.auditLogs(user);
@@ -45,13 +49,11 @@ export class SettingsController {
     return this.settingsService.customerSources(user);
   }
 
-  @RequirePermissions("settings.manage")
   @Post("settings/customer-sources")
   createCustomerSource(@CurrentUser() user: RequestUser, @Body() dto: CreateCustomerDictionaryDto) {
     return this.settingsService.createCustomerSource(user, dto);
   }
 
-  @RequirePermissions("settings.manage")
   @Patch("settings/customer-sources/:id")
   updateCustomerSource(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: UpdateCustomerDictionaryDto) {
     return this.settingsService.updateCustomerSource(user, id, dto);
@@ -62,13 +64,11 @@ export class SettingsController {
     return this.settingsService.customerTypes(user);
   }
 
-  @RequirePermissions("settings.manage")
   @Post("settings/customer-types")
   createCustomerType(@CurrentUser() user: RequestUser, @Body() dto: CreateCustomerDictionaryDto) {
     return this.settingsService.createCustomerType(user, dto);
   }
 
-  @RequirePermissions("settings.manage")
   @Patch("settings/customer-types/:id")
   updateCustomerType(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: UpdateCustomerDictionaryDto) {
     return this.settingsService.updateCustomerType(user, id, dto);
@@ -79,13 +79,11 @@ export class SettingsController {
     return this.settingsService.blacklistRules(user);
   }
 
-  @RequirePermissions("settings.manage")
   @Post("blacklist-rules")
   createBlacklistRule(@CurrentUser() user: RequestUser, @Body() dto: CreateBlacklistRuleDto) {
     return this.settingsService.createBlacklistRule(user, dto);
   }
 
-  @RequirePermissions("settings.manage")
   @Patch("blacklist-rules/:id")
   updateBlacklistRule(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: UpdateBlacklistRuleDto) {
     return this.settingsService.updateBlacklistRule(user, id, dto);

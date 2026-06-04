@@ -1,7 +1,8 @@
 import { InjectQueue } from "@nestjs/bullmq";
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { ImapIdleService } from "./imap-idle.service";
 import { ImapSyncService } from "./imap-sync.service";
-import { AiContentVersionType, AiGenerationType, CustomerStage, EmailDraftStatus } from "@oem-crm/shared";
+import { AiContentVersionType, AiGenerationType, CustomerStage, EmailDraftStatus, normalizeEmailDraftPurpose } from "@oem-crm/shared";
 import { RequestUser } from "../../common/auth/current-user.decorator";
 import { buildCustomerDataScopeWhere } from "../../common/query/data-scope";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -31,6 +32,7 @@ export class EmailsService {
     private readonly secrets: EmailSecretService,
     private readonly compliance: EmailComplianceService,
     private readonly smtp: SmtpService,
+    private readonly imapIdle: ImapIdleService,
     private readonly imapSync: ImapSyncService,
     @InjectQueue(EMAIL_DRAFT_QUEUE) private readonly emailDraftQueue: Queue
   ) {}
@@ -68,7 +70,7 @@ export class EmailsService {
     }
     const encryptedSmtpPassword = this.secrets.encrypt(dto.smtpPassword);
     const encryptedImapPassword = this.secrets.encrypt(dto.imapPassword);
-    return this.prisma.emailAccount.create({
+    const account = await this.prisma.emailAccount.create({
       data: {
         userId: user.id,
         scope: (dto.scope ?? "PERSONAL") as never,
@@ -87,8 +89,15 @@ export class EmailsService {
         encryptionKeyVersion: encryptedSmtpPassword.keyVersion,
         dailySendLimit: dto.dailySendLimit ?? 80,
         hourlySendLimit: dto.hourlySendLimit ?? 20
-      }
+      },
+      include: { user: { select: { organizationId: true } } }
     });
+
+    await this.imapIdle.startAccount(account).catch((error) => {
+      console.error(`[EmailAccount] Failed to start IMAP listener for ${account.id}:`, error instanceof Error ? error.message : "Unknown error");
+    });
+
+    return account;
   }
 
   async updateAccount(user: RequestUser, id: string, dto: UpdateEmailAccountDto) {
@@ -98,10 +107,15 @@ export class EmailsService {
 
     const data = this.buildEmailAccountUpdateData(dto);
 
-    return this.prisma.emailAccount.update({
+    const updated = await this.prisma.emailAccount.update({
       where: { id: account.id },
-      data
+      data,
+      include: { user: { select: { organizationId: true } } }
     });
+
+    await this.refreshImapListenerAfterAccountUpdate(account, updated, dto);
+
+    return updated;
   }
 
   async testAccount(user: RequestUser, id: string) {
@@ -136,6 +150,13 @@ export class EmailsService {
 
   async generateDraft(user: RequestUser, customerId: string, dto: GenerateEmailDraftDto) {
     const context = await this.buildEmailContext(user, customerId, dto);
+    const toEmail = dto.toEmail ?? context.bestContact?.email;
+    if (!toEmail) {
+      throw new BadRequestException("No recipient email available");
+    }
+    const selectedContact = context.contacts.find((contact) => sameEmailAddress(contact.email, toEmail));
+    const account = await this.resolveSenderAccount(user, toEmail, dto.emailAccountId);
+
     const run = await this.aiGeneration.createRun({
       organizationId: user.organizationId,
       customerId,
@@ -146,20 +167,19 @@ export class EmailsService {
       createdById: user.id
     });
 
-    const toEmail = dto.toEmail ?? context.bestContact?.email;
-    if (!toEmail) {
-      throw new BadRequestException("No recipient email available");
-    }
-
     const subject = dto.subject ?? buildSubject(context.customer.name);
     const draft = await this.prisma.emailDraft.create({
       data: {
         customerId,
-        emailAccountId: dto.emailAccountId,
+        emailAccountId: account.id,
         aiGenerationRunId: run.id,
+        purpose: context.purpose,
         subject,
         body: "",
         toEmail,
+        toNameSnapshot: selectedContact?.name,
+        fromEmailSnapshot: account.email,
+        fromNameSnapshot: account.name,
         ccEmails: dto.ccEmails ?? [],
         bccEmails: dto.bccEmails ?? [],
         status: EmailDraftStatus.Draft as never,
@@ -185,14 +205,17 @@ export class EmailsService {
         reason: "Email draft generated"
       });
     }
-  
+
     return { id: draft.id, status: draft.status, message: "草稿生成中，请稍后刷新查看。" };
   }
 
   async getDraft(user: RequestUser, id: string) {
     const draft = await this.prisma.emailDraft.findFirst({
       where: { id, customer: buildCustomerDataScopeWhere(user) },
-      include: { aiGenerationRun: { include: { versions: { orderBy: { createdAt: "asc" } } } } }
+      include: {
+        emailAccount: { select: { id: true, name: true, email: true, scope: true } },
+        aiGenerationRun: { include: { versions: { orderBy: { createdAt: "asc" } } } }
+      }
     });
     if (!draft) {
       throw new NotFoundException("Email draft not found");
@@ -206,17 +229,28 @@ export class EmailsService {
       throw new BadRequestException("Sent draft cannot be edited");
     }
 
+    const nextToEmail = dto.toEmail ?? draft.toEmail;
+    const account = await this.resolveSenderAccount(user, nextToEmail, dto.emailAccountId ?? draft.emailAccountId ?? undefined);
+    const selectedContact = await this.prisma.contact.findFirst({
+      where: { customerId: draft.customerId, email: nextToEmail },
+      select: { name: true }
+    });
+
     const updated = await this.prisma.emailDraft.update({
       where: { id },
-      data: {
+      data: pickDefinedFields({
+        purpose: dto.purpose ? normalizeEmailDraftPurpose(dto.purpose) : undefined,
         subject: dto.subject,
         body: dto.body,
         toEmail: dto.toEmail,
+        toNameSnapshot: dto.toEmail ? selectedContact?.name : undefined,
         ccEmails: dto.ccEmails,
         bccEmails: dto.bccEmails,
-        emailAccountId: dto.emailAccountId,
+        emailAccountId: account.id,
+        fromEmailSnapshot: account.email,
+        fromNameSnapshot: account.name,
         status: EmailDraftStatus.PendingReview as never
-      }
+      })
     });
 
     if (draft.aiGenerationRunId && (dto.body || dto.subject)) {
@@ -264,18 +298,7 @@ export class EmailsService {
 
   async sendApprovedDraft(user: RequestUser, id: string) {
     const draft = await this.getDraft(user, id);
-    const account = draft.emailAccountId
-      ? await this.findAccount(user, draft.emailAccountId)
-      : await this.prisma.emailAccount.findFirst({
-          where: {
-            isActive: true,
-            OR: [{ userId: user.id }, { scope: "SHARED" } as never]
-          },
-          orderBy: [{ scope: "asc" as never }, { createdAt: "asc" }]
-        });
-    if (!account) {
-      throw new BadRequestException("No active email account available");
-    }
+    const account = await this.resolveSenderAccount(user, draft.toEmail, draft.emailAccountId ?? undefined);
 
     await this.compliance.assertCanSend(user, draft, account);
     const sendResult = await this.smtp.send(account, draft);
@@ -310,17 +333,27 @@ export class EmailsService {
       where: { id: draft.id },
       data: {
         status: EmailDraftStatus.Sent as never,
-        sentMessageId: message.id
+        sentMessageId: message.id,
+        emailAccountId: account.id,
+        fromEmailSnapshot: account.email,
+        fromNameSnapshot: account.name
       }
     });
 
-    const purpose = getDraftPurpose(draft.aiGenerationRun?.rawInput);
+    const purpose = normalizeEmailDraftPurpose((draft as { purpose?: string | null }).purpose ?? getDraftPurpose(draft.aiGenerationRun?.rawInput));
     if (purpose === "FIRST_OUTREACH") {
       await this.customerStageService.advanceCustomerStage({
         customerId: draft.customerId,
         toStage: CustomerStage.FirstEmailSent,
         changedById: user.id,
         reason: "First outreach email sent"
+      });
+    } else if (purpose === "QUOTATION") {
+      await this.customerStageService.advanceCustomerStage({
+        customerId: draft.customerId,
+        toStage: CustomerStage.Quoting,
+        changedById: user.id,
+        reason: "Quotation email sent"
       });
     } else if (purpose === "REQUIREMENT_CONFIRMATION") {
       await this.customerStageService.advanceCustomerStage({
@@ -410,7 +443,7 @@ export class EmailsService {
       })
     ]);
     return {
-      purpose: dto.purpose ?? "FIRST_OUTREACH",
+      purpose: normalizeEmailDraftPurpose(dto.purpose),
       customer,
       bestContact: contacts[0],
       contacts,
@@ -420,6 +453,32 @@ export class EmailsService {
       companyProfiles,
       userInstructions: dto.userInstructions
     };
+  }
+
+  private async resolveSenderAccount(user: RequestUser, toEmail: string, emailAccountId?: string | null) {
+    if (emailAccountId) {
+      const account = await this.findAccount(user, emailAccountId);
+      if (!account.isActive) {
+        throw new BadRequestException("发件邮箱已停用，请选择其他发件邮箱。");
+      }
+      if (sameEmailAddress(account.email, toEmail)) {
+        throw new BadRequestException("发件邮箱不能与收件人邮箱相同，请选择其他发件邮箱。");
+      }
+      return account;
+    }
+
+    const accounts = await this.prisma.emailAccount.findMany({
+      where: {
+        isActive: true,
+        OR: [{ userId: user.id }, { scope: "SHARED" } as never]
+      },
+      orderBy: [{ scope: "asc" as never }, { createdAt: "asc" }]
+    });
+    const account = accounts.find((item) => !sameEmailAddress(item.email, toEmail));
+    if (!account) {
+      throw new BadRequestException("没有可用发件邮箱，或可用发件邮箱与收件人邮箱相同。");
+    }
+    return account;
   }
 
   private async findAccount(user: RequestUser, id: string) {
@@ -451,6 +510,41 @@ export class EmailsService {
   private assertScopeChangeAllowed(user: RequestUser, dto: UpdateEmailAccountDto) {
     if (dto.scope === "SHARED" && !user.roleCodes.includes("ADMIN")) {
       throw new ForbiddenException("Only administrators can share email accounts");
+    }
+  }
+
+  private async refreshImapListenerAfterAccountUpdate(
+    previous: Awaited<ReturnType<EmailsService["findAccount"]>>,
+    updated: {
+      id: string;
+      isActive: boolean;
+      imapHost: string;
+      imapPort: number;
+      imapSecure: boolean;
+      imapUsername: string;
+      imapPasswordEncrypted: string;
+      user: { organizationId: string };
+    },
+    dto: UpdateEmailAccountDto
+  ) {
+    const connectionChanged = Boolean(
+      dto.imapHost
+      || dto.imapPort
+      || dto.imapSecure !== undefined
+      || dto.imapUsername
+      || dto.imapPassword
+      || dto.email
+    );
+
+    if (!updated.isActive) {
+      await this.imapIdle.stopAccount(updated.id);
+      return;
+    }
+
+    if (!previous.isActive || connectionChanged) {
+      await this.imapIdle.startAccount(updated).catch((error) => {
+        console.error(`[EmailAccount] Failed to refresh IMAP listener for ${updated.id}:`, error instanceof Error ? error.message : "Unknown error");
+      });
     }
   }
 
@@ -496,10 +590,18 @@ function buildSubject(customerName: string) {
   return `OEM cooperation idea for ${customerName}`;
 }
 
+function sameEmailAddress(left?: string | null, right?: string | null) {
+  return normalizeEmailAddress(left) === normalizeEmailAddress(right);
+}
+
+function normalizeEmailAddress(value?: string | null) {
+  return (value ?? "").trim().toLowerCase();
+}
+
 function getDraftPurpose(rawInput: unknown) {
   if (!rawInput || typeof rawInput !== "object" || Array.isArray(rawInput)) return undefined;
   const purpose = (rawInput as { purpose?: unknown }).purpose;
-  return typeof purpose === "string" ? purpose : undefined;
+  return typeof purpose === "string" ? normalizeEmailDraftPurpose(purpose) : undefined;
 }
 
 function pickDefinedFields<T extends Record<string, unknown>>(input: T) {

@@ -11,6 +11,7 @@ type LoginResponse = {
     name: string;
     email: string;
     roleCodes: string[];
+    permissions?: string[];
     dataScope: string;
   };
 };

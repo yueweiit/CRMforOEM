@@ -43,15 +43,41 @@ export class ImapInboundService {
   }
 
   async handleInboundMessage(input: InboundMessageInput) {
+    const existing = await this.prisma.emailMessage.findUnique({
+      where: { messageId: input.messageId },
+      include: {
+        thread: true
+      }
+    });
+
+    if (existing) {
+      const customer = existing.thread
+        ? await this.prisma.customer.findUnique({
+            where: { id: existing.thread.customerId },
+            select: {
+              id: true,
+              name: true,
+              ownerId: true,
+              stage: true
+            }
+          })
+        : null;
+
+      return {
+        thread: existing.thread,
+        customer,
+        created: false,
+        duplicate: true
+      };
+    }
+
     const thread = await this.findThreadForInbound(input.fromEmail, input.inReplyTo);
     if (!thread) {
       return null;
     }
 
-    await this.prisma.emailMessage.upsert({
-      where: { messageId: input.messageId },
-      update: {},
-      create: {
+    await this.prisma.emailMessage.create({
+      data: {
         threadId: thread.id,
         emailAccountId: input.accountId,
         direction: "INBOUND",
@@ -94,7 +120,9 @@ export class ImapInboundService {
 
     return {
       thread,
-      customer
+      customer,
+      created: true,
+      duplicate: false
     };
   }
 }

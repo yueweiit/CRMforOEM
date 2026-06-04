@@ -113,20 +113,11 @@ BlacklistRule 被 Customer / EmailDraft / EmailMessage 发送前引用校验
 
 ## 4. API 接口清单
 
-认证与用户：
-
 - `POST /auth/login`
 - `POST /auth/refresh`
 - `POST /auth/logout`
-- `GET /users`
-- `POST /users`
-- `PATCH /users/:id`
-- `GET /roles`
-- `POST /roles/:id/permissions`
-
-客户与联系人：
-
 - `GET /customers`
+- `GET /customers/filter-options`
 - `POST /customers`
 - `GET /customers/:id`
 - `PATCH /customers/:id`
@@ -134,13 +125,10 @@ BlacklistRule 被 Customer / EmailDraft / EmailMessage 发送前引用校验
 - `POST /customers/:id/stage`
 - `GET /customers/:id/timeline`
 - `POST /customers/:id/contacts`
-- `PATCH /contacts/:id`
-- `DELETE /contacts/:id`
-
-企业资料库：
-
 - `GET /knowledge/company-profile`
 - `PATCH /knowledge/company-profile`
+- `GET /knowledge/brands`
+- `POST /knowledge/brands`
 - `GET /knowledge/products`
 - `POST /knowledge/products`
 - `GET /knowledge/oem-capabilities`
@@ -151,42 +139,35 @@ BlacklistRule 被 Customer / EmailDraft / EmailMessage 发送前引用校验
 - `POST /knowledge/case-studies`
 - `GET /knowledge/email-materials`
 - `POST /knowledge/email-materials`
-
-官网分析与背调：
-
-- `POST /customers/:id/website-analyses`
-- `GET /customers/:id/website-analyses/latest`
+- `PATCH /knowledge/:entity/:id`
+- `POST /customers/:customerId/website-analyses`
+- `GET /customers/:customerId/website-analyses/latest`
 - `GET /website-analyses/:id`
-- `POST /customers/:id/research-reports`
-- `GET /customers/:id/research-reports/latest`
-- `POST /customers/:id/oem-fit-scores`
-- `GET /customers/:id/oem-fit-scores/latest`
-
-AI 生成与版本：
-
-- `POST /customers/:id/email-drafts/generate`
+- `POST /customers/:customerId/research-reports`
+- `GET /customers/:customerId/research-reports/latest`
+- `POST /customers/:customerId/oem-fit-scores`
+- `GET /customers/:customerId/oem-fit-scores/latest`
 - `GET /ai-generation-runs/:id`
 - `GET /ai-generation-runs/:id/versions`
 - `POST /ai-generation-runs/:id/versions`
 - `POST /ai-generation-runs/:id/finalize`
-
-邮件：
-
 - `GET /email-accounts`
 - `POST /email-accounts`
 - `PATCH /email-accounts/:id`
 - `POST /email-accounts/:id/test`
-- `GET /customers/:id/email-threads`
-- `GET /email-threads/:id/messages`
+- `POST /customers/:customerId/email-drafts/generate`
 - `GET /email-drafts/:id`
+- `GET /email-drafts`
+- `GET /customers/:customerId/email-drafts`
 - `PATCH /email-drafts/:id`
 - `POST /email-drafts/:id/submit-review`
 - `POST /email-drafts/:id/approve`
 - `POST /email-drafts/:id/send`
+- `GET /customers/:customerId/email-threads`
+- `GET /email-threads`
+- `GET /email-threads/:id/messages`
 - `POST /email-sync/run`
-
-跟进与业务流程：
-
+- `GET /follow-up-tasks/overdue-count`
 - `GET /follow-up-tasks`
 - `POST /follow-up-tasks`
 - `PATCH /follow-up-tasks/:id`
@@ -195,53 +176,93 @@ AI 生成与版本：
 - `POST /quotes`
 - `GET /samples`
 - `POST /samples`
-
-看板与审计：
-
 - `GET /dashboards/me`
 - `GET /dashboards/team`
 - `GET /dashboards/management`
-- `GET /audit-logs`
+- `GET /dashboards/filter-options`
+- `GET /settings/users`
+- `POST /settings/users`
+- `PATCH /settings/users/:id`
+- `GET /settings/roles`
+- `GET /settings/teams`
+- `GET /settings/audit-logs`
+- `GET /settings/customer-sources`
+- `POST /settings/customer-sources`
+- `PATCH /settings/customer-sources/:id`
+- `GET /settings/customer-types`
+- `POST /settings/customer-types`
+- `PATCH /settings/customer-types/:id`
 - `GET /blacklist-rules`
 - `POST /blacklist-rules`
-
-## 5. 页面路由设计
-
-```text
-/login
-/dashboard
-/customers
-/customers/new
-/customers/:id/overview
-/customers/:id/website-analysis
-/customers/:id/research
-/customers/:id/oem-score
-/customers/:id/email
-/customers/:id/follow-ups
-/customers/:id/quotes
-/customers/:id/samples
-/email-center/inbox
-/email-center/drafts
-/email-center/threads/:id
-/follow-ups
-/knowledge/company
-/knowledge/products
-/knowledge/oem-capabilities
-/knowledge/certificates
-/knowledge/cases
-/knowledge/email-materials
-/reports/personal
-/reports/team
-/reports/management
-/settings/users
-/settings/roles
-/settings/email-accounts
-/settings/ai
-/settings/scoring
-/settings/blacklist
-/settings/audit-logs
-```
-
+- `PATCH /blacklist-rules/:id`
+- `GET /customers/filter-options`
+- `GET /dashboards/filter-options`
+- `GET /knowledge/brands`
+- `POST /knowledge/brands`
+- `PATCH /knowledge/:entity/:id`
+- `GET /email-drafts`
+- `GET /customers/:customerId/email-drafts`
+- `GET /email-threads`
+- `GET /follow-up-tasks/overdue-count`
+- `GET /settings/teams`
+- `GET /settings/customer-sources`
+- `POST /settings/customer-sources`
+- `PATCH /settings/customer-sources/:id`
+- `GET /settings/customer-types`
+- `POST /settings/customer-types`
+- `PATCH /settings/customer-types/:id`
+- `/settings/users`
+- `/settings/roles`
+- `/settings/audit-logs`
+- `/login`
+- `/dashboard`
+- `/customers`
+- `/customers/new`
+- `/customers/:id/:tab?`
+- `/email-center/:folder?`
+- `/follow-ups`
+- `/knowledge/:section?`
+- `/reports/:scope?`
+- `/settings/:section?`
+- `/customers/:id/overview`
+- `/customers/:id/website-analysis`
+- `/customers/:id/research`
+- `/customers/:id/oem-score`
+- `/customers/:id/email`
+- `/customers/:id/follow-ups`
+- `/customers/:id/quotes`
+- `/customers/:id/samples`
+- `/email-center/accounts`
+- `/email-center/drafts`
+- `/email-center/threads`
+- `/email-center/inbox`
+- `/knowledge/company`
+- `/knowledge/brands`
+- `/knowledge/products`
+- `/knowledge/oem-capabilities`
+- `/knowledge/certificates`
+- `/knowledge/cases`
+- `/knowledge/email-materials`
+- `/settings/users`
+- `/settings/roles`
+- `/settings/customer-dictionaries`
+- `/settings/email-accounts`
+- `/settings/ai`
+- `/settings/scoring`
+- `/settings/blacklist`
+- `/settings/audit-logs`
+- `/settings/logout`
+- `/customers/:id/overview`
+- `/customers/:id/research`
+- `/customers/:id/email`
+- `/customers/:id/follow-ups`
+- `/customers/:id/:tab?`
+- `/dashboard`
+- `/reports/team`
+- `/reports/management`
+- `/email-center/threads`
+- `/knowledge/brands`
+---
 ## 6. 开发里程碑
 
 | 阶段 | 目标 | 交付 |

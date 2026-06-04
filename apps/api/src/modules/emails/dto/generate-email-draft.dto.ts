@@ -1,9 +1,10 @@
-import { IsArray, IsEmail, IsOptional, IsString } from "class-validator";
+import { EMAIL_DRAFT_ALLOWED_PURPOSES } from "@oem-crm/shared";
+import { IsArray, IsEmail, IsIn, IsOptional, IsString } from "class-validator";
 
 export class GenerateEmailDraftDto {
   @IsOptional()
-  @IsString()
-  purpose?: "FIRST_OUTREACH" | "SECOND_FOLLOW_UP" | "THIRD_FOLLOW_UP" | "REQUIREMENT_CONFIRMATION" | "QUOTE_FOLLOW_UP" | "SAMPLE_FOLLOW_UP";
+  @IsIn(EMAIL_DRAFT_ALLOWED_PURPOSES)
+  purpose?: string;
 
   @IsOptional()
   @IsString()

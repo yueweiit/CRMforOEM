@@ -2,8 +2,10 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { KeyRound, ListChecks, LogOut, Mail, Shield, SlidersHorizontal, Users } from "lucide-react";
-import { NavLink, useParams } from "react-router-dom";
+import { Navigate, NavLink, useParams } from "react-router-dom";
 import { apiGet, apiPatch, apiPost, clearSessionAndRedirect } from "../api/http";
+import { canViewSettingsSection, defaultSettingsPath, getCurrentUser } from "../auth/permissions";
+import { AppSelect } from "../components/AppSelect";
 import { Switch } from "../components/Switch";
 
 const settings = [
@@ -26,7 +28,14 @@ type AuditLog = { id: string; action: string; entityType: string; entityId?: str
 
 export function SettingsPage() {
   const { section = "users" } = useParams();
-  const current = settings.find((item) => item.key === section) ?? settings[0];
+  const currentUser = getCurrentUser();
+  const visibleSettings = settings.filter((item) => canViewSettingsSection(currentUser, item.key));
+  const current = visibleSettings.find((item) => item.key === section) ?? visibleSettings[0];
+
+  if (!current || !canViewSettingsSection(currentUser, section)) {
+    return <Navigate to={defaultSettingsPath(currentUser)} replace />;
+  }
+
   const Icon = current.icon;
   return (
     <section className="page-stack">
@@ -37,7 +46,7 @@ export function SettingsPage() {
         </div>
       </header>
       <nav className="tab-bar">
-        {settings.map((item) => <NavLink key={item.key} to={`/settings/${item.key}`} className={({ isActive }) => `tab-link ${isActive ? "active" : ""}`}><item.icon size={15} />{item.label}</NavLink>)}
+        {visibleSettings.map((item) => <NavLink key={item.key} to={`/settings/${item.key}`} className={({ isActive }) => `tab-link ${isActive ? "active" : ""}`}><item.icon size={15} />{item.label}</NavLink>)}
       </nav>
       <section className="panel">
         <div className="panel-title">
@@ -156,7 +165,20 @@ function BlacklistPanel() {
   return (
     <div className="page-stack">
       <div className="form-grid">
-        <label><span>类型</span><select value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value })}><option value="EMAIL">邮箱</option><option value="DOMAIN">域名</option><option value="COMPANY_NAME">公司名</option><option value="COUNTRY">国家</option><option value="KEYWORD">关键词</option></select></label>
+        <label>
+          <span>类型</span>
+          <AppSelect
+            value={form.type}
+            onChange={(type) => setForm({ ...form, type })}
+            options={[
+              { value: "EMAIL", label: "邮箱" },
+              { value: "DOMAIN", label: "域名" },
+              { value: "COMPANY_NAME", label: "公司名" },
+              { value: "COUNTRY", label: "国家" },
+              { value: "KEYWORD", label: "关键词" }
+            ]}
+          />
+        </label>
         <Field label="值" value={form.value} onChange={(value) => setForm({ ...form, value })} />
         <Field label="原因" value={form.reason} onChange={(reason) => setForm({ ...form, reason })} />
         <div><button className="primary-button" disabled={!form.value} onClick={() => create.mutate()}>加入黑名单</button></div>

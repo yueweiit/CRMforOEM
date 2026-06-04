@@ -163,7 +163,7 @@ function websiteAnalysisPrompt() {
     "",
     "3. unknown_factors: 必须返回数组，至少包含：采购周期、实际采购量级、当前供应商关系、关键决策人联系方式、预算范围、认证要求。",
     "",
-    "4. our_data_quality_note: 当我方产品数量<10时输出提醒文本。",
+    "4. our_data_quality_note: 当我方参考产品数量<10时输出提醒文本。",
     "",
     "总输出控制在2800中文字符以内。"
   ].join("\n");

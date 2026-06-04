@@ -94,6 +94,11 @@ export class EmailsController {
     return this.emailsService.listThreadMessages(user, id);
   }
 
+  @Get("email-sync/status")
+  syncStatus(@CurrentUser() user: RequestUser) {
+    return this.imapIdleService.getConnectionStatusesForUser(user);
+  }
+
   @Post("email-sync/run")
   runSync(@CurrentUser() user: RequestUser) {
     return this.imapIdleService.manualSyncForUser(user.id);

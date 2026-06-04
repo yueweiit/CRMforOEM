@@ -1,6 +1,11 @@
-import { IsArray, IsEmail, IsOptional, IsString } from "class-validator";
+import { EMAIL_DRAFT_ALLOWED_PURPOSES } from "@oem-crm/shared";
+import { IsArray, IsEmail, IsIn, IsOptional, IsString } from "class-validator";
 
 export class UpdateEmailDraftDto {
+  @IsOptional()
+  @IsIn(EMAIL_DRAFT_ALLOWED_PURPOSES)
+  purpose?: string;
+
   @IsOptional()
   @IsString()
   emailAccountId?: string;

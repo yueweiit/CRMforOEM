@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Filter, Plus, Search } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { apiGet, apiPost } from "../api/http";
+import { getCurrentUser, isAdmin } from "../auth/permissions";
+import { AppSelect } from "../components/AppSelect";
 import { notifyMutationStep } from "../components/Toast";
 
 type Customer = {
@@ -28,6 +30,8 @@ type CustomerOptions = {
 export function CustomersPage({ mode }: { mode?: "create" }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const currentUser = getCurrentUser();
+  const canManageDictionaries = isAdmin(currentUser);
   const [q, setQ] = useState("");
   const [stage, setStage] = useState("");
   const [form, setForm] = useState(defaultCustomerForm());
@@ -90,7 +94,11 @@ export function CustomersPage({ mode }: { mode?: "create" }) {
           {createMutation.isError ? <div className="error-state panel">创建失败：{String(createMutation.error)}</div> : null}
           {!hasSources || !hasTypes ? (
             <div className="panel loading-state">
-              客户来源或客户类型还没有可选项，请到 <Link className="table-link" to="/settings/customer-dictionaries">系统设置 / 客户字典</Link> 配置；也可以先不选直接创建客户。
+              客户来源或客户类型还没有可选项。
+              {canManageDictionaries ? (
+                <> 请到 <Link className="table-link" to="/settings/customer-dictionaries">系统设置 / 客户字典</Link> 配置；</>
+              ) : null}
+              也可以先不选直接创建客户。
             </div>
           ) : null}
           <div className="form-grid">
@@ -102,24 +110,36 @@ export function CustomersPage({ mode }: { mode?: "create" }) {
             <Field label="币种" value={form.currency} onChange={(currency) => setForm({ ...form, currency })} placeholder="USD" />
             <label>
               <span>客户来源</span>
-              <select value={form.sourceId} onChange={(event) => setForm({ ...form, sourceId: event.target.value })}>
-                <option value="">{hasSources ? "未选择" : "暂无来源，请先配置"}</option>
-                {options?.sources.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
-              </select>
+              <AppSelect
+                value={form.sourceId}
+                onChange={(sourceId) => setForm({ ...form, sourceId })}
+                options={[
+                  { value: "", label: hasSources ? "未选择" : "暂无来源，请先配置" },
+                  ...(options?.sources.map((item) => ({ value: item.id, label: item.name })) ?? [])
+                ]}
+              />
             </label>
             <label>
               <span>客户类型</span>
-              <select value={form.typeId} onChange={(event) => setForm({ ...form, typeId: event.target.value })}>
-                <option value="">{hasTypes ? "未选择" : "暂无类型，请先配置"}</option>
-                {options?.types.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
-              </select>
+              <AppSelect
+                value={form.typeId}
+                onChange={(typeId) => setForm({ ...form, typeId })}
+                options={[
+                  { value: "", label: hasTypes ? "未选择" : "暂无类型，请先配置" },
+                  ...(options?.types.map((item) => ({ value: item.id, label: item.name })) ?? [])
+                ]}
+              />
             </label>
             <label>
               <span>负责人</span>
-              <select value={form.ownerId} onChange={(event) => setForm({ ...form, ownerId: event.target.value })}>
-                <option value="">{hasOwners ? "默认当前用户" : "暂无可选负责人"}</option>
-                {options?.users.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
-              </select>
+              <AppSelect
+                value={form.ownerId}
+                onChange={(ownerId) => setForm({ ...form, ownerId })}
+                options={[
+                  { value: "", label: hasOwners ? "默认当前用户" : "暂无可选负责人" },
+                  ...(options?.users.map((item) => ({ value: item.id, label: item.name })) ?? [])
+                ]}
+              />
             </label>
             <Field label="标签" value={form.tags} onChange={(tags) => setForm({ ...form, tags })} placeholder="用逗号分隔" />
             <label className="wide-field">
@@ -155,10 +175,16 @@ export function CustomersPage({ mode }: { mode?: "create" }) {
           <Search size={16} />
           <input placeholder="搜索公司、官网" value={q} onChange={(event) => setQ(event.target.value)} />
         </div>
-        <select className="secondary-button" value={stage} onChange={(event) => setStage(event.target.value)} title="筛选阶段">
-          <option value="">全部阶段</option>
-          {(options?.stages ?? Object.keys(stageLabels)).map((item) => <option value={item} key={item}>{stageLabel(item)}</option>)}
-        </select>
+        <AppSelect
+          variant="toolbar"
+          value={stage}
+          onChange={setStage}
+          title="筛选阶段"
+          options={[
+            { value: "", label: "全部阶段" },
+            ...((options?.stages ?? Object.keys(stageLabels)).map((item) => ({ value: item, label: stageLabel(item) })))
+          ]}
+        />
         <button className="icon-button" title="筛选">
           <Filter size={17} />
         </button>

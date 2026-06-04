@@ -149,7 +149,7 @@ export class DashboardsService {
       this.prisma.customer.count({ where: customerWhere as never }),
       this.prisma.followUpTask.count({
         where: {
-          ownerId: user.id,
+          ...this.buildFollowupOwnerWhere(user),
           status: "OPEN",
           dueAt: { gte: startOfDay(new Date()), lt: addDays(startOfDay(new Date()), 1) },
           customer: customerWhere as never
@@ -184,7 +184,7 @@ export class DashboardsService {
       }),
       this.prisma.followUpTask.count({
         where: {
-          ownerId: user.id,
+          ...this.buildFollowupOwnerWhere(user),
           status: "OPEN",
           dueAt: { lt: new Date() },
           customer: customerWhere as never
@@ -637,7 +637,7 @@ export class DashboardsService {
   private async getTodayFollowupTasks(user: RequestUser, customerWhere: CustomerWhere) {
     const tasks = await this.prisma.followUpTask.findMany({
       where: {
-        ownerId: user.id,
+        ...this.buildFollowupOwnerWhere(user),
         status: "OPEN",
         dueAt: { gte: startOfDay(new Date()), lt: addDays(startOfDay(new Date()), 1) },
         customer: customerWhere as never
@@ -672,6 +672,10 @@ export class DashboardsService {
     if (query.customerTypeId || query.customer_type_id) where.typeId = query.customerTypeId ?? query.customer_type_id;
     if (query.stage) where.stage = query.stage;
     if (withCreatedRange && range) where.createdAt = between(range);
+
+    if (mode === "personal" && this.isAdmin(user)) {
+      return where;
+    }
 
     if (mode === "personal" || user.dataScope === "SELF") {
       where.ownerId = user.id;
@@ -741,6 +745,14 @@ export class DashboardsService {
       }
     }
     return Array.from(result);
+  }
+
+  private buildFollowupOwnerWhere(user: RequestUser) {
+    return this.isAdmin(user) ? {} : { ownerId: user.id };
+  }
+
+  private isAdmin(user: RequestUser) {
+    return user.roleCodes.includes("ADMIN");
   }
 }
 
