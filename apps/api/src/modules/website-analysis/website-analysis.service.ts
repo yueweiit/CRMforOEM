@@ -7,6 +7,7 @@ import { buildCustomerDataScopeWhere } from "../../common/query/data-scope";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AiGenerationService } from "../ai/ai-generation.service";
 import { AiProviderService } from "../ai/ai-provider.service";
+import { TaskSubmissionLockService } from "../background-tasks/task-submission-lock.service";
 import { WEBSITE_ANALYSIS_QUEUE } from "./website-analysis.constants";
 
 @Injectable()
@@ -15,6 +16,7 @@ export class WebsiteAnalysisService {
     private readonly prisma: PrismaService,
     private readonly aiGeneration: AiGenerationService,
     private readonly aiProvider: AiProviderService,
+    private readonly taskLocks: TaskSubmissionLockService,
     @InjectQueue(WEBSITE_ANALYSIS_QUEUE) private readonly queue: Queue
   ) {}
 
@@ -26,68 +28,116 @@ export class WebsiteAnalysisService {
       throw new NotFoundException("Customer or website URL not found");
     }
 
-    const companyProfile = await this.prisma.companyProfile.findFirst({
-      where: { organizationId: user.organizationId },
-      select: {
-        id: true,
-        displayName: true,
-        products: {
-          select: { category: true, priceMin: true },
-          take: 200
-        },
-        capabilities: {
-          select: { category: true }
-        }
-      }
-    });
-    const uniqueProductCategories = [...new Set(companyProfile?.products.map((product) => product.category) ?? [])];
-    const uniqueCapabilityCategories = [...new Set(companyProfile?.capabilities.map((capability) => capability.category) ?? [])];
-    const hasPriceData = companyProfile?.products.some((product) => product.priceMin != null) ?? false;
+    const existing = await this.findActiveWebsiteAnalysis(customerId, user.organizationId);
+    if (existing) {
+      return {
+        accepted: false,
+        reason: "ACTIVE_WEBSITE_ANALYSIS_EXISTS",
+        existing
+      };
+    }
 
-    const run = await this.aiGeneration.createRun({
+    const lockKey = this.taskLocks.buildKey({
       organizationId: user.organizationId,
-      customerId,
-      type: AiGenerationType.WebsiteAnalysis,
-      model: this.aiProvider.model,
-      promptVersion: "website-analysis-v2",
-      rawInput: {
-        customer: {
-          id: customer.id,
-          name: customer.name,
-          websiteUrl: customer.websiteUrl,
-          country: customer.country,
-          language: customer.language
-        },
-        ourProfile: companyProfile
-          ? {
-              id: companyProfile.id,
-              displayName: companyProfile.displayName,
-              productCount: companyProfile.products.length,
-              productCategories: uniqueProductCategories.slice(0, 30),
-              hasPriceData,
-              capabilityCount: companyProfile.capabilities.length,
-              capabilityCategories: uniqueCapabilityCategories
-            }
-          : null
-      },
-      createdById: user.id
+      type: "website-analysis",
+      scope: customerId
     });
 
-    const analysis = await this.prisma.websiteAnalysis.create({
-      data: {
+    const locked = await this.taskLocks.acquire(lockKey, 600, {
+      userId: user.id,
+      customerId,
+      createdAt: new Date().toISOString()
+    });
+
+    if (!locked) {
+      const lockedExisting = await this.findActiveWebsiteAnalysis(customerId, user.organizationId);
+      return {
+        accepted: false,
+        reason: "WEBSITE_ANALYSIS_SUBMISSION_LOCKED",
+        existing: lockedExisting
+      };
+    }
+
+    try {
+      const companyProfile = await this.prisma.companyProfile.findFirst({
+        where: { organizationId: user.organizationId },
+        select: {
+          id: true,
+          displayName: true,
+          products: {
+            select: { category: true, priceMin: true },
+            take: 200
+          },
+          capabilities: {
+            select: { category: true }
+          }
+        }
+      });
+      const uniqueProductCategories = [...new Set(companyProfile?.products.map((product) => product.category) ?? [])];
+      const uniqueCapabilityCategories = [...new Set(companyProfile?.capabilities.map((capability) => capability.category) ?? [])];
+      const hasPriceData = companyProfile?.products.some((product) => product.priceMin != null) ?? false;
+
+      const run = await this.aiGeneration.createRun({
+        organizationId: user.organizationId,
         customerId,
-        aiGenerationRunId: run.id,
-        status: "QUEUED"
-      }
-    });
+        type: AiGenerationType.WebsiteAnalysis,
+        model: this.aiProvider.model,
+        promptVersion: "website-analysis-v2",
+        rawInput: {
+          customer: {
+            id: customer.id,
+            name: customer.name,
+            websiteUrl: customer.websiteUrl,
+            country: customer.country,
+            language: customer.language
+          },
+          ourProfile: companyProfile
+            ? {
+                id: companyProfile.id,
+                displayName: companyProfile.displayName,
+                productCount: companyProfile.products.length,
+                productCategories: uniqueProductCategories.slice(0, 30),
+                hasPriceData,
+                capabilityCount: companyProfile.capabilities.length,
+                capabilityCategories: uniqueCapabilityCategories
+              }
+            : null
+        },
+        createdById: user.id
+      });
 
-    await this.queue.add("analyze-website", {
-      analysisId: analysis.id,
-      customerId,
-      websiteUrl: customer.websiteUrl
-    });
+      const analysis = await this.prisma.websiteAnalysis.create({
+        data: {
+          customerId,
+          aiGenerationRunId: run.id,
+          status: "QUEUED"
+        }
+      });
 
-    return analysis;
+      await this.queue.add("analyze-website", {
+        analysisId: analysis.id,
+        customerId,
+        websiteUrl: customer.websiteUrl
+      });
+
+      return {
+        accepted: true,
+        analysis
+      };
+    } finally {
+      await this.taskLocks.release(lockKey);
+    }
+  }
+
+  private findActiveWebsiteAnalysis(customerId: string, organizationId: string) {
+    return this.prisma.websiteAnalysis.findFirst({
+      where: {
+        customerId,
+        customer: { organizationId },
+        status: { in: ["QUEUED", "RUNNING"] }
+      },
+      orderBy: { createdAt: "desc" }
+    });
   }
 
   async getLatest(user: RequestUser, customerId: string) {

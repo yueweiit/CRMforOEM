@@ -10,6 +10,7 @@ import { RedisModule } from "./common/redis/redis.module";
 import { SseModule } from "./common/sse/sse.module";
 import { AiModule } from "./modules/ai/ai.module";
 import { AuthModule } from "./modules/auth/auth.module";
+import { BackgroundTasksModule } from "./modules/background-tasks/background-tasks.module";
 import { CommercialModule } from "./modules/commercial/commercial.module";
 import { CustomersModule } from "./modules/customers/customers.module";
 import { DashboardsModule } from "./modules/dashboards/dashboards.module";
@@ -41,6 +42,7 @@ import { PrismaModule } from "./prisma/prisma.module";
     PrismaModule,
     RedisModule,
     SseModule,
+    BackgroundTasksModule,
     AuthModule,
     CommercialModule,
     CustomersModule,

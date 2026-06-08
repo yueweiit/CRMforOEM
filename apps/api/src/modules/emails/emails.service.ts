@@ -9,6 +9,7 @@ import { buildCustomerDataScopeWhere } from "../../common/query/data-scope";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AiGenerationService } from "../ai/ai-generation.service";
 import { AiProviderService } from "../ai/ai-provider.service";
+import { TaskSubmissionLockService } from "../background-tasks/task-submission-lock.service";
 import { CustomerStageService } from "../customers/customer-stage.service";
 import { FollowUpRulesService } from "../follow-ups/follow-up-rules.service";
 import { Queue } from "bullmq";
@@ -29,6 +30,7 @@ export class EmailsService {
     private readonly prisma: PrismaService,
     private readonly aiGeneration: AiGenerationService,
     private readonly aiProvider: AiProviderService,
+    private readonly taskLocks: TaskSubmissionLockService,
     private readonly customerStageService: CustomerStageService,
     private readonly followUpRules: FollowUpRulesService,
     private readonly secrets: EmailSecretService,
@@ -152,71 +154,120 @@ export class EmailsService {
 
   async generateDraft(user: RequestUser, customerId: string, dto: GenerateEmailDraftDto) {
     const context = await this.buildEmailContext(user, customerId, dto);
+    const purpose = normalizeEmailDraftPurpose(dto.purpose);
     const toEmail = dto.toEmail ?? context.bestContact?.email;
     if (!toEmail) {
       throw new BadRequestException("No recipient email available");
     }
-    const selectedContact = context.contacts.find((contact) => sameEmailAddress(contact.email, toEmail));
-    const account = await this.resolveSenderAccount(user, toEmail, dto.emailAccountId);
 
-    const emailContext = buildEmailGenerationContext({
-      purpose: context.purpose,
-      customer: context.customer,
-      selectedContact,
-      responsibleOwner: context.customer.owner ?? user,
-      websiteAnalysis: context.websiteAnalysis,
-      researchReport: context.researchReport,
-      oemFitScore: context.oemFitScore,
-      companyProfile: context.companyProfile,
-      userInstructions: context.userInstructions
-    });
-
-    const run = await this.aiGeneration.createRun({
-      organizationId: user.organizationId,
+    const existingDraft = await this.findActiveEmailDraftGeneration({
       customerId,
-      type: AiGenerationType.EmailDraft,
-      model: this.aiProvider.model,
-      promptVersion: "email-draft-v1",
-      rawInput: emailContext,
-      createdById: user.id
-    });
-
-    const subject = dto.subject ?? buildSubject(context.customer.name);
-    const draft = await this.prisma.emailDraft.create({
-      data: {
-        customerId,
-        emailAccountId: account.id,
-        aiGenerationRunId: run.id,
-        purpose: context.purpose,
-        subject,
-        body: "",
-        toEmail,
-        toNameSnapshot: selectedContact?.name,
-        fromEmailSnapshot: account.email,
-        fromNameSnapshot: account.name,
-        ccEmails: dto.ccEmails ?? [],
-        bccEmails: dto.bccEmails ?? [],
-        status: EmailDraftStatus.Draft as never,
-        createdById: user.id
-      }
-    });
-
-    await this.emailDraftQueue.add("generate-email-draft", {
-      draftId: draft.id,
-      context: emailContext,
+      organizationId: user.organizationId,
+      purpose,
       toEmail
     });
-
-    if (context.customer.stage === CustomerStage.PendingEmailGeneration) {
-      await this.customerStageService.advanceCustomerStage({
-        customerId,
-        toStage: CustomerStage.PendingEmailSend,
-        changedById: user.id,
-        reason: "Email draft generated"
-      });
+    if (existingDraft) {
+      return {
+        accepted: false,
+        reason: "ACTIVE_EMAIL_DRAFT_GENERATION_EXISTS",
+        existing: existingDraft
+      };
     }
 
-    return { id: draft.id, status: draft.status, message: "草稿生成中，请稍后刷新查看。" };
+    const emailScope = [customerId, purpose, toEmail.toLowerCase()].join(":");
+    const lockKey = this.taskLocks.buildKey({
+      organizationId: user.organizationId,
+      type: "email-draft",
+      scope: emailScope
+    });
+
+    const locked = await this.taskLocks.acquire(lockKey, 300, {
+      userId: user.id,
+      customerId,
+      purpose,
+      toEmail,
+      createdAt: new Date().toISOString()
+    });
+
+    if (!locked) {
+      const lockedExisting = await this.findActiveEmailDraftGeneration({
+        customerId,
+        organizationId: user.organizationId,
+        purpose,
+        toEmail
+      });
+      return {
+        accepted: false,
+        reason: "EMAIL_DRAFT_SUBMISSION_LOCKED",
+        existing: lockedExisting
+      };
+    }
+
+    try {
+      const selectedContact = context.contacts.find((contact) => sameEmailAddress(contact.email, toEmail));
+      const account = await this.resolveSenderAccount(user, toEmail, dto.emailAccountId);
+
+      const emailContext = buildEmailGenerationContext({
+        purpose: context.purpose,
+        customer: context.customer,
+        selectedContact,
+        responsibleOwner: context.customer.owner ?? user,
+        websiteAnalysis: context.websiteAnalysis,
+        researchReport: context.researchReport,
+        oemFitScore: context.oemFitScore,
+        companyProfile: context.companyProfile,
+        userInstructions: context.userInstructions
+      });
+
+      const run = await this.aiGeneration.createRun({
+        organizationId: user.organizationId,
+        customerId,
+        type: AiGenerationType.EmailDraft,
+        model: this.aiProvider.model,
+        promptVersion: "email-draft-v1",
+        rawInput: emailContext,
+        createdById: user.id
+      });
+
+      const subject = dto.subject ?? buildSubject(context.customer.name);
+      const draft = await this.prisma.emailDraft.create({
+        data: {
+          customerId,
+          emailAccountId: account.id,
+          aiGenerationRunId: run.id,
+          purpose: context.purpose,
+          subject,
+          body: "",
+          toEmail,
+          toNameSnapshot: selectedContact?.name,
+          fromEmailSnapshot: account.email,
+          fromNameSnapshot: account.name,
+          ccEmails: dto.ccEmails ?? [],
+          bccEmails: dto.bccEmails ?? [],
+          status: EmailDraftStatus.Draft as never,
+          createdById: user.id
+        }
+      });
+
+      await this.emailDraftQueue.add("generate-email-draft", {
+        draftId: draft.id,
+        context: emailContext,
+        toEmail
+      });
+
+      if (context.customer.stage === CustomerStage.PendingEmailGeneration) {
+        await this.customerStageService.advanceCustomerStage({
+          customerId,
+          toStage: CustomerStage.PendingEmailSend,
+          changedById: user.id,
+          reason: "Email draft generated"
+        });
+      }
+
+      return { accepted: true, id: draft.id, status: draft.status, message: "草稿生成中，请稍后刷新查看。" };
+    } finally {
+      await this.taskLocks.release(lockKey);
+    }
   }
 
   async getDraft(user: RequestUser, id: string) {
@@ -437,6 +488,27 @@ export class EmailsService {
       where: { threadId },
       orderBy: { createdAt: "asc" },
       include: { attachments: true }
+    });
+  }
+
+  private findActiveEmailDraftGeneration(input: {
+    customerId: string;
+    organizationId: string;
+    purpose: string;
+    toEmail: string;
+  }) {
+    return this.prisma.emailDraft.findFirst({
+      where: {
+        customerId: input.customerId,
+        customer: { organizationId: input.organizationId },
+        purpose: input.purpose,
+        toEmail: input.toEmail,
+        aiGenerationRun: {
+          status: { in: ["QUEUED", "RUNNING"] }
+        }
+      },
+      orderBy: { createdAt: "desc" },
+      include: { aiGenerationRun: true }
     });
   }
 
