@@ -3,20 +3,43 @@ import * as bcrypt from "bcrypt";
 
 const prisma = new PrismaClient();
 
-const permissions = [
-  ["customers.read", "View customers"],
-  ["customers.write", "Create and update customers"],
-  ["customers.assign", "Assign customers"],
-  ["research.generate", "Generate research reports"],
-  ["website.analyze", "Analyze customer websites"],
-  ["emails.generate", "Generate email drafts"],
-  ["emails.approve", "Approve email drafts"],
-  ["emails.send", "Send approved emails"],
-  ["knowledge.write", "Maintain company knowledge base"],
-  ["dashboards.personal", "View personal dashboards"],
-  ["dashboards.team", "View team dashboards"],
-  ["dashboards.management", "View management dashboards"],
-  ["settings.manage", "Manage system settings"]
+// [code, name, module, group, dependsOn[]]
+const permissionDefs: Array<[string, string, string, string, string[]]> = [
+  // 客户管理
+  ["customers.read", "View customers", "customers", "客户管理", []],
+  ["customers.write", "Create and update customers", "customers", "客户管理", ["customers.read"]],
+  ["customers.assign", "Assign customers", "customers", "客户管理", ["customers.read"]],
+  // 官网分析
+  ["website.analyze", "Analyze customer websites", "website", "官网分析", ["customers.read"]],
+  // 背调报告
+  ["research.generate", "Generate research reports", "research", "背调报告", ["customers.read"]],
+  // OEM 评分
+  ["scoring.generate", "Generate OEM fit scores", "scoring", "OEM评分", ["customers.read"]],
+  // 邮件中心
+  ["emails.generate", "Generate email drafts", "emails", "邮件中心", ["customers.read"]],
+  ["emails.send", "Send approved emails", "emails", "邮件中心", ["customers.read", "emails.generate"]],
+  ["emails.approve", "Approve email drafts", "emails", "邮件中心", ["emails.generate"]],
+  ["emails.accounts.manage_personal", "Manage personal email accounts", "emails", "邮件中心", []],
+  ["emails.accounts.manage_shared", "Manage shared email accounts", "emails", "邮件中心", ["emails.accounts.manage_personal"]],
+  // 数据看板
+  ["dashboards.personal.view", "View personal workbench", "dashboards", "数据看板", []],
+  ["dashboards.view", "View team/management dashboards", "dashboards", "数据看板", ["customers.read"]],
+  // 企业资料库
+  ["knowledge.write", "Maintain company knowledge base", "knowledge", "企业资料库", []],
+  // 系统设置
+  ["settings.users.manage", "Manage users", "settings", "系统设置", []],
+  ["settings.roles.manage", "Manage roles and permissions", "settings", "系统设置", []],
+  ["settings.audit_logs.read", "View audit logs", "settings", "系统设置", []],
+  ["settings.customer_dictionaries.manage", "Manage customer dictionaries", "settings", "系统设置", []],
+  ["settings.blacklist.manage", "Manage blacklist rules", "settings", "系统设置", []],
+  ["settings.ai_config.manage", "Manage AI configuration", "settings", "系统设置", []],
+  ["settings.scoring_weights.manage", "Manage OEM scoring weights", "settings", "系统设置", []],
+  ["settings.email_prompt.manage", "Manage email prompt configuration", "settings", "系统设置", []],
+  // 兼容旧权限码（双写过渡期）
+  ["dashboards.personal", "View personal dashboards (legacy)", "dashboards", "数据看板", []],
+  ["dashboards.team", "View team dashboards (legacy)", "dashboards", "数据看板", []],
+  ["dashboards.management", "View management dashboards (legacy)", "dashboards", "数据看板", []],
+  ["settings.manage", "Manage system settings (legacy)", "settings", "系统设置", []]
 ];
 
 async function main() {
@@ -40,63 +63,84 @@ async function main() {
   });
 
   const createdPermissions = await Promise.all(
-    permissions.map(([code, name]) =>
+    permissionDefs.map(([code, name, module, group, dependsOn]) =>
       prisma.permission.upsert({
         where: { organizationId_code: { organizationId: organization.id, code } },
-        update: { name },
-        create: { organizationId: organization.id, code, name }
+        update: { name, module, group, dependsOn: dependsOn as never },
+        create: { organizationId: organization.id, code, name, module, group, dependsOn: dependsOn as never }
       })
     )
   );
 
   const roleDefinitions = [
-    { code: "ADMIN", name: "系统管理员", dataScope: "ALL", permissionCodes: permissions.map(([code]) => code) },
+    { code: "ADMIN", name: "系统管理员", dataScope: "ALL", level: 100,
+      permissionCodes: permissionDefs.map(([code]) => code) },
     {
-      code: "SALES_MANAGER",
-      name: "销售主管",
-      dataScope: "TEAM",
+      code: "EXECUTIVE", name: "管理层", dataScope: "ALL", level: 80,
+      permissionCodes: [
+        "customers.read",
+        "dashboards.personal.view",
+        "dashboards.view",
+        "dashboards.personal", "dashboards.team", "dashboards.management",
+        "emails.accounts.manage_shared",
+        "settings.scoring_weights.manage",
+        "settings.blacklist.manage",
+        "settings.customer_dictionaries.manage",
+        "scoring.generate"
+      ]
+    },
+    {
+      code: "SALES_MANAGER", name: "销售主管", dataScope: "TEAM", level: 60,
       permissionCodes: [
         "customers.read",
         "customers.write",
         "customers.assign",
         "research.generate",
         "website.analyze",
+        "scoring.generate",
         "emails.generate",
         "emails.approve",
         "emails.send",
-        "dashboards.personal",
-        "dashboards.team"
+        "dashboards.personal.view",
+        "dashboards.view",
+        "dashboards.personal", "dashboards.team"
       ]
     },
     {
-      code: "SALES_REP",
-      name: "业务员",
-      dataScope: "SELF",
-      permissionCodes: ["customers.read", "customers.write", "research.generate", "website.analyze", "emails.generate", "emails.send", "dashboards.personal"]
+      code: "SALES_REP", name: "业务员", dataScope: "SELF", level: 40,
+      permissionCodes: [
+        "customers.read",
+        "customers.write",
+        "research.generate",
+        "website.analyze",
+        "scoring.generate",
+        "emails.generate",
+        "emails.send",
+        "emails.accounts.manage_personal",
+        "dashboards.personal.view",
+        "dashboards.personal"
+      ]
     },
     {
-      code: "OPERATOR",
-      name: "运营人员",
-      dataScope: "ALL",
-      permissionCodes: ["knowledge.write", "customers.read"]
-    },
-    {
-      code: "EXECUTIVE",
-      name: "管理层",
-      dataScope: "ALL",
-      permissionCodes: ["customers.read", "dashboards.personal", "dashboards.team", "dashboards.management"]
+      code: "OPERATOR", name: "运营人员", dataScope: "ALL", level: 20,
+      permissionCodes: [
+        "knowledge.write",
+        "customers.read",
+        "settings.customer_dictionaries.manage"
+      ]
     }
   ] as const;
 
   for (const definition of roleDefinitions) {
     const role = await prisma.role.upsert({
       where: { organizationId_code: { organizationId: organization.id, code: definition.code } },
-      update: { name: definition.name, dataScope: definition.dataScope },
+      update: { name: definition.name, dataScope: definition.dataScope, level: definition.level },
       create: {
         organizationId: organization.id,
         code: definition.code,
         name: definition.name,
-        dataScope: definition.dataScope
+        dataScope: definition.dataScope,
+        level: definition.level
       }
     });
 

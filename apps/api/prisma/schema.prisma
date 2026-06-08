@@ -174,16 +174,54 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  teams           Team[]
-  users           User[]
-  sources         CustomerSource[]
-  types           CustomerType[]
-  customers       Customer[]
-  companyProfiles CompanyProfile[]
-  roles           Role[]
-  permissions     Permission[]
+  teams             Team[]
+  users             User[]
+  sources           CustomerSource[]
+  types             CustomerType[]
+  customers         Customer[]
+  companyProfiles   CompanyProfile[]
+  roles             Role[]
+  permissions       Permission[]
+  oemScoringConfig   OemScoringConfig?
+  emailPromptConfigs EmailPromptConfig[]
 
   @@map("organizations")
+}
+
+model OemScoringConfig {
+  id             String   @id @default(cuid())
+  organizationId String   @unique
+  weights        Json
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("oem_scoring_configs")
+}
+
+model EmailPromptConfig {
+  id               String   @id @default(cuid())
+  organizationId   String
+  purpose          String
+  goal             String?
+  tone             String?
+  mustInclude      Json     @default("[]")
+  mustAvoid        Json     @default("[]")
+  structure        String?
+  customInstruction String?
+  isActive         Boolean  @default(true)
+  createdById      String?
+  updatedById      String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User?        @relation("EmailPromptConfigCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy    User?        @relation("EmailPromptConfigUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, purpose])
+  @@map("email_prompt_configs")
 }
 
 model Team {
@@ -222,9 +260,12 @@ model User {
   emailAccounts    EmailAccount[]
   ownedCustomers   Customer[]         @relation("CustomerOwner")
   createdCustomers Customer[]         @relation("CustomerCreator")
-  editedVersions   AiContentVersion[]
-  followUpTasks    FollowUpTask[]
-  auditLogs        AuditLog[]
+  editedVersions        AiContentVersion[]
+  followUpTasks         FollowUpTask[]
+  auditLogs                  AuditLog[]
+  permissionGrants           UserPermissionGrant[]
+  emailPromptConfigsCreated EmailPromptConfig[] @relation("EmailPromptConfigCreatedBy")
+  emailPromptConfigsUpdated EmailPromptConfig[] @relation("EmailPromptConfigUpdatedBy")
 
   @@index([organizationId])
   @@index([teamId])
@@ -237,6 +278,7 @@ model Role {
   code           String
   name           String
   dataScope      DataScope @default(SELF)
+  level          Int       @default(0)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
@@ -245,6 +287,7 @@ model Role {
   userRoles       UserRole[]
 
   @@unique([organizationId, code])
+  @@index([organizationId, level])
   @@map("roles")
 }
 
@@ -253,12 +296,17 @@ model Permission {
   organizationId String
   code           String
   name           String
+  module         String?
+  group          String?
+  dependsOn      Json     @default("[]")
   description    String?
 
-  organization    Organization     @relation(fields: [organizationId], references: [id])
+  organization    Organization             @relation(fields: [organizationId], references: [id])
   rolePermissions RolePermission[]
+  userGrants      UserPermissionGrant[]
 
   @@unique([organizationId, code])
+  @@index([organizationId, module])
   @@map("permissions")
 }
 
@@ -271,6 +319,20 @@ model RolePermission {
 
   @@id([roleId, permissionId])
   @@map("role_permissions")
+}
+
+model UserPermissionGrant {
+  userId       String
+  permissionId String
+  createdById  String?
+  createdAt    DateTime @default(now())
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([userId, permissionId])
+  @@index([permissionId])
+  @@map("user_permission_grants")
 }
 
 model UserRole {
