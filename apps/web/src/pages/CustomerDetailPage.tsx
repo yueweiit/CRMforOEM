@@ -7,6 +7,7 @@ import { NavLink, useParams } from "react-router-dom";
 import { apiGet, apiPatch, apiPost } from "../api/http";
 import { AppSelect } from "../components/AppSelect";
 import { showClientToast } from "../components/Toast";
+import { formatDraftRecipient as formatEmailDraftRecipient, formatDraftSender as formatEmailDraftSender, sameEmailAddress } from "../utils/email-format";
 
 type CustomerDetail = {
   id: string;
@@ -598,8 +599,8 @@ function EmailPanel({ customer, customerId, onChanged }: { customer: CustomerDet
               <MailPlus size={16} />
               <div>
                 <strong>邮件类型：{emailDraftPurposeLabel(draft.purpose)}</strong>
-                <span>发件人：{formatDraftSender(draft)}</span>
-                <span>收件人：{formatDraftRecipient(draft)}</span>
+                <span>发件人：{formatEmailDraftSender(draft, { fallback: "未选择发件邮箱", separator: " · " })}</span>
+                <span>收件人：{formatEmailDraftRecipient(draft, { separator: " · " })}</span>
               </div>
               <span className="status-pill">{draft.status}</span>
             </div>
@@ -663,14 +664,6 @@ function AutoResizeTextarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) 
 
 function CommercialPanel(props: { title: string; rows: Array<{ id: string; title: string; meta: string }>; form: Record<string, string>; setForm: (v: Record<string, string>) => void; onSubmit: () => void; fields: string[][] }) {
   return <section className="panel"><div className="panel-title"><h2>{props.title}</h2><span>{props.rows.length} 条</span></div><SimpleRows rows={props.rows} empty={`暂无${props.title}。`} /><div className="form-grid compact-form">{props.fields.map(([key, label]) => <Field key={key} label={label} value={props.form[key]} onChange={(value) => props.setForm({ ...props.form, [key]: value })} />)}<div><button className="secondary-button" onClick={props.onSubmit}>新增</button></div></div></section>;
-}
-
-function sameEmailAddress(left?: string | null, right?: string | null) {
-  return normalizeEmailAddress(left) === normalizeEmailAddress(right);
-}
-
-function normalizeEmailAddress(value?: string | null) {
-  return (value ?? "").trim().toLowerCase();
 }
 
 function Detail({ label, value, wide }: { label: string; value: string; wide?: boolean }) {
@@ -767,14 +760,31 @@ function WebsiteBusinessReportV2({ analysis, insights }: { analysis: WebsiteAnal
 
 function ScoreDimensionList({ score }: { score: OemScore }) {
   const details = asArray(score.dimensionDetails);
+  const weights = score.weights as Record<string, number> | undefined;
+  const breakdown = score.breakdown as Record<string, number> | undefined;
+
+  const resolveMaxScore = (key: string, rawMax: number) => {
+    if (weights && typeof weights[key] === "number") return weights[key];
+    if (rawMax > 0) return rawMax;
+    return key === "riskPenalty" ? 10 : 15;
+  };
+
+  const resolveScore = (key: string, rawScore: number) => {
+    if (breakdown && typeof breakdown[key] === "number") return breakdown[key];
+    return rawScore;
+  };
+
   const rows = details.length
     ? details.map((item) => {
         const record = asRecord(item);
+        const key = getText(record, "key");
+        const rawScore = getNumber(record, "score");
+        const rawMax = getNumber(record, "maxScore");
         return {
-          key: getText(record, "key"),
-          label: getText(record, "label") || scoreLabel(getText(record, "key")),
-          score: getNumber(record, "score"),
-          maxScore: getNumber(record, "maxScore") || score.weights?.[getText(record, "key")] || 10,
+          key,
+          label: getText(record, "label") || scoreLabel(key),
+          score: resolveScore(key, rawScore),
+          maxScore: resolveMaxScore(key, rawMax),
           reason: getText(record, "reason"),
           evidence: asArray(record.evidence).map(stringifyInsight).filter(Boolean)
         };
@@ -783,7 +793,7 @@ function ScoreDimensionList({ score }: { score: OemScore }) {
         key,
         label: scoreLabel(key),
         score: value,
-        maxScore: score.weights?.[key] || (key === "riskPenalty" ? 10 : 15),
+        maxScore: resolveMaxScore(key, 0),
         reason: "",
         evidence: []
       }));

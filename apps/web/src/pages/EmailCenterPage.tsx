@@ -9,10 +9,12 @@ import { CheckCircle2, Inbox, Send, ShieldCheck } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiGet, apiPatch, apiPost } from "../api/http";
+import { getCurrentUser, hasAnyPermission, hasPermission } from "../auth/permissions";
 import { AppSelect } from "../components/AppSelect";
 import { showClientToast } from "../components/Toast";
 import { Switch } from "../components/Switch";
 import { useSse } from "../hooks/useSse";
+import { formatDraftRecipient, formatDraftSender } from "../utils/email-format";
 
 type EmailAccount = {
   id: string;
@@ -77,6 +79,13 @@ type EmailSyncResult = {
 export function EmailCenterPage() {
   const { folder = "accounts" } = useParams();
   const queryClient = useQueryClient();
+  const currentUser = getCurrentUser();
+  const canManageShared = hasPermission(currentUser, "emails.accounts.manage_shared");
+  const canSync = hasAnyPermission(currentUser, [
+    "emails.accounts.manage_personal",
+    "emails.accounts.manage_shared",
+    "settings.manage"
+  ]);
   const [accountForm, setAccountForm] = useState(defaultAccountForm());
   const [editingId, setEditingId] = useState("");
   const [message, setMessage] = useState("");
@@ -196,10 +205,12 @@ export function EmailCenterPage() {
           <p className="eyebrow">Email Center</p>
           <h1>邮件中心</h1>
         </div>
-        <button className="secondary-button" disabled={sync.isPending} onClick={() => sync.mutate()}>
-          <ShieldCheck size={16} />
-          {sync.isPending ? "同步中..." : "同步邮箱"}
-        </button>
+        {canSync && (
+          <button className="secondary-button" disabled={sync.isPending} onClick={() => sync.mutate()}>
+            <ShieldCheck size={16} />
+            {sync.isPending ? "同步中..." : "同步邮箱"}
+          </button>
+        )}
       </header>
 
       {message ? <section className="panel loading-state">{message}</section> : null}
@@ -253,7 +264,7 @@ export function EmailCenterPage() {
                 onChange={(scope) => setAccountForm({ ...accountForm, scope })}
                 options={[
                   { value: "PERSONAL", label: "个人邮箱" },
-                  { value: "SHARED", label: "共享企业邮箱" }
+                  ...(canManageShared ? [{ value: "SHARED" as const, label: "共享企业邮箱" }] : [])
                 ]}
               />
             </label>
@@ -537,22 +548,6 @@ function syncStatusLabel(status?: EmailSyncAccountStatus["connectionStatus"], is
 
 function formatSyncTime(value?: string | null) {
   return value ? `最近同步 ${new Date(value).toLocaleString()}` : "尚未同步";
-}
-
-function formatDraftSender(draft: EmailDraft) {
-  if (draft.fromEmailSnapshot) {
-    return draft.fromNameSnapshot
-      ? `${draft.fromNameSnapshot} / ${draft.fromEmailSnapshot}`
-      : draft.fromEmailSnapshot;
-  }
-  if (draft.emailAccount) {
-    return `${draft.emailAccount.name} / ${draft.emailAccount.email}`;
-  }
-  return "-";
-}
-
-function formatDraftRecipient(draft: EmailDraft) {
-  return draft.toNameSnapshot ? `${draft.toNameSnapshot} / ${draft.toEmail}` : draft.toEmail;
 }
 
 function Field(props: { label: string; value: string; onChange: (value: string) => void }) {

@@ -179,6 +179,18 @@ a {
   padding: 0 12px;
 }
 
+.secondary-button.active {
+  background: #0f766e;
+  border-color: #0f766e;
+  color: white;
+}
+
+.secondary-button.active:hover {
+  background: #0d6b64;
+  border-color: #0d6b64;
+  color: white;
+}
+
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -252,6 +264,70 @@ a {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
   gap: 16px;
+}
+
+.settings-role-grid {
+  grid-template-columns: 260px minmax(0, 1fr);
+}
+
+.settings-role-sidebar {
+  border-right: 1px solid var(--color-border, #e5e7eb);
+  min-width: 0;
+  padding-right: 14px;
+}
+
+.settings-role-sidebar-title {
+  color: var(--color-muted, #52616b);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.settings-role-card {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  min-width: 0;
+  margin-bottom: 6px;
+  padding: 8px 12px;
+  border: 1px solid #d7dcd2;
+  border-radius: 7px;
+  background: white;
+  color: #10253b;
+  cursor: pointer;
+  text-align: left;
+}
+
+.settings-role-card.active {
+  background: #0f766e;
+  border-color: #0f766e;
+  color: white;
+}
+
+.settings-role-card-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.settings-role-card-meta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-muted, #52616b);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.settings-role-card.active .settings-role-card-meta {
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .panel,

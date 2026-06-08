@@ -1,5 +1,4 @@
 import { useState } from "react";
-import type { Dispatch, SetStateAction } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarClock, CheckCircle2 } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -29,49 +28,27 @@ type FollowUpForm = {
   description: string;
 };
 
-type FollowUpPreset = {
-  key: string;
-  type: string;
-  title: string;
-  description: string;
-  delayDays: number;
+type FollowUpTaskTypeOption = {
+  value: string;
+  label: string;
 };
 
-const FOLLOW_UP_TASK_PRESETS: FollowUpPreset[] = [
-  {
-    key: "PRODUCT_RECOMMENDATION_FEEDBACK",
-    type: "CUSTOM",
-    title: "提醒跟进产品推荐反馈",
-    description: "请确认客户是否对推荐产品、规格、目录、样品或定制方案感兴趣。",
-    delayDays: 3
-  },
-  {
-    key: "TRADE_SHOW_INVITATION_RESULT",
-    type: "CUSTOM",
-    title: "提醒跟进展会邀约结果",
-    description: "请确认客户是否参会、是否需要预约会面，展后需记录沟通结果和下一步跟进。",
-    delayDays: 3
-  },
-  {
-    key: "NEW_PRODUCT_FEEDBACK",
-    type: "CUSTOM",
-    title: "提醒跟进新品推荐反馈",
-    description: "请确认客户是否需要新品目录、规格、样品或进一步定制信息。",
-    delayDays: 5
-  },
-  {
-    key: "REORDER_INTENT",
-    type: "CUSTOM",
-    title: "提醒跟进老客户复购意向",
-    description: "请确认客户是否有补货计划、新采购需求，或需要更新目录与报价。",
-    delayDays: 5
-  }
+const FOLLOW_UP_TASK_TYPES: FollowUpTaskTypeOption[] = [
+  { value: "COMPLETE_RESEARCH", label: "完成客户调研" },
+  { value: "GENERATE_EMAIL", label: "生成邮件" },
+  { value: "REVIEW_EMAIL", label: "审核邮件" },
+  { value: "SECOND_FOLLOW_UP", label: "二次跟进" },
+  { value: "THIRD_FOLLOW_UP", label: "三次跟进" },
+  { value: "REQUIREMENT_CONFIRMATION", label: "需求确认" },
+  { value: "QUOTE_FOLLOW_UP", label: "报价跟进" },
+  { value: "SAMPLE_FOLLOW_UP", label: "样品跟进" },
+  { value: "STAGE_STALE_REMINDER", label: "阶段停滞提醒" },
+  { value: "CUSTOM", label: "自定义任务" }
 ];
 
 export function FollowUpsPage() {
   const queryClient = useQueryClient();
   const [status, setStatus] = useState("OPEN");
-  const [presetKey, setPresetKey] = useState("");
   const [form, setForm] = useState<FollowUpForm>(defaultForm());
   const { data = [], isLoading } = useQuery({
     queryKey: ["follow-up-tasks", status],
@@ -119,7 +96,6 @@ export function FollowUpsPage() {
     onMutate: () => notifyMutationStep({ phase: "loading", title: "处理中", message: "正在创建跟进任务。", dedupeKey: `followup-create:${form.customerId}:${form.title}` }),
     onSuccess: () => {
       notifyMutationStep({ phase: "success", title: "跟进任务已创建", message: "新任务已加入跟进列表。" });
-      setPresetKey("");
       setForm(defaultForm());
       queryClient.invalidateQueries({ queryKey: ["follow-up-tasks"] });
       queryClient.invalidateQueries({ queryKey: ["nav-follow-up-overdue-count"] });
@@ -168,15 +144,12 @@ export function FollowUpsPage() {
           />
         </label>
         <label>
-          <span>任务预设</span>
+          <span>任务类型</span>
           <AppSelect
             variant="filter"
-            value={presetKey}
-            onChange={(value) => applyPreset(value, setPresetKey, setForm)}
-            options={[
-              { value: "", label: "手动创建" },
-              ...FOLLOW_UP_TASK_PRESETS.map((preset) => ({ value: preset.key, label: preset.title }))
-            ]}
+            value={form.type}
+            onChange={(type) => setForm({ ...form, type })}
+            options={FOLLOW_UP_TASK_TYPES}
           />
         </label>
         <label><span>任务标题</span><input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} /></label>
@@ -218,33 +191,4 @@ function defaultForm(): FollowUpForm {
     dueAt: new Date().toISOString().slice(0, 16),
     description: ""
   };
-}
-
-function addDaysFromNow(days: number) {
-  const date = new Date();
-  date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 16);
-}
-
-function applyPreset(
-  key: string,
-  setPresetKey: Dispatch<SetStateAction<string>>,
-  setForm: Dispatch<SetStateAction<FollowUpForm>>
-) {
-  setPresetKey(key);
-  if (!key) {
-    setForm((current) => ({ ...current, title: "", type: "CUSTOM", dueAt: defaultForm().dueAt, description: "" }));
-    return;
-  }
-
-  const preset = FOLLOW_UP_TASK_PRESETS.find((item) => item.key === key);
-  if (!preset) return;
-
-  setForm((current) => ({
-    ...current,
-    title: preset.title,
-    type: preset.type,
-    dueAt: addDaysFromNow(preset.delayDays),
-    description: preset.description
-  }));
 }

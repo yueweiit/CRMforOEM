@@ -8,26 +8,12 @@ export type CurrentUser = {
 };
 
 export const ADMIN_ROLE = "ADMIN";
-export const REPORT_VIEW_ROLE_CODES = ["ADMIN", "SALES_MANAGER", "EXECUTIVE"] as const;
 
-export const SETTINGS_SECTION_ACCESS = {
-  users: "admin",
-  roles: "admin",
-  "customer-dictionaries": "common",
-  "email-accounts": "common",
-  ai: "common",
-  scoring: "common",
-  blacklist: "common",
-  "audit-logs": "admin",
-  logout: "common"
-} as const;
-
-export type SettingsSectionKey = keyof typeof SETTINGS_SECTION_ACCESS;
+// ── Role helpers (retained for system-protection scenarios only) ──
 
 export function getCurrentUser(): CurrentUser | null {
   const stored = readStoredUser();
   if (stored) return stored;
-
   return readUserFromToken();
 }
 
@@ -36,29 +22,80 @@ export function hasAnyRole(user: CurrentUser | null, roles: readonly string[]) {
   return roles.some((role) => user.roleCodes.includes(role));
 }
 
+/** @deprecated Use hasPermission(user, code) for business logic. Retained only for system-protection scenarios. */
 export function isAdmin(user: CurrentUser | null) {
   return hasAnyRole(user, [ADMIN_ROLE]);
 }
 
-export function canViewReports(user: CurrentUser | null) {
-  return hasAnyRole(user, REPORT_VIEW_ROLE_CODES);
+// ── Permission helpers (primary API for all business logic) ──
+
+export function hasPermission(user: CurrentUser | null, permissionCode: string) {
+  return user?.permissions?.includes(permissionCode) ?? false;
 }
+
+export function hasAnyPermission(user: CurrentUser | null, permissionCodes: string[]) {
+  return permissionCodes.some((code) => hasPermission(user, code));
+}
+
+// ── Data scope ──
+
+export function hasDataScope(user: CurrentUser | null, scope: "SELF" | "TEAM" | "ALL") {
+  return user?.dataScope === scope;
+}
+
+// ── Route / navigation guards (permission-based) ──
+
+export function canViewReports(user: CurrentUser | null) {
+  return hasAnyPermission(user, ["dashboards.view", "dashboards.team", "dashboards.management"]);
+}
+
+export function canViewSettingsSection(user: CurrentUser | null, section?: string) {
+  if (!user) return false;
+  const code = SETTINGS_PERMISSION_MAP[section as SettingsSectionKey];
+  if (!code) return section === "logout";
+  return hasAnyPermission(user, [code, "settings.manage"]);
+}
+
+const SETTINGS_PERMISSION_MAP: Record<string, string> = {
+  users: "settings.users.manage",
+  roles: "settings.roles.manage",
+  "customer-dictionaries": "settings.customer_dictionaries.manage",
+  "email-accounts": "emails.accounts.manage_personal",
+  ai: "settings.ai_config.manage",
+  scoring: "settings.scoring_weights.manage",
+  blacklist: "settings.blacklist.manage",
+  "audit-logs": "settings.audit_logs.read"
+} as const;
+
+export type SettingsSectionKey = keyof typeof SETTINGS_PERMISSION_MAP | "logout";
 
 export function defaultReportPath(user: CurrentUser | null) {
   if (canViewReports(user)) return "/reports/management";
   return defaultAuthorizedPath(user);
 }
 
-export function canViewSettingsSection(user: CurrentUser | null, section?: string) {
-  if (!user) return false;
-  const access = toSettingsSectionAccess(section);
-  if (!access) return false;
-  return access === "common" || isAdmin(user);
-}
+const SETTINGS_SECTION_ORDER = [
+  "users",
+  "roles",
+  "customer-dictionaries",
+  "email-accounts",
+  "ai",
+  "scoring",
+  "blacklist",
+  "audit-logs",
+  "logout"
+] as const;
 
 export function defaultSettingsPath(user: CurrentUser | null) {
   if (!user) return "/login";
-  return isAdmin(user) ? "/settings/users" : "/settings/customer-dictionaries";
+
+  for (const section of SETTINGS_SECTION_ORDER) {
+    if (canViewSettingsSection(user, section)) {
+      return `/settings/${section}`;
+    }
+  }
+
+  return "/dashboard";
 }
 
 export function defaultAuthorizedPath(user: CurrentUser | null) {
@@ -66,11 +103,7 @@ export function defaultAuthorizedPath(user: CurrentUser | null) {
   return "/dashboard";
 }
 
-function toSettingsSectionAccess(section?: string) {
-  if (!section) return undefined;
-  if (!Object.prototype.hasOwnProperty.call(SETTINGS_SECTION_ACCESS, section)) return undefined;
-  return SETTINGS_SECTION_ACCESS[section as SettingsSectionKey];
-}
+// ── Token decoding ──
 
 function readStoredUser(): CurrentUser | null {
   try {

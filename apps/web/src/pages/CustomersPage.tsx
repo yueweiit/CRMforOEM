@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Filter, Plus, Search } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { apiGet, apiPost } from "../api/http";
-import { getCurrentUser, isAdmin } from "../auth/permissions";
+import { getCurrentUser, hasPermission } from "../auth/permissions";
 import { AppSelect } from "../components/AppSelect";
 import { notifyMutationStep } from "../components/Toast";
 
@@ -31,7 +31,7 @@ export function CustomersPage({ mode }: { mode?: "create" }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const currentUser = getCurrentUser();
-  const canManageDictionaries = isAdmin(currentUser);
+  const canManageDictionaries = hasPermission(currentUser, "settings.customer_dictionaries.manage");
   const [q, setQ] = useState("");
   const [stage, setStage] = useState("");
   const [form, setForm] = useState(defaultCustomerForm());

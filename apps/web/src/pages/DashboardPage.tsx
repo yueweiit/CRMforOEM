@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { ArrowUpRight, CalendarClock, Clock, MailCheck, Target, UsersRound } from "lucide-react";
 import { apiGet } from "../api/http";
-import { getCurrentUser, isAdmin } from "../auth/permissions";
+import { getCurrentUser } from "../auth/permissions";
 import { AppSelect } from "../components/AppSelect";
 import { useSse } from "../hooks/useSse";
 
@@ -92,7 +92,7 @@ const fallback: PersonalDashboard = {
 
 export function DashboardPage() {
   const queryClient = useQueryClient();
-  const isAdminWorkspace = isAdmin(getCurrentUser());
+  const isAdminWorkspace = getCurrentUser()?.dataScope === "ALL";
   const [filters, setFilters] = useState(defaultPersonalFilters());
   const queryString = useMemo(() => toQueryString(filters), [filters]);
 
