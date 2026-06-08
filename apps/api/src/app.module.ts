@@ -4,8 +4,9 @@ import { APP_GUARD } from "@nestjs/core";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { EventEmitterModule } from "@nestjs/event-emitter";
 import { JwtAuthGuard } from "./common/guards/jwt-auth.guard";
+import { LiveSessionGuard } from "./common/guards/live-session.guard";
 import { PermissionsGuard } from "./common/guards/permissions.guard";
-import { RolesGuard } from "./common/guards/roles.guard";
+import { RedisModule } from "./common/redis/redis.module";
 import { SseModule } from "./common/sse/sse.module";
 import { AiModule } from "./modules/ai/ai.module";
 import { AuthModule } from "./modules/auth/auth.module";
@@ -38,6 +39,7 @@ import { PrismaModule } from "./prisma/prisma.module";
     }),
     EventEmitterModule.forRoot(),
     PrismaModule,
+    RedisModule,
     SseModule,
     AuthModule,
     CommercialModule,
@@ -55,7 +57,7 @@ import { PrismaModule } from "./prisma/prisma.module";
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
-    { provide: APP_GUARD, useClass: RolesGuard },
+    { provide: APP_GUARD, useClass: LiveSessionGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard }
   ]
 })

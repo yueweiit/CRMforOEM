@@ -35,6 +35,9 @@ export class JwtAuthGuard implements CanActivate {
       roleCodes?: string[];
       permissions?: string[];
       dataScope?: string;
+      sessionId?: string;
+      permissionVersion?: number;
+      type?: string;
     };
     try {
       payload = await this.jwt.verifyAsync(token, {
@@ -43,13 +46,22 @@ export class JwtAuthGuard implements CanActivate {
     } catch {
       throw new UnauthorizedException("Invalid or expired bearer token");
     }
+
+    // If token has a type field, it must be "access" — reject refresh tokens
+    if (payload.type !== undefined && payload.type !== "access") {
+      throw new UnauthorizedException("Invalid token type");
+    }
+
     request.user = {
       id: payload.sub,
       organizationId: payload.organizationId,
       teamId: payload.teamId,
       roleCodes: payload.roleCodes ?? [],
       permissions: payload.permissions ?? [],
-      dataScope: payload.dataScope ?? "SELF"
+      dataScope: payload.dataScope ?? "SELF",
+      sessionId: payload.sessionId,
+      permissionVersion: payload.permissionVersion,
+      tokenType: payload.type as "access" | "refresh" | undefined
     };
     return true;
   }

@@ -1,4 +1,5 @@
-import { Body, Controller, Post } from "@nestjs/common";
+import { Body, Controller, Get, Post } from "@nestjs/common";
+import { CurrentUser, RequestUser } from "../../common/auth/current-user.decorator";
 import { Public } from "../../common/auth/public.decorator";
 import { AuthService } from "./auth.service";
 import { LoginDto } from "./dto/login.dto";
@@ -20,7 +21,12 @@ export class AuthController {
   }
 
   @Post("logout")
-  logout() {
-    return { ok: true };
+  logout(@CurrentUser() user: RequestUser) {
+    return this.authService.logout(user);
+  }
+
+  @Get("me/permissions")
+  mePermissions(@CurrentUser() user: RequestUser) {
+    return this.authService.getMePermissions(user.id);
   }
 }

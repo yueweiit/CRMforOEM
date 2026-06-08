@@ -7,6 +7,9 @@ export type RequestUser = {
   roleCodes: string[];
   permissions: string[];
   dataScope: "SELF" | "TEAM" | "ALL";
+  sessionId?: string;
+  permissionVersion?: number;
+  tokenType?: "access" | "refresh";
 };
 
 export const CurrentUser = createParamDecorator((_: unknown, context: ExecutionContext): RequestUser => {
