@@ -673,7 +673,7 @@ export class DashboardsService {
     if (query.stage) where.stage = query.stage;
     if (withCreatedRange && range) where.createdAt = between(range);
 
-    if (mode === "personal" && this.isAdmin(user)) {
+    if (mode === "personal" && user.dataScope === "ALL") {
       return where;
     }
 
@@ -748,11 +748,7 @@ export class DashboardsService {
   }
 
   private buildFollowupOwnerWhere(user: RequestUser) {
-    return this.isAdmin(user) ? {} : { ownerId: user.id };
-  }
-
-  private isAdmin(user: RequestUser) {
-    return user.roleCodes.includes("ADMIN");
+    return user.dataScope === "ALL" ? {} : { ownerId: user.id };
   }
 }
 

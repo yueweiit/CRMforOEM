@@ -1,4 +1,4 @@
-import { IsArray, IsBoolean, IsEmail, IsIn, IsOptional, IsString, MinLength } from "class-validator";
+import { IsArray, IsBoolean, IsEmail, IsIn, IsInt, IsOptional, IsString, Max, Min, MinLength } from "class-validator";
 
 export class CreateUserDto {
   @IsEmail()
@@ -91,4 +91,84 @@ export class UpdateCustomerDictionaryDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+}
+
+export class UpdateEmailPromptConfigDto {
+  @IsOptional()
+  @IsString()
+  goal?: string;
+
+  @IsOptional()
+  @IsString()
+  tone?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  mustInclude?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  mustAvoid?: string[];
+
+  @IsOptional()
+  @IsString()
+  structure?: string;
+
+  @IsOptional()
+  @IsString()
+  customInstruction?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+}
+
+export class UpdateRolePermissionsDto {
+  @IsArray()
+  @IsString({ each: true })
+  permissionCodes!: string[];
+}
+
+export class UpdateOemScoringWeightsDto {
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  productLineFit!: number;
+
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  marketFit!: number;
+
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  priceBandFit!: number;
+
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  brandMaturity!: number;
+
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  websiteCompleteness!: number;
+
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  contactQuality!: number;
+
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  cooperationOpportunity!: number;
+
+  @IsInt()
+  @Min(0)
+  @Max(10)
+  riskPenaltyMax!: number;
 }

@@ -5,6 +5,7 @@ import { buildCustomerDataScopeWhere } from "../../common/query/data-scope";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AiGenerationService } from "../ai/ai-generation.service";
 import { AiProviderService } from "../ai/ai-provider.service";
+import { DEFAULT_OEM_SCORING_WEIGHTS, mergeWithDefaults, type OemScoringWeights } from "../settings/settings.service";
 
 type ScoreDimension = {
   key: keyof OemScoreBreakdown;
@@ -37,8 +38,6 @@ const DIMENSIONS: Array<{ key: keyof OemScoreBreakdown; label: string; maxScore:
   { key: "riskPenalty", label: "风险扣分", maxScore: 10 }
 ];
 
-const MAX_SCORES = Object.fromEntries(DIMENSIONS.map((item) => [item.key, item.maxScore])) as OemScoreBreakdown;
-
 @Injectable()
 export class ScoringService {
   constructor(
@@ -49,9 +48,10 @@ export class ScoringService {
 
   async generate(user: RequestUser, customerId: string) {
     const context = await this.buildContext(user, customerId);
+    const weights = await this.readOrgWeights(user.organizationId);
     const dimensions = calculateDimensions(context);
-    const breakdown = Object.fromEntries(dimensions.map((item) => [item.key, item.score])) as OemScoreBreakdown;
-    const weightedScore = calculateTotal(dimensions);
+    const weightedScore = calculateWeightedTotal(dimensions, weights);
+    const breakdown = buildBreakdown(dimensions, weights);
     const grade = toGrade(weightedScore);
     const recommendedProducts = recommendProducts(context);
     const fallbackPlan = buildFallbackPlan(context, dimensions, recommendedProducts, weightedScore, grade);
@@ -74,7 +74,8 @@ export class ScoringService {
         dimensions,
         weightedScore,
         grade,
-        recommendedProducts
+        recommendedProducts,
+        weights
       },
       createdById: user.id
     });
@@ -108,7 +109,7 @@ export class ScoringService {
         score: weightedScore,
         grade,
         breakdown: breakdown as never,
-        weights: MAX_SCORES as never,
+        weights: weights as never,
         dimensionDetails: dimensions as never,
         recommendedProducts: aiPlan.recommended_products as never,
         developmentStrategy: aiPlan.development_strategy as never,
@@ -170,6 +171,14 @@ export class ScoringService {
       })
     ]);
     return { customer, websiteAnalysis, researchReport, contacts, products, capabilities, caseStudies };
+  }
+
+  private async readOrgWeights(organizationId: string): Promise<OemScoringWeights> {
+    const config = await this.prisma.oemScoringConfig.findUnique({
+      where: { organizationId }
+    });
+    if (!config) return { ...DEFAULT_OEM_SCORING_WEIGHTS };
+    return mergeWithDefaults((config.weights ?? {}) as Partial<OemScoringWeights>);
   }
 
   private async ensureCustomerVisible(user: RequestUser, customerId: string) {
@@ -300,12 +309,27 @@ function calculateDimensions(context: ScoreContext): ScoreDimension[] {
   ];
 }
 
-function calculateTotal(dimensions: ScoreDimension[]) {
-  const total = dimensions.reduce((sum, item) => {
-    if (item.key === "riskPenalty") return sum - item.score;
-    return sum + item.score;
-  }, 0);
-  return clamp(Math.round(total), 0, 100);
+function calculateWeightedTotal(dimensions: ScoreDimension[], weights: OemScoringWeights) {
+  const breakdown = buildBreakdown(dimensions, weights);
+  const bonusSum = Object.entries(breakdown)
+    .filter(([key]) => key !== "riskPenalty")
+    .reduce((sum, [, val]) => sum + val, 0);
+  const riskPenalty = breakdown.riskPenalty ?? 0;
+  return clamp(bonusSum - riskPenalty, 0, 100);
+}
+
+function buildBreakdown(dimensions: ScoreDimension[], weights: OemScoringWeights): OemScoreBreakdown {
+  const result: Record<string, number> = {};
+  for (const dim of dimensions) {
+    if (dim.key === "riskPenalty") {
+      result[dim.key] = clamp(Math.round((dim.score / Math.max(dim.maxScore, 1)) * weights.riskPenaltyMax), 0, weights.riskPenaltyMax);
+    } else {
+      const normalized = (dim.score / Math.max(dim.maxScore, 1)) * 10;
+      const weight = weights[dim.key as keyof OemScoringWeights] ?? 0;
+      result[dim.key] = Math.round((normalized * weight) / 10);
+    }
+  }
+  return result as OemScoreBreakdown;
 }
 
 function recommendProducts(context: ScoreContext) {
