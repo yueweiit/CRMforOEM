@@ -4,6 +4,7 @@ import { ImapIdleService } from "./imap-idle.service";
 import { ImapSyncService } from "./imap-sync.service";
 import { AiContentVersionType, AiGenerationType, CustomerStage, EmailDraftStatus, normalizeEmailDraftPurpose } from "@oem-crm/shared";
 import { RequestUser } from "../../common/auth/current-user.decorator";
+import { hasPermission } from "../../common/auth/permission.utils";
 import { buildCustomerDataScopeWhere } from "../../common/query/data-scope";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AiGenerationService } from "../ai/ai-generation.service";
@@ -19,6 +20,7 @@ import { GenerateEmailDraftDto } from "./dto/generate-email-draft.dto";
 import { UpdateEmailAccountDto } from "./dto/update-email-account.dto";
 import { UpdateEmailDraftDto } from "./dto/update-email-draft.dto";
 import { EMAIL_DRAFT_QUEUE } from "./email-draft.constants";
+import type { EmailGenerationContext } from "./email-generation-types";
 import { SmtpService } from "./smtp.service";
 
 @Injectable()
@@ -65,8 +67,8 @@ export class EmailsService {
   }
 
   async createAccount(user: RequestUser, dto: CreateEmailAccountDto) {
-    if (dto.scope === "SHARED" && !user.roleCodes.includes("ADMIN")) {
-      throw new ForbiddenException("Only administrators can create shared email accounts");
+    if (dto.scope === "SHARED" && !hasPermission(user, "emails.accounts.manage_shared")) {
+      throw new ForbiddenException("You do not have permission to create shared email accounts");
     }
     const encryptedSmtpPassword = this.secrets.encrypt(dto.smtpPassword);
     const encryptedImapPassword = this.secrets.encrypt(dto.imapPassword);
@@ -157,13 +159,25 @@ export class EmailsService {
     const selectedContact = context.contacts.find((contact) => sameEmailAddress(contact.email, toEmail));
     const account = await this.resolveSenderAccount(user, toEmail, dto.emailAccountId);
 
+    const emailContext = buildEmailGenerationContext({
+      purpose: context.purpose,
+      customer: context.customer,
+      selectedContact,
+      responsibleOwner: context.customer.owner ?? user,
+      websiteAnalysis: context.websiteAnalysis,
+      researchReport: context.researchReport,
+      oemFitScore: context.oemFitScore,
+      companyProfile: context.companyProfile,
+      userInstructions: context.userInstructions
+    });
+
     const run = await this.aiGeneration.createRun({
       organizationId: user.organizationId,
       customerId,
       type: AiGenerationType.EmailDraft,
       model: this.aiProvider.model,
       promptVersion: "email-draft-v1",
-      rawInput: context,
+      rawInput: emailContext,
       createdById: user.id
     });
 
@@ -189,11 +203,7 @@ export class EmailsService {
 
     await this.emailDraftQueue.add("generate-email-draft", {
       draftId: draft.id,
-      context: {
-        purpose: context.purpose,
-        bestContact: context.bestContact,
-        contacts: context.contacts
-      },
+      context: emailContext,
       toEmail
     });
 
@@ -431,17 +441,29 @@ export class EmailsService {
   }
 
   private async buildEmailContext(user: RequestUser, customerId: string, dto: GenerateEmailDraftDto) {
-    const customer = await this.ensureCustomerVisible(user, customerId);
-    const [contacts, websiteAnalysis, researchReport, oemFitScore, companyProfiles] = await Promise.all([
+    const customer = await this.prisma.customer.findFirst({
+      where: { id: customerId, ...buildCustomerDataScopeWhere(user) },
+      include: {
+        owner: { select: { id: true, name: true, email: true, title: true } },
+        source: { select: { name: true } },
+        type: { select: { name: true } }
+      }
+    });
+    if (!customer) {
+      throw new NotFoundException("Customer not found");
+    }
+
+    const [contacts, websiteAnalysis, researchReport, oemFitScore, companyProfile] = await Promise.all([
       this.prisma.contact.findMany({ where: { customerId }, orderBy: [{ isDecisionMaker: "desc" }, { qualityScore: "desc" }] }),
       this.prisma.websiteAnalysis.findFirst({ where: { customerId }, orderBy: { createdAt: "desc" } }),
       this.prisma.researchReport.findFirst({ where: { customerId }, orderBy: { createdAt: "desc" } }),
       this.prisma.oemFitScore.findFirst({ where: { customerId }, orderBy: { createdAt: "desc" } }),
-      this.prisma.companyProfile.findMany({
+      this.prisma.companyProfile.findFirst({
         where: { organizationId: user.organizationId },
-        include: { capabilities: true, products: { take: 50 }, certificates: true, caseStudies: true, emailMaterials: true }
+        include: { capabilities: true, products: true, certificates: true, caseStudies: true, emailMaterials: true }
       })
     ]);
+
     return {
       purpose: normalizeEmailDraftPurpose(dto.purpose),
       customer,
@@ -450,7 +472,7 @@ export class EmailsService {
       websiteAnalysis,
       researchReport,
       oemFitScore,
-      companyProfiles,
+      companyProfile,
       userInstructions: dto.userInstructions
     };
   }
@@ -502,14 +524,14 @@ export class EmailsService {
     user: RequestUser,
     account: { userId: string }
   ) {
-    if (account.userId !== user.id && !user.roleCodes.includes("ADMIN")) {
+    if (account.userId !== user.id && !hasPermission(user, "emails.accounts.manage_shared")) {
       throw new ForbiddenException("Cannot update this email account");
     }
   }
 
   private assertScopeChangeAllowed(user: RequestUser, dto: UpdateEmailAccountDto) {
-    if (dto.scope === "SHARED" && !user.roleCodes.includes("ADMIN")) {
-      throw new ForbiddenException("Only administrators can share email accounts");
+    if (dto.scope === "SHARED" && !hasPermission(user, "emails.accounts.manage_shared")) {
+      throw new ForbiddenException("You do not have permission to share email accounts");
     }
   }
 
@@ -584,6 +606,218 @@ export class EmailsService {
     return customer;
   }
 
+}
+
+function buildEmailGenerationContext(params: {
+  purpose: string;
+  customer: {
+    name: string;
+    websiteUrl?: string | null;
+    websiteDomain?: string | null;
+    country?: string | null;
+    language?: string | null;
+    stage: string;
+    riskLevel: string;
+    tags: string[];
+    notes?: string | null;
+    owner?: { id: string; name?: string | null; email?: string | null; title?: string | null } | null;
+    source?: { name: string } | null;
+    type?: { name: string } | null;
+  };
+  selectedContact?: {
+    name?: string | null;
+    title?: string | null;
+    department?: string | null;
+    email?: string | null;
+    isDecisionMaker?: boolean;
+  };
+  responsibleOwner: { id: string; name?: string | null; email?: string | null } | null;
+  websiteAnalysis?: {
+    productCategories?: unknown;
+    productCount?: number | null;
+    pricePositioning?: string | null;
+    websiteCompleteness?: number | null;
+    imageStyle?: string | null;
+    missingCategories?: unknown;
+    opportunities?: unknown;
+    risks?: unknown;
+  } | null;
+  researchReport?: {
+    title?: string;
+    finalMarkdown?: string | null;
+    searchEnabled?: boolean;
+  } | null;
+  oemFitScore?: {
+    score?: number;
+    grade?: string;
+    recommendedProducts?: unknown;
+    developmentStrategy?: unknown;
+    emailEntryPoints?: unknown;
+    opportunities?: unknown;
+    risks?: unknown;
+    nextActions?: unknown;
+  } | null;
+  companyProfile?: {
+    displayName?: string;
+    legalName?: string;
+    summary?: string | null;
+    markets?: string[];
+    productionScale?: string | null;
+    factoryAddress?: string | null;
+    capabilities?: Array<{
+      name: string;
+      category: string;
+      description?: string | null;
+      moq?: string | null;
+      leadTime?: string | null;
+      certifications?: string[];
+    }>;
+    products?: Array<{
+      name: string;
+      category: string;
+      description?: string | null;
+      material?: string | null;
+      tags?: string[];
+    }>;
+    certificates?: Array<{
+      name: string;
+      certType: string;
+      issuer?: string | null;
+    }>;
+    caseStudies?: Array<{
+      title: string;
+      market?: string | null;
+      category?: string | null;
+      summary: string;
+      result?: string | null;
+    }>;
+    emailMaterials?: Array<{
+      name: string;
+      materialType: string;
+      content: string;
+      tags?: string[];
+    }>;
+  } | null;
+  userInstructions?: string;
+}): EmailGenerationContext {
+  const intendedRecipient = params.selectedContact?.email
+    ? {
+        email: params.selectedContact.email,
+        name: params.selectedContact.name,
+        title: params.selectedContact.title,
+        department: params.selectedContact.department,
+        isDecisionMaker: params.selectedContact.isDecisionMaker
+      }
+    : { email: "" };
+
+  const customerInsights: EmailGenerationContext["customerInsights"] = {};
+
+  if (params.websiteAnalysis) {
+    const wa = params.websiteAnalysis;
+    customerInsights.websiteAnalysis = {
+      productCategories: wa.productCategories,
+      productCount: wa.productCount,
+      pricePositioning: wa.pricePositioning,
+      websiteCompleteness: wa.websiteCompleteness,
+      imageStyle: wa.imageStyle,
+      missingCategories: wa.missingCategories,
+      opportunities: wa.opportunities,
+      risks: wa.risks
+    };
+  }
+
+  if (params.researchReport) {
+    const rr = params.researchReport;
+    const rawMarkdown = rr.finalMarkdown ?? "";
+    customerInsights.researchReport = {
+      title: rr.title,
+      markdownExcerpt: rawMarkdown.slice(0, 1500),
+      searchEnabled: rr.searchEnabled
+    };
+  }
+
+  if (params.oemFitScore) {
+    const oem = params.oemFitScore;
+    customerInsights.oemFit = {
+      score: oem.score,
+      grade: oem.grade,
+      recommendedProducts: oem.recommendedProducts,
+      developmentStrategy: oem.developmentStrategy,
+      emailEntryPoints: oem.emailEntryPoints,
+      opportunities: oem.opportunities,
+      risks: oem.risks,
+      nextActions: oem.nextActions
+    };
+  }
+
+  return {
+    purpose: params.purpose,
+    intendedRecipient,
+    responsibleOwner: params.responsibleOwner
+      ? {
+          id: params.responsibleOwner.id,
+          name: params.responsibleOwner.name,
+          email: params.responsibleOwner.email
+        }
+      : null,
+    customer: {
+      name: params.customer.name,
+      sourceName: params.customer.source?.name,
+      typeName: params.customer.type?.name,
+      websiteUrl: params.customer.websiteUrl,
+      websiteDomain: params.customer.websiteDomain,
+      country: params.customer.country,
+      language: params.customer.language,
+      stage: params.customer.stage,
+      riskLevel: params.customer.riskLevel,
+      tags: params.customer.tags,
+      notes: params.customer.notes
+    },
+    customerInsights,
+    ourCompany: params.companyProfile
+      ? {
+          displayName: params.companyProfile.displayName,
+          legalName: params.companyProfile.legalName,
+          summary: params.companyProfile.summary,
+          markets: params.companyProfile.markets,
+          productionScale: params.companyProfile.productionScale,
+          factoryAddress: params.companyProfile.factoryAddress,
+          capabilities: pickDiverseByCategory(params.companyProfile.capabilities, 8),
+          products: pickDiverseByCategory(params.companyProfile.products, 8),
+          certificates: (params.companyProfile.certificates ?? []).slice(0, 5),
+          caseStudies: (params.companyProfile.caseStudies ?? []).slice(0, 5),
+          emailMaterials: (params.companyProfile.emailMaterials ?? []).slice(0, 10)
+        }
+      : null,
+    userInstructions: params.userInstructions
+  };
+}
+
+function pickDiverseByCategory<T extends { category?: string }>(items: T[] | undefined, limit: number): T[] {
+  if (!items || items.length === 0) return [];
+  if (items.length <= limit) return items;
+
+  const seen = new Set<string>();
+  const result: T[] = [];
+  const remainder: T[] = [];
+
+  for (const item of items) {
+    const cat = item.category ?? "";
+    if (!seen.has(cat)) {
+      seen.add(cat);
+      result.push(item);
+      if (result.length >= limit) return result;
+    } else {
+      remainder.push(item);
+    }
+  }
+
+  for (const item of remainder) {
+    if (result.length >= limit) break;
+    result.push(item);
+  }
+
+  return result;
 }
 
 function buildSubject(customerName: string) {

@@ -1,5 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from "@nestjs/common";
 import { CurrentUser, RequestUser } from "../../common/auth/current-user.decorator";
+import { RequireLiveSession } from "../../common/auth/live-session.decorator";
+import { RequireAnyPermissions } from "../../common/auth/permissions.decorator";
 import { ApproveEmailDraftDto } from "./dto/approve-email-draft.dto";
 import { CreateEmailAccountDto } from "./dto/create-email-account.dto";
 import { GenerateEmailDraftDto } from "./dto/generate-email-draft.dto";
@@ -20,16 +22,24 @@ export class EmailsController {
     return this.emailsService.listAccounts(user);
   }
 
+  // Controller only performs coarse permission checks.
+  // Personal/shared account ownership is enforced in EmailsService.
+  @RequireLiveSession()
+  @RequireAnyPermissions("emails.accounts.manage_personal", "emails.accounts.manage_shared", "settings.manage")
   @Post("email-accounts")
   createAccount(@CurrentUser() user: RequestUser, @Body() dto: CreateEmailAccountDto) {
     return this.emailsService.createAccount(user, dto);
   }
 
+  @RequireLiveSession()
+  @RequireAnyPermissions("emails.accounts.manage_personal", "emails.accounts.manage_shared", "settings.manage")
   @Patch("email-accounts/:id")
   updateAccount(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: UpdateEmailAccountDto) {
     return this.emailsService.updateAccount(user, id, dto);
   }
 
+  @RequireLiveSession()
+  @RequireAnyPermissions("emails.accounts.manage_personal", "emails.accounts.manage_shared", "settings.manage")
   @Post("email-accounts/:id/test")
   testAccount(@CurrentUser() user: RequestUser, @Param("id") id: string) {
     return this.emailsService.testAccount(user, id);
@@ -69,11 +79,15 @@ export class EmailsController {
     return this.emailsService.submitReview(user, id);
   }
 
+  @RequireLiveSession()
+  @RequireAnyPermissions("emails.send", "emails.approve", "settings.manage")
   @Post("email-drafts/:id/approve")
   approve(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: ApproveEmailDraftDto) {
     return this.emailsService.approve(user, id, dto);
   }
 
+  @RequireLiveSession()
+  @RequireAnyPermissions("emails.send", "settings.manage")
   @Post("email-drafts/:id/send")
   send(@CurrentUser() user: RequestUser, @Param("id") id: string) {
     return this.emailsService.sendApprovedDraft(user, id);
@@ -99,6 +113,8 @@ export class EmailsController {
     return this.imapIdleService.getConnectionStatusesForUser(user);
   }
 
+  @RequireLiveSession()
+  @RequireAnyPermissions("emails.accounts.manage_personal", "emails.accounts.manage_shared", "settings.manage")
   @Post("email-sync/run")
   runSync(@CurrentUser() user: RequestUser) {
     return this.imapIdleService.manualSyncForUser(user.id);
