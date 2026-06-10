@@ -144,11 +144,17 @@ export class AuthSessionService {
   }
 
   async touchSession(sessionId: string) {
-    const raw = await this.redis.get(this.sessionKey(sessionId));
+    const key = this.sessionKey(sessionId);
+    const raw = await this.redis.get(key);
     if (!raw) return;
     const session = JSON.parse(raw) as AuthSessionPayload;
     session.lastSeenAt = new Date().toISOString();
-    await this.redis.set(this.sessionKey(sessionId), JSON.stringify(session), "KEEPTTL");
+    const ttl = await this.redis.pttl(key);
+    if (ttl > 0) {
+      await this.redis.set(key, JSON.stringify(session), "PX", ttl);
+    } else {
+      await this.redis.set(key, JSON.stringify(session));
+    }
   }
 
   async revokeSession(sessionId: string) {

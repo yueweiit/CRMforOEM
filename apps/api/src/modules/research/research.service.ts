@@ -89,7 +89,7 @@ export class ResearchService {
         customerId,
         type: AiGenerationType.ResearchReport,
         model: this.aiProvider.model,
-        promptVersion: "research-report-v3",
+        promptVersion: "research-report-v4",
         rawInput,
         createdById: user.id
       });

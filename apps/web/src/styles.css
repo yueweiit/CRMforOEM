@@ -191,6 +191,16 @@ a {
   color: white;
 }
 
+.secondary-button.active-task,
+.secondary-button.active-task:disabled {
+  background: #f6fffb;
+  border-color: #b8d9d2;
+  color: #0f766e;
+  box-shadow: inset 0 0 0 1px rgba(15, 118, 110, 0.08);
+  cursor: wait;
+  opacity: 1;
+}
+
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -978,26 +988,48 @@ td small {
   margin-top: 2px;
 }
 
-@keyframes button-spin {
-  to { transform: rotate(360deg); }
-}
-
-.button-spinner {
+.button-loading {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
+  color: #0f766e;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
 }
 
-.button-spinner::before {
-  content: "";
-  display: inline-block;
-  width: 14px;
-  height: 14px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top-color: currentColor;
-  border-radius: 50%;
-  animation: button-spin 0.6s linear infinite;
-  flex-shrink: 0;
+.button-loading-icon.next-loading-inline {
+  width: 18px;
+  height: 18px;
+  color: #0f766e;
+  line-height: 1;
+  overflow: hidden;
+  flex: 0 0 18px;
+}
+
+.button-loading-icon .next-loading-tip {
+  width: 32px;
+  height: 32px;
+  transform: translate(-50%, -50%) scale(0.56);
+  transform-origin: center;
+}
+
+.button-loading-icon .next-loading-indicator {
+  width: 32px;
+  height: 32px;
+}
+
+.button-loading-icon .next-loading-tip-content,
+.button-loading-icon .next-loading-tip-placeholder,
+.button-loading-icon .next-loading-component {
+  display: none;
+}
+
+.button-loading-text {
+  color: #0f766e;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .mini-tag {

@@ -35,7 +35,7 @@ export class ResearchProcessor extends WorkerHost {
       const startedAt = Date.now();
       const completion = await this.aiProvider.complete({
         system: researchSystemPrompt(),
-        user: JSON.stringify(context),
+        user: stableStringify(context),
         jsonMode: true
       });
       const parsed = parseResearchOutput(completion.content, context);
@@ -78,40 +78,33 @@ export class ResearchProcessor extends WorkerHost {
   }
 
   private async buildContext(organizationId: string, customerId: string, salesNotes?: string) {
-    const [customer, websiteAnalysis, companyProfiles, contacts, priorMessages] = await Promise.all([
+    const [customer, websiteAnalysis, companyProfiles, contacts] = await Promise.all([
       this.prisma.customer.findFirstOrThrow({
         where: { id: customerId, organizationId },
-        include: { source: true, type: true, owner: { select: { id: true, name: true, email: true } } }
+        include: { source: true, type: true }
       }),
       this.prisma.websiteAnalysis.findFirst({
         where: { customerId },
         orderBy: { createdAt: "desc" },
-        include: {
-          pages: true,
-          products: true
-        }
+        include: { pages: true, products: true }
       }),
       this.prisma.companyProfile.findMany({
         where: { organizationId },
         include: {
           capabilities: true,
           products: { take: 80 },
-          certificates: true,
-          caseStudies: true,
-          emailMaterials: true
+          caseStudies: true
         }
       }),
-      this.prisma.contact.findMany({ where: { customerId } }),
-      this.prisma.emailThread.findMany({
-        where: { customerId },
-        include: { messages: { take: 10, orderBy: { createdAt: "desc" } } }
-      })
+      this.prisma.contact.findMany({ where: { customerId } })
     ]);
+
     const publicSearch = await this.searchProvider.searchCustomer({
       name: customer.name,
       websiteUrl: customer.websiteUrl,
       country: customer.country
     });
+
     const rawResult = asRecord(websiteAnalysis?.rawResult);
     const aiInsights = asRecord(rawResult.aiInsights);
     const websiteInsights = Object.keys(aiInsights).length
@@ -129,38 +122,65 @@ export class ResearchProcessor extends WorkerHost {
         }
       : null;
 
+    const allProducts = companyProfiles.flatMap((p) => p.products);
+    const allCapabilities = companyProfiles.flatMap((p) => p.capabilities);
+    const allCaseStudies = companyProfiles.flatMap((p) => p.caseStudies);
+
     return {
-      customer,
-      contacts,
-      websiteAnalysis,
-      websiteInsights,
-      publicSearch,
-      sourceEvidence: {
-        websiteUrls: websiteAnalysis?.crawledUrls ?? [],
-        websitePages: websiteAnalysis?.pages.filter((page) => !page.errorMessage).map((page) => ({ url: page.url, pageType: page.pageType, title: page.title })) ?? [],
-        publicSearchResults: publicSearch.results,
-        crmContacts: contacts.map((contact) => ({ name: contact.name, email: contact.email, phone: contact.phone })),
-        searchWarning: publicSearch.warning
-      },
+      promptVersion: "research-report-v4",
       companyKnowledge: {
-        profiles: companyProfiles.map((profile) => ({
-          id: profile.id,
-          displayName: profile.displayName,
-          summary: profile.summary,
-          markets: profile.markets,
-          capabilities: profile.capabilities,
-          products: profile.products,
-          certificates: profile.certificates,
-          caseStudies: profile.caseStudies,
-          emailMaterials: profile.emailMaterials
-        })),
-        products: companyProfiles.flatMap((profile) => profile.products),
-        capabilities: companyProfiles.flatMap((profile) => profile.capabilities),
-        caseStudies: companyProfiles.flatMap((profile) => profile.caseStudies),
-        certificates: companyProfiles.flatMap((profile) => profile.certificates)
+        products: allProducts
+          .map((p) => ({ name: p.name, category: p.category, description: p.description, tags: p.tags }))
+          .sort(byCategoryThenName)
+          .slice(0, 50),
+        capabilities: allCapabilities
+          .map((c) => ({ name: c.name, category: c.category, description: c.description }))
+          .sort(byCategoryThenName)
+          .slice(0, 20),
+        caseStudies: allCaseStudies
+          .map((c) => ({ title: c.title, market: c.market, category: c.category, summary: c.summary }))
+          .sort(byMarketThenCategoryThenTitle)
+          .slice(0, 10)
       },
-      priorMessages,
-      salesNotes
+      customer: {
+        name: customer.name,
+        websiteUrl: customer.websiteUrl,
+        country: customer.country,
+        language: customer.language,
+        typeName: customer.type?.name ?? null,
+        sourceName: customer.source?.name ?? null
+      },
+      contacts: contacts
+        .map((c) => ({ name: c.name, title: c.title, email: c.email, qualityScore: c.qualityScore }))
+        .sort(byQualityScoreDescThenEmail),
+      websiteSummary: websiteAnalysis
+        ? {
+            status: websiteAnalysis.status,
+            productCount: websiteAnalysis.productCount,
+            pricePositioning: websiteAnalysis.pricePositioning,
+            websiteCompleteness: websiteAnalysis.websiteCompleteness,
+            productCategories: websiteAnalysis.productCategories,
+            pages: websiteAnalysis.pages
+              .filter((p) => !p.errorMessage)
+              .map((p) => ({ url: p.url, pageType: p.pageType, title: p.title, textSummary: p.textSummary }))
+              .sort(byPageTypeThenUrl)
+          }
+        : null,
+      websiteInsights,
+      publicSearch: {
+        enabled: publicSearch.enabled,
+        warning: publicSearch.warning,
+        results: (publicSearch.results ?? [])
+          .slice(0, 8)
+          .map((r) => ({ title: r.title, url: r.url, snippet: (r as { snippet?: string }).snippet }))
+          .sort(byUrl)
+      },
+      salesNotes,
+      sourceEvidence: {
+        websiteAnalysisStatus: websiteAnalysis?.status ?? null,
+        searchWarning: publicSearch.warning ?? null,
+        contactCount: contacts.length
+      }
     };
   }
 }
@@ -206,6 +226,58 @@ function researchSystemPrompt() {
     "source_basis 要列出每个维度用到的官网URL、公开搜索结果URL或CRM资料说明。"
   ].join("\n");
 }
+
+// ── Sort helpers (stable ordering for prompt cache) ──
+
+function byCategoryThenName(a: { category?: string | null; name?: string | null }, b: { category?: string | null; name?: string | null }) {
+  const ca = a.category ?? "";
+  const cb = b.category ?? "";
+  if (ca !== cb) return ca.localeCompare(cb);
+  return (a.name ?? "").localeCompare(b.name ?? "");
+}
+
+function byMarketThenCategoryThenTitle(a: { market?: string | null; category?: string | null; title?: string | null }, b: { market?: string | null; category?: string | null; title?: string | null }) {
+  const ma = a.market ?? "";
+  const mb = b.market ?? "";
+  if (ma !== mb) return ma.localeCompare(mb);
+  return byCategoryThenName({ name: a.title, category: a.category }, { name: b.title, category: b.category });
+}
+
+function byQualityScoreDescThenEmail(a: { qualityScore?: number | null; email?: string | null }, b: { qualityScore?: number | null; email?: string | null }) {
+  const sb = b.qualityScore ?? 0;
+  const sa = a.qualityScore ?? 0;
+  if (sa !== sb) return sb - sa;
+  return (a.email ?? "").localeCompare(b.email ?? "");
+}
+
+function byPageTypeThenUrl(a: { pageType?: string | null; url?: string | null }, b: { pageType?: string | null; url?: string | null }) {
+  const pa = a.pageType ?? "";
+  const pb = b.pageType ?? "";
+  if (pa !== pb) return pa.localeCompare(pb);
+  return (a.url ?? "").localeCompare(b.url ?? "");
+}
+
+function byUrl(a: { url?: string | null }, b: { url?: string | null }) {
+  return (a.url ?? "").localeCompare(b.url ?? "");
+}
+
+// ── Stable serialization (top-level key order preserved, nested keys sorted) ──
+
+function stableStringify(value: unknown): string {
+  return JSON.stringify(value, (key, val) => {
+    if (key === "") return val;
+    if (val !== null && typeof val === "object" && !Array.isArray(val)) {
+      const sorted: Record<string, unknown> = {};
+      for (const k of Object.keys(val).sort()) {
+        sorted[k] = (val as Record<string, unknown>)[k];
+      }
+      return sorted;
+    }
+    return val;
+  });
+}
+
+// ── Output parser ──
 
 function parseResearchOutput(content: string, context: ResearchContextLike) {
   const parsed = safeJson(content);
@@ -450,48 +522,39 @@ type ResearchContextLike = {
     name: string;
     websiteUrl?: string | null;
     country?: string | null;
-    notes?: string | null;
-    source?: { name?: string | null } | null;
-    type?: { name?: string | null } | null;
-    owner?: { name?: string | null } | null;
+    language?: string | null;
+    typeName?: string | null;
+    sourceName?: string | null;
   };
-  contacts?: Array<{ name?: string | null; title?: string | null; email?: string | null; phone?: string | null }>;
-  websiteAnalysis?: {
+  contacts?: Array<{ name?: string | null; title?: string | null; email?: string | null; qualityScore?: number | null }>;
+  websiteSummary?: {
     status?: string;
-    crawledUrls?: string[];
     productCount?: number | null;
-    productCategories?: unknown;
-    contactEvidence?: unknown;
-    opportunities?: unknown;
-    risks?: unknown;
     pricePositioning?: string | null;
     websiteCompleteness?: number | null;
-    rawResult?: unknown;
-    products?: unknown;
-    pages?: Array<{ url: string; pageType: string; title?: string | null; errorMessage?: string | null }>;
+    productCategories?: unknown;
+    pages?: Array<{ url: string; pageType: string; title?: string | null; textSummary?: string | null }>;
   } | null;
   websiteInsights?: Record<string, unknown> | null;
   companyKnowledge?: {
-    products?: unknown;
-    capabilities?: unknown;
-    caseStudies?: unknown;
-    certificates?: unknown;
+    products?: Array<{ name: string; category: string; description?: string | null; tags?: string[] }>;
+    capabilities?: Array<{ name: string; category: string; description?: string | null }>;
+    caseStudies?: Array<{ title: string; market?: string | null; category?: string | null; summary: string }>;
   };
-  publicSearch: { warning?: string; enabled?: boolean; results?: Array<{ title?: string; url?: string }> };
+  publicSearch: { warning?: string; enabled?: boolean; results?: Array<{ title?: string; url?: string; snippet?: string }> };
+  sourceEvidence?: { websiteAnalysisStatus?: string | null; searchWarning?: string | null; contactCount?: number };
 };
 
 function buildContextReport(context: ResearchContextLike) {
   const customer = context.customer;
-  const analysis = context.websiteAnalysis;
+  const analysis = context.websiteSummary;
   const productCategories = asRecords(analysis?.productCategories);
-  const opportunities = asStringList(analysis?.opportunities);
-  const risks = asStringList(analysis?.risks);
-  const usablePages = (analysis?.pages ?? []).filter((page) => !page.errorMessage);
+  const usablePages = analysis?.pages ?? [];
   const companyProducts = asRecords(context.companyKnowledge?.products);
   const companyCapabilities = asRecords(context.companyKnowledge?.capabilities);
   const companyCaseStudies = asRecords(context.companyKnowledge?.caseStudies);
   const sourceBasis = [
-    ...(analysis?.crawledUrls ?? []).slice(0, 10).map((url) => ({ section: "官网产品专项分析", source: "官网抓取", evidence: url })),
+    ...usablePages.slice(0, 10).map((p) => ({ section: "官网产品专项分析", source: "官网抓取", evidence: p.url })),
     ...(context.publicSearch.results ?? []).slice(0, 6).map((item) => ({ section: "企业背景和发展历程", source: item.title ?? "公开搜索", evidence: item.url ?? "" })),
     ...((context.contacts ?? []).length ? [{ section: "公司基本信息", source: "CRM联系人资料", evidence: `${context.contacts?.length ?? 0} 个联系人` }] : [])
   ];
@@ -502,13 +565,11 @@ function buildContextReport(context: ResearchContextLike) {
         `公司名称：${customer.name}`,
         ...(customer.websiteUrl ? [`官网：${customer.websiteUrl}`] : []),
         ...(customer.country ? [`国家/地区：${customer.country}`] : []),
-        ...(customer.type?.name ? [`客户类型：${customer.type.name}`] : []),
-        ...(customer.source?.name ? [`来源：${customer.source.name}`] : []),
+        ...(customer.typeName ? [`客户类型：${customer.typeName}`] : []),
+        ...(customer.sourceName ? [`来源：${customer.sourceName}`] : []),
         ...(context.contacts ?? []).map((contact) => `联系人：${contact.name || contact.email || "未命名联系人"}${contact.email ? ` <${contact.email}>` : ""}`)
       ],
-      analysis: customer.owner?.name
-        ? `负责人为 ${customer.owner.name}，可根据联系人信息进一步评估客户质量。`
-        : "尚未分配负责人，建议尽快分配销售跟进。",
+      analysis: "请根据联系人信息进一步评估客户质量，并尽快分配销售跟进。",
       missing_info: [
         ...(!customer.websiteUrl ? ["官网URL未录入，建议补充以启用官网分析。"] : []),
         ...(!customer.country ? ["国家/地区未录入。"] : []),
@@ -567,9 +628,8 @@ function buildContextReport(context: ResearchContextLike) {
     website_product_analysis: {
       confirmed_facts: [
         `官网分析状态：${analysisStatusText(analysis?.status)}`,
-        `抓取页面数：${analysis?.crawledUrls?.length ?? 0}`,
         `有效页面数：${usablePages.length}`,
-        `产品数量：${analysis?.productCount ?? 0}`,
+        ...(analysis?.productCount != null ? [`产品数量：${analysis.productCount}`] : []),
         ...(analysis?.websiteCompleteness ? [`官网完整度：${analysis.websiteCompleteness}/100`] : [])
       ],
       analysis: productCategories.length
@@ -590,14 +650,11 @@ function buildContextReport(context: ResearchContextLike) {
         "首封邮件引用其官网中已识别的品牌/产品线，避免泛泛群发。",
         "围绕新品补充、定制款、私标或差异化供货做轻量合作试探。"
       ],
-      cooperation_opportunities: opportunities.length
-        ? opportunities
-        : [
-            "可基于官网产品线和品牌页，探索OEM/ODM合作机会。",
-            ...(companyCapabilities.length ? [`我方已有 ${companyCapabilities.length} 条能力资料，可用于筛选合作切入点。`] : [])
-          ],
+      cooperation_opportunities: [
+        "可基于官网产品线和品牌页，探索OEM/ODM合作机会。",
+        ...(companyCapabilities.length ? [`我方已有 ${companyCapabilities.length} 条能力资料，可用于筛选合作切入点。`] : [])
+      ],
       potential_risks: [
-        ...risks,
         ...(context.publicSearch.warning ? [context.publicSearch.warning] : []),
         ...(!context.contacts?.length ? ["CRM中缺少高质量联系人，建议补充采购/产品/供应链负责人。"] : []),
         ...(!companyCaseStudies.length ? ["企业资料库中案例资料不足，开发建议的说服力可能偏弱。"] : [])

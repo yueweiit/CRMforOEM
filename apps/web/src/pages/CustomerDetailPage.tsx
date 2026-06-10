@@ -1,4 +1,6 @@
 import { EMAIL_DRAFT_PURPOSES, emailDraftPurposeLabel } from "@oem-crm/shared";
+import { Loading } from "@alifd/next";
+import "@alifd/next/lib/loading/style.js";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ReactNode, TextareaHTMLAttributes } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -229,19 +231,19 @@ export function CustomerDetailPage() {
         </div>
         <div className="toolbar">
           <button
-            className="secondary-button"
+            className={`secondary-button${hasActiveTask("WEBSITE_ANALYSIS") ? " active-task" : ""}`}
             title={customer?.websiteUrl ? "抓取并分析客户官网" : "请先在概览中编辑并保存官网URL"}
             onClick={() => analyzeMutation.mutate()}
             disabled={!customer?.websiteUrl || analyzeMutation.isPending || hasActiveTask("WEBSITE_ANALYSIS")}
           >
-            {hasActiveTask("WEBSITE_ANALYSIS") ? <span className="button-spinner">处理中</span> : customer?.websiteUrl ? "官网分析" : "先填写官网"}
+            {hasActiveTask("WEBSITE_ANALYSIS") ? <ProcessingButtonLabel /> : customer?.websiteUrl ? "官网分析" : "先填写官网"}
           </button>
           <button
-            className="secondary-button"
+            className={`secondary-button${hasActiveTask("RESEARCH_REPORT") ? " active-task" : ""}`}
             onClick={() => researchMutation.mutate()}
             disabled={researchMutation.isPending || hasActiveTask("RESEARCH_REPORT")}
           >
-            {hasActiveTask("RESEARCH_REPORT") ? <span className="button-spinner">处理中</span> : "生成背调"}
+            {hasActiveTask("RESEARCH_REPORT") ? <ProcessingButtonLabel /> : "生成背调"}
           </button>
           <button className="secondary-button" onClick={() => scoreMutation.mutate()} disabled={scoreMutation.isPending}>OEM评分</button>
         </div>
@@ -266,6 +268,15 @@ export function CustomerDetailPage() {
       {customerQuery.isError && customer ? <section className="panel error-state">客户详情刷新失败，当前显示的是上一次加载的数据。</section> : null}
       {customer ? <CustomerTab tab={tab} customer={customer} customerId={id} onChanged={refreshCustomer} /> : null}
     </section>
+  );
+}
+
+function ProcessingButtonLabel() {
+  return (
+    <span className="button-loading">
+      <Loading className="button-loading-icon" inline visible size="medium" color="#0f766e" />
+      <span className="button-loading-text">{"\u5904\u7406\u4e2d..."}</span>
+    </span>
   );
 }
 

@@ -47,20 +47,41 @@ export class AiProviderService {
             { role: "system", content: input.system },
             { role: "user", content: input.user }
           ],
-          temperature: 0.3,
-          ...(input.jsonMode ? { response_format: { type: "json_object" } } : {})
+          temperature: 0.3
         }),
         signal: controller.signal
       });
 
-      const raw = (await response.json().catch(() => ({}))) as OpenAiChatResponse;
+      const rawText = await response.text().catch(() => "");
+      console.error("[AiProvider] HTTP", response.status, "- body:", rawText.slice(0, 500));
+
       if (!response.ok) {
-        throw new ServiceUnavailableException(raw.error?.message ?? "AI provider request failed");
+        let errMsg = "AI provider request failed";
+        try {
+          const parsed = JSON.parse(rawText);
+          errMsg = parsed.error?.message ?? errMsg;
+        } catch {}
+        throw new ServiceUnavailableException(errMsg);
       }
 
-      const content = raw.choices?.[0]?.message?.content?.trim();
+      let raw: Record<string, unknown> = {};
+      try {
+        raw = JSON.parse(rawText);
+      } catch {
+        throw new ServiceUnavailableException(`AI provider returned non-JSON response. Body: ${rawText.slice(0, 300)}`);
+      }
+
+      // Try multiple paths — some providers/models return content in non-standard fields
+      const choice = (raw.choices as Array<Record<string, unknown>> | undefined)?.[0];
+      const message = choice?.message as Record<string, unknown> | undefined;
+      let content = (message?.content as string | undefined)?.trim();
+
+      if (!content && typeof message?.reasoning_content === "string") {
+        content = message.reasoning_content.trim();
+      }
+
       if (!content) {
-        throw new ServiceUnavailableException("AI provider returned an empty response");
+        throw new ServiceUnavailableException(`AI provider returned an empty response. Raw: ${rawText.slice(0, 300)}`);
       }
 
       return {
@@ -77,8 +98,3 @@ export class AiProviderService {
   }
 }
 
-type OpenAiChatResponse = {
-  choices?: Array<{ message?: { content?: string } }>;
-  usage?: unknown;
-  error?: { message?: string };
-};
