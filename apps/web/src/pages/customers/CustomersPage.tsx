@@ -1,0 +1,137 @@
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Plus } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { apiGet, apiPost } from "../../api/http";
+import { getCurrentUser, hasPermission } from "../../auth/permissions";
+import { notifyMutationStep } from "../../components/Toast";
+import type { CustomerOptions } from "../../types/customer";
+import { splitList } from "../../utils/string";
+import { CustomerCreateForm } from "./CustomerCreateForm";
+import { CustomerFilterBar } from "./CustomerFilterBar";
+import { CustomerListTable, type Customer } from "./CustomerListTable";
+
+/**
+ * 客户页面主组件。
+ * mode 为 "create" 时渲染新建客户表单，否则渲染客户列表 + 筛选栏。
+ */
+export function CustomersPage({ mode }: { mode?: "create" }) {
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const currentUser = getCurrentUser();
+  const canManageDictionaries = hasPermission(currentUser, "settings.customer_dictionaries.manage");
+
+  const [q, setQ] = useState("");
+  const [stage, setStage] = useState("");
+  const [form, setForm] = useState(defaultCustomerForm());
+
+  const queryString = useMemo(() => {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (stage) params.set("stage", stage);
+    const value = params.toString();
+    return value ? `?${value}` : "";
+  }, [q, stage]);
+
+  const { data = [], isLoading, isError } = useQuery({
+    queryKey: ["customers", queryString],
+    queryFn: () => apiGet<Customer[]>(`/customers${queryString}`),
+    enabled: Boolean(localStorage.getItem("accessToken"))
+  });
+
+  const { data: options } = useQuery({
+    queryKey: ["customer-filter-options"],
+    queryFn: () => apiGet<CustomerOptions>("/customers/filter-options"),
+    enabled: Boolean(localStorage.getItem("accessToken"))
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (payload: Record<string, unknown>) => apiPost<Customer>("/customers", payload),
+    onMutate: () => notifyMutationStep({ phase: "loading", title: "处理中", message: "正在创建客户。", dedupeKey: `customer-create:${form.name}` }),
+    onSuccess: (customer) => {
+      notifyMutationStep({ phase: "success", title: "操作成功", message: "客户已创建。" });
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      navigate(`/customers/${customer.id}/overview`);
+    },
+    onError: (error) => notifyMutationStep({ phase: "error", title: "操作失败", message: error instanceof Error ? error.message : "创建客户失败。", dedupeKey: `customer-create:${form.name}:error` })
+  });
+
+  function updateField(key: string, value: string) {
+    setForm({ ...form, [key]: value });
+  }
+
+  function submitCustomer() {
+    createMutation.mutate({
+      ...form,
+      tags: splitList(form.tags),
+      ownerId: form.ownerId || undefined,
+      sourceId: form.sourceId || undefined,
+      typeId: form.typeId || undefined
+    });
+  }
+
+  if (mode === "create") {
+    return (
+      <section className="page-stack">
+        <header className="page-header">
+          <div>
+            <p className="eyebrow">Customer Development</p>
+            <h1>新增目标客户</h1>
+          </div>
+        </header>
+        <CustomerCreateForm
+          form={form}
+          onFieldChange={updateField}
+          options={options}
+          isError={createMutation.isError}
+          error={createMutation.error}
+          isPending={createMutation.isPending}
+          onSubmit={submitCustomer}
+          canManageDictionaries={canManageDictionaries}
+        />
+      </section>
+    );
+  }
+
+  return (
+    <section className="page-stack">
+      <header className="page-header">
+        <div>
+          <p className="eyebrow">Customer Development</p>
+          <h1>客户开发池</h1>
+        </div>
+        <Link to="/customers/new" className="primary-button">
+          <Plus size={16} />
+          新增客户
+        </Link>
+      </header>
+
+      <CustomerFilterBar
+        q={q}
+        onQChange={setQ}
+        stage={stage}
+        onStageChange={setStage}
+        options={options}
+      />
+
+      <CustomerListTable data={data} isLoading={isLoading} isError={isError} />
+    </section>
+  );
+}
+
+/** 创建客户表单的初始空值，字段对应 Customer 实体的创建接口参数 */
+function defaultCustomerForm() {
+  return {
+    name: "",
+    websiteUrl: "",
+    country: "",
+    language: "",
+    timezone: "",
+    currency: "",
+    sourceId: "",
+    typeId: "",
+    ownerId: "",
+    tags: "",
+    notes: ""
+  };
+}

@@ -2,15 +2,15 @@ import { createBrowserRouter, Navigate, useParams } from "react-router-dom";
 import { AppShell } from "./layouts/AppShell";
 import { canViewReports, canViewSettingsSection, defaultReportPath, defaultSettingsPath, getCurrentUser } from "./auth/permissions";
 import { appBasePath } from "./config/runtime";
-import { CustomerDetailPage } from "./pages/CustomerDetailPage";
-import { CustomersPage } from "./pages/CustomersPage";
-import { DashboardPage } from "./pages/DashboardPage";
-import { EmailCenterPage } from "./pages/EmailCenterPage";
-import { FollowUpsPage } from "./pages/FollowUpsPage";
-import { KnowledgeBasePage } from "./pages/KnowledgeBasePage";
+import { CustomerDetailPage } from "./pages/customer-detail/CustomerDetailPage";
+import { CustomersPage } from "./pages/customers/CustomersPage";
+import { DashboardPage } from "./pages/dashboard/DashboardPage";
+import { EmailCenterPage } from "./pages/email-center/EmailCenterPage";
+import { FollowUpsPage } from "./pages/follow-ups/FollowUpsPage";
+import { KnowledgeBasePage } from "./pages/knowledge/KnowledgeBasePage";
 import { LoginPage } from "./pages/LoginPage";
-import { ReportsPage } from "./pages/ReportsPage";
-import { SettingsPage } from "./pages/SettingsPage";
+import { ReportsPage } from "./pages/reports/ReportsPage";
+import { SettingsPage } from "./pages/settings/SettingsPage";
 
 function RequireReportAccess() {
   const user = getCurrentUser();

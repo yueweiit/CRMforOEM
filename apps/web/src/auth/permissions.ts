@@ -60,7 +60,7 @@ const SETTINGS_PERMISSION_MAP: Record<string, string> = {
   users: "settings.users.manage",
   roles: "settings.roles.manage",
   "customer-dictionaries": "settings.customer_dictionaries.manage",
-  "email-accounts": "emails.accounts.manage_personal",
+  "email-accounts": "settings.email_prompt.manage",
   ai: "settings.ai_config.manage",
   scoring: "settings.scoring_weights.manage",
   blacklist: "settings.blacklist.manage",

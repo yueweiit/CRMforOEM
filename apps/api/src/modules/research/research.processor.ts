@@ -7,6 +7,67 @@ import { AiProviderService } from "../ai/ai-provider.service";
 import { RESEARCH_REPORT_QUEUE } from "./research.constants";
 import { SearchProviderService } from "./search-provider.service";
 
+export const RESEARCH_PROMPT_MAX_CHARS = 12_000;
+
+const RESEARCH_PROMPT_BUDGETS = [
+  {
+    contacts: 8,
+    searchResults: 5,
+    products: 12,
+    capabilities: 8,
+    caseStudies: 6,
+    productCategories: 12,
+    pages: 12,
+    genericListItems: 8,
+    salesNotesChars: 1200,
+    insightChars: 500,
+    pageTextChars: 500,
+    searchTitleChars: 160,
+    searchSnippetChars: 260,
+    productDescriptionChars: 260,
+    capabilityDescriptionChars: 260,
+    caseStudySummaryChars: 300
+  },
+  {
+    contacts: 5,
+    searchResults: 3,
+    products: 8,
+    capabilities: 5,
+    caseStudies: 4,
+    productCategories: 8,
+    pages: 8,
+    genericListItems: 5,
+    salesNotesChars: 700,
+    insightChars: 300,
+    pageTextChars: 260,
+    searchTitleChars: 120,
+    searchSnippetChars: 180,
+    productDescriptionChars: 180,
+    capabilityDescriptionChars: 180,
+    caseStudySummaryChars: 200
+  },
+  {
+    contacts: 3,
+    searchResults: 2,
+    products: 5,
+    capabilities: 3,
+    caseStudies: 2,
+    productCategories: 5,
+    pages: 5,
+    genericListItems: 3,
+    salesNotesChars: 400,
+    insightChars: 180,
+    pageTextChars: 160,
+    searchTitleChars: 90,
+    searchSnippetChars: 120,
+    productDescriptionChars: 120,
+    capabilityDescriptionChars: 120,
+    caseStudySummaryChars: 140
+  }
+] as const;
+
+type ResearchPromptBudget = typeof RESEARCH_PROMPT_BUDGETS[number];
+
 @Processor(RESEARCH_REPORT_QUEUE)
 export class ResearchProcessor extends WorkerHost {
   constructor(
@@ -32,13 +93,15 @@ export class ResearchProcessor extends WorkerHost {
         data: { status: "RUNNING", rawInput: compactResearchRunInput(context) as never }
       }).catch(() => undefined);
 
+      const promptContext = buildResearchPromptInput(context);
+      const promptUserInput = buildResearchPromptUserInput(context);
       const startedAt = Date.now();
       const completion = await this.aiProvider.complete({
         system: researchSystemPrompt(),
-        user: stableStringify(context),
+        user: promptUserInput,
         jsonMode: true
       });
-      const parsed = parseResearchOutput(completion.content, context);
+      const parsed = parseResearchOutput(completion.content, promptContext);
 
       if (report.aiGenerationRunId) {
         await this.aiGeneration.markSucceeded(report.aiGenerationRunId, completion.raw, completion.tokenUsage, Date.now() - startedAt);
@@ -318,7 +381,151 @@ function compactResearchRunInput(context: ResearchContextLike & { promptVersion?
   };
 }
 
-function compactWebsiteAnalysis(context: ResearchContextLike) {
+export function buildResearchPromptUserInput(context: ResearchContextLike & { promptVersion?: string; salesNotes?: string }) {
+  for (const budget of RESEARCH_PROMPT_BUDGETS) {
+    const serialized = stableStringify(buildResearchPromptInput(context, budget));
+    if (serialized.length <= RESEARCH_PROMPT_MAX_CHARS) {
+      return serialized;
+    }
+  }
+
+  const minimalSerialized = stableStringify(buildMinimalResearchPromptInput(context));
+  if (minimalSerialized.length <= RESEARCH_PROMPT_MAX_CHARS) {
+    return minimalSerialized;
+  }
+
+  const emergencySerialized = stableStringify(buildEmergencyResearchPromptInput(context));
+  if (emergencySerialized.length <= RESEARCH_PROMPT_MAX_CHARS) {
+    return emergencySerialized;
+  }
+
+  const absoluteMinimumSerialized = stableStringify({
+    promptVersion: compactText(context.promptVersion, 20),
+    customer: { name: compactText(context.customer.name, 20) },
+    inputWarning: `Prompt context exceeded ${RESEARCH_PROMPT_MAX_CHARS} characters and was reduced to minimum evidence.`
+  });
+  if (absoluteMinimumSerialized.length > RESEARCH_PROMPT_MAX_CHARS) {
+    throw new Error(`Research prompt context exceeds ${RESEARCH_PROMPT_MAX_CHARS} characters after compaction.`);
+  }
+  return absoluteMinimumSerialized;
+}
+
+function buildEmergencyResearchPromptInput(context: ResearchContextLike & { promptVersion?: string }) {
+  return {
+    promptVersion: compactText(context.promptVersion, 80),
+    customer: compactCustomer(context.customer, 80),
+    websiteSummary: {
+      status: context.websiteSummary?.status ?? null,
+      productCount: context.websiteSummary?.productCount ?? null,
+      websiteCompleteness: context.websiteSummary?.websiteCompleteness ?? null
+    },
+    publicSearch: {
+      enabled: context.publicSearch.enabled,
+      warning: compactText(context.publicSearch.warning, 120)
+    },
+    inputBudget: inputBudgetSummary(context),
+    inputWarning: `Prompt context exceeded ${RESEARCH_PROMPT_MAX_CHARS} characters and was reduced to minimal evidence.`
+  };
+}
+
+function buildResearchPromptInput(
+  context: ResearchContextLike & { promptVersion?: string; salesNotes?: string },
+  budget: ResearchPromptBudget = RESEARCH_PROMPT_BUDGETS[0]
+) {
+  return {
+    promptVersion: compactText(context.promptVersion, 80),
+    customer: compactCustomer(context.customer, 240),
+    contacts: context.contacts
+      ?.slice(0, budget.contacts)
+      .map((contact) => ({
+        name: compactText(contact.name, 80),
+        title: compactText(contact.title, 80),
+        email: compactText(contact.email, 120),
+        qualityScore: contact.qualityScore
+      })),
+    websiteSummary: compactWebsiteAnalysis(context, budget),
+    publicSearch: {
+      enabled: context.publicSearch.enabled,
+      warning: compactText(context.publicSearch.warning, 180),
+      results: context.publicSearch.results
+        ?.slice(0, budget.searchResults)
+        .map((item) => ({
+          title: compactText(item.title, budget.searchTitleChars),
+          url: compactText(item.url, 240),
+          snippet: compactText(item.snippet, budget.searchSnippetChars)
+        }))
+    },
+    companyKnowledge: {
+      products: context.companyKnowledge?.products
+        ?.slice(0, budget.products)
+        .map((item) => ({
+          name: compactText(item.name, 120),
+          category: compactText(item.category, 80),
+          description: compactText(item.description, budget.productDescriptionChars),
+          tags: item.tags?.slice(0, 6).map((tag) => compactText(tag, 40)) ?? []
+        })),
+      capabilities: context.companyKnowledge?.capabilities
+        ?.slice(0, budget.capabilities)
+        .map((item) => ({
+          name: compactText(item.name, 120),
+          category: compactText(item.category, 80),
+          description: compactText(item.description, budget.capabilityDescriptionChars)
+        })),
+      caseStudies: context.companyKnowledge?.caseStudies
+        ?.slice(0, budget.caseStudies)
+        .map((item) => ({
+          title: compactText(item.title, 140),
+          market: compactText(item.market, 80),
+          category: compactText(item.category, 80),
+          summary: compactText(item.summary, budget.caseStudySummaryChars)
+        }))
+    },
+    salesNotes: compactText(context.salesNotes, budget.salesNotesChars),
+    sourceEvidence: compactSourceEvidence(context.sourceEvidence),
+    inputBudget: inputBudgetSummary(context)
+  };
+}
+
+function buildMinimalResearchPromptInput(context: ResearchContextLike & { promptVersion?: string; salesNotes?: string }) {
+  return {
+    promptVersion: compactText(context.promptVersion, 80),
+    customer: compactCustomer(context.customer, 120),
+    contacts: context.contacts
+      ?.slice(0, 2)
+      .map((contact) => ({ name: compactText(contact.name, 60), title: compactText(contact.title, 60), email: compactText(contact.email, 120) })),
+    websiteSummary: {
+      status: context.websiteSummary?.status ?? null,
+      productCount: context.websiteSummary?.productCount ?? null,
+      pricePositioning: compactText(context.websiteSummary?.pricePositioning, 80),
+      websiteCompleteness: context.websiteSummary?.websiteCompleteness ?? null,
+      productCategories: compactUnknownList(context.websiteSummary?.productCategories, 3, RESEARCH_PROMPT_BUDGETS[2])
+    },
+    publicSearch: {
+      enabled: context.publicSearch.enabled,
+      warning: compactText(context.publicSearch.warning, 120),
+      results: context.publicSearch.results
+        ?.slice(0, 1)
+        .map((item) => ({ title: compactText(item.title, 80), url: compactText(item.url, 240) }))
+    },
+    companyKnowledge: {
+      products: context.companyKnowledge?.products
+        ?.slice(0, 3)
+        .map((item) => ({ name: compactText(item.name, 100), category: compactText(item.category, 80) })),
+      capabilities: context.companyKnowledge?.capabilities
+        ?.slice(0, 2)
+        .map((item) => ({ name: compactText(item.name, 100), category: compactText(item.category, 80) })),
+      caseStudies: context.companyKnowledge?.caseStudies
+        ?.slice(0, 1)
+        .map((item) => ({ title: compactText(item.title, 120), market: compactText(item.market, 80), category: compactText(item.category, 80) }))
+    },
+    salesNotes: compactText(context.salesNotes, 200),
+    sourceEvidence: compactSourceEvidence(context.sourceEvidence),
+    inputBudget: inputBudgetSummary(context),
+    inputWarning: `Prompt context exceeded ${RESEARCH_PROMPT_MAX_CHARS} characters and was reduced.`
+  };
+}
+
+function compactWebsiteAnalysis(context: ResearchContextLike, budget: ResearchPromptBudget = RESEARCH_PROMPT_BUDGETS[0]) {
   const summary = context.websiteSummary;
   if (!summary) return null;
   const insights = asRecord(context.websiteInsights);
@@ -328,50 +535,84 @@ function compactWebsiteAnalysis(context: ResearchContextLike) {
     pricePositioning: summary.pricePositioning,
     websiteCompleteness: summary.websiteCompleteness,
     insights: {
-      businessSummary: compactText(insights.businessSummary),
-      customerProfile: compactText(insights.customerProfile),
-      mainBusiness: compactText(insights.mainBusiness),
-      productLineAnalysis: compactText(insights.productLineAnalysis),
-      brandPositioning: compactText(insights.brandPositioning),
-      marketChannelSignals: compactText(insights.marketChannelSignals),
+      businessSummary: compactText(insights.businessSummary, budget.insightChars),
+      customerProfile: compactText(insights.customerProfile, budget.insightChars),
+      mainBusiness: compactText(insights.mainBusiness, budget.insightChars),
+      productLineAnalysis: compactText(insights.productLineAnalysis, budget.insightChars),
+      brandPositioning: compactText(insights.brandPositioning, budget.insightChars),
+      marketChannelSignals: compactText(insights.marketChannelSignals, budget.insightChars),
       priceCompetitiveness: insights.priceCompetitiveness,
-      missingCategoriesGap: compactUnknownList(insights.missingCategoriesGap, 8),
-      unknownFactors: compactUnknownList(insights.unknownFactors, 8),
-      evidencePages: compactUnknownList(insights.evidencePages, 8)
+      missingCategoriesGap: compactUnknownList(insights.missingCategoriesGap, budget.genericListItems, budget),
+      unknownFactors: compactUnknownList(insights.unknownFactors, budget.genericListItems, budget),
+      evidencePages: compactUnknownList(insights.evidencePages, budget.genericListItems, budget)
     },
-    productCategories: compactUnknownList(summary.productCategories, 12),
+    productCategories: compactUnknownList(summary.productCategories, budget.productCategories, budget),
     pages: summary.pages
-      ?.slice(0, 12)
+      ?.slice(0, budget.pages)
       .map((page) => ({
-        url: page.url,
-        pageType: page.pageType,
-        title: page.title,
-        textSummary: compactText(page.textSummary)
+        url: compactText(page.url, 240),
+        pageType: compactText(page.pageType, 60),
+        title: compactText(page.title, 120),
+        textSummary: compactText(page.textSummary, budget.pageTextChars)
       }))
   };
 }
 
-function compactUnknownList(value: unknown, limit: number) {
+function compactUnknownList(value: unknown, limit: number, budget: ResearchPromptBudget = RESEARCH_PROMPT_BUDGETS[0]) {
   if (!Array.isArray(value)) return [];
   return value.slice(0, limit).map((item) => {
-    if (typeof item === "string") return compactText(item);
+    if (typeof item === "string") return compactText(item, budget.insightChars);
     if (!item || typeof item !== "object" || Array.isArray(item)) return item;
-    return compactRecord(item as Record<string, unknown>);
+    return compactRecord(item as Record<string, unknown>, budget);
   });
 }
 
-function compactRecord(record: Record<string, unknown>) {
+function compactRecord(record: Record<string, unknown>, budget: ResearchPromptBudget = RESEARCH_PROMPT_BUDGETS[0]) {
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(record)) {
     if (typeof value === "string") {
-      result[key] = compactText(value);
+      result[key] = compactText(value, budget.insightChars);
     } else if (Array.isArray(value)) {
-      result[key] = compactUnknownList(value, 6);
+      result[key] = compactUnknownList(value, Math.min(6, budget.genericListItems), budget);
+    } else if (value && typeof value === "object") {
+      result[key] = compactRecord(value as Record<string, unknown>, budget);
     } else {
       result[key] = value;
     }
   }
   return result;
+}
+
+function compactCustomer(customer: ResearchContextLike["customer"], maxLength: number) {
+  return {
+    name: compactText(customer.name, maxLength),
+    websiteUrl: compactText(customer.websiteUrl, maxLength * 2),
+    country: compactText(customer.country, maxLength),
+    language: compactText(customer.language, maxLength),
+    typeName: compactText(customer.typeName, maxLength),
+    sourceName: compactText(customer.sourceName, maxLength)
+  };
+}
+
+function compactSourceEvidence(sourceEvidence: ResearchContextLike["sourceEvidence"]) {
+  if (!sourceEvidence) return undefined;
+  return {
+    websiteAnalysisStatus: sourceEvidence.websiteAnalysisStatus ?? null,
+    searchWarning: compactText(sourceEvidence.searchWarning, 180),
+    contactCount: sourceEvidence.contactCount ?? 0
+  };
+}
+
+function inputBudgetSummary(context: ResearchContextLike) {
+  return {
+    maxPromptChars: RESEARCH_PROMPT_MAX_CHARS,
+    contacts: context.contacts?.length ?? 0,
+    publicSearchResults: context.publicSearch.results?.length ?? 0,
+    companyProducts: context.companyKnowledge?.products?.length ?? 0,
+    companyCapabilities: context.companyKnowledge?.capabilities?.length ?? 0,
+    companyCaseStudies: context.companyKnowledge?.caseStudies?.length ?? 0,
+    websitePages: context.websiteSummary?.pages?.length ?? 0
+  };
 }
 
 function compactText(value: unknown, maxLength = 500) {
@@ -420,11 +661,7 @@ function parseResearchOutput(content: string, context: ResearchContextLike) {
       markdown_report: isReadableMarkdown(markdown) ? markdown : buildMarkdownReportV2(context.customer.name, legacySections, context.publicSearch.warning)
     };
   }
-  const fallback = buildContextReport(context);
-  return {
-    ...fallback,
-    markdown_report: isReadableMarkdown(content) ? content : fallback.markdown_report
-  };
+  throw new Error(`AI provider returned non-JSON response. Body: ${compactText(content, 500)}`);
 }
 
 const SECTION_KEYS = [

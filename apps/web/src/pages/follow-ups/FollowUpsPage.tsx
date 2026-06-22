@@ -2,10 +2,12 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarClock, CheckCircle2 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { apiGet, apiPatch, apiPost } from "../api/http";
-import { AppSelect } from "../components/AppSelect";
-import { notifyMutationStep } from "../components/Toast";
-import { useSse } from "../hooks/useSse";
+import { apiGet, apiPatch, apiPost } from "../../api/http";
+import { EmptyState } from "../../components/ui/EmptyState";
+import { LoadingState } from "../../components/ui/LoadingState";
+import { notifyMutationStep } from "../../components/Toast";
+import { useSse } from "../../hooks/useSse";
+import { FollowUpFilterBar, type Customer, type FollowUpForm } from "./FollowUpFilterBar";
 
 type FollowUpTask = {
   id: string;
@@ -17,34 +19,6 @@ type FollowUpTask = {
   customer: { id: string; name: string; stage: string; websiteDomain?: string };
   owner: { id: string; name: string };
 };
-
-type Customer = { id: string; name: string };
-
-type FollowUpForm = {
-  customerId: string;
-  title: string;
-  type: string;
-  dueAt: string;
-  description: string;
-};
-
-type FollowUpTaskTypeOption = {
-  value: string;
-  label: string;
-};
-
-const FOLLOW_UP_TASK_TYPES: FollowUpTaskTypeOption[] = [
-  { value: "COMPLETE_RESEARCH", label: "完成客户调研" },
-  { value: "GENERATE_EMAIL", label: "生成邮件" },
-  { value: "REVIEW_EMAIL", label: "审核邮件" },
-  { value: "SECOND_FOLLOW_UP", label: "二次跟进" },
-  { value: "THIRD_FOLLOW_UP", label: "三次跟进" },
-  { value: "REQUIREMENT_CONFIRMATION", label: "需求确认" },
-  { value: "QUOTE_FOLLOW_UP", label: "报价跟进" },
-  { value: "SAMPLE_FOLLOW_UP", label: "样品跟进" },
-  { value: "STAGE_STALE_REMINDER", label: "阶段停滞提醒" },
-  { value: "CUSTOM", label: "自定义任务" }
-];
 
 export function FollowUpsPage() {
   const queryClient = useQueryClient();
@@ -116,51 +90,18 @@ export function FollowUpsPage() {
         </button>
       </header>
 
-      <section className="filter-panel">
-        <label>
-          <span>状态</span>
-          <AppSelect
-            variant="filter"
-            value={status}
-            onChange={setStatus}
-            options={[
-              { value: "", label: "全部" },
-              { value: "OPEN", label: "待处理" },
-              { value: "COMPLETED", label: "已完成" },
-              { value: "CANCELLED", label: "已取消" }
-            ]}
-          />
-        </label>
-        <label>
-          <span>关联客户</span>
-          <AppSelect
-            variant="filter"
-            value={form.customerId}
-            onChange={(customerId) => setForm({ ...form, customerId })}
-            options={[
-              { value: "", label: "选择客户" },
-              ...customers.map((customer) => ({ value: customer.id, label: customer.name }))
-            ]}
-          />
-        </label>
-        <label>
-          <span>任务类型</span>
-          <AppSelect
-            variant="filter"
-            value={form.type}
-            onChange={(type) => setForm({ ...form, type })}
-            options={FOLLOW_UP_TASK_TYPES}
-          />
-        </label>
-        <label><span>任务标题</span><input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} /></label>
-        <label><span>截止时间</span><input type="datetime-local" value={form.dueAt} onChange={(event) => setForm({ ...form, dueAt: event.target.value })} /></label>
-        <label className="wide-field"><span>任务说明</span><textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
-      </section>
+      <FollowUpFilterBar
+        status={status}
+        onStatusChange={setStatus}
+        form={form}
+        onFormChange={setForm}
+        customers={customers}
+      />
 
       <section className="table-panel">
         <div className="panel-title"><h2>任务列表</h2><span>{data.length} 项</span></div>
-        {isLoading ? <div className="empty-state">正在加载任务...</div> : null}
-        {!isLoading && !data.length ? <div className="empty-state">暂无跟进任务。</div> : null}
+        {isLoading ? <LoadingState message="正在加载任务..." /> : null}
+        {!isLoading && !data.length ? <EmptyState message="暂无跟进任务。" /> : null}
         {data.length ? (
           <table>
             <thead><tr><th>任务</th><th>客户</th><th>负责人</th><th>截止时间</th><th>状态</th><th>操作</th></tr></thead>

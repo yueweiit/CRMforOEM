@@ -4,6 +4,7 @@ import { AssignCustomerDto } from "./dto/assign-customer.dto";
 import { ChangeCustomerStageDto } from "./dto/change-customer-stage.dto";
 import { CreateContactDto } from "./dto/create-contact.dto";
 import { CreateCustomerDto } from "./dto/create-customer.dto";
+import { UpdateCustomerDto } from "./dto/update-customer.dto";
 import { CustomersService } from "./customers.service";
 
 @Controller("customers")
@@ -31,7 +32,7 @@ export class CustomersController {
   }
 
   @Patch(":id")
-  update(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: Partial<CreateCustomerDto>) {
+  update(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: UpdateCustomerDto) {
     return this.customersService.update(user, id, dto);
   }
 

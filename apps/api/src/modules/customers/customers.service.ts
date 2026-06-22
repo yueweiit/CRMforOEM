@@ -7,6 +7,7 @@ import { AssignCustomerDto } from "./dto/assign-customer.dto";
 import { ChangeCustomerStageDto } from "./dto/change-customer-stage.dto";
 import { CreateContactDto } from "./dto/create-contact.dto";
 import { CreateCustomerDto } from "./dto/create-customer.dto";
+import { UpdateCustomerDto } from "./dto/update-customer.dto";
 
 @Injectable()
 export class CustomersService {
@@ -156,18 +157,11 @@ export class CustomersService {
     return customer;
   }
 
-  async update(user: RequestUser, id: string, dto: Partial<CreateCustomerDto>) {
+  async update(user: RequestUser, id: string, dto: UpdateCustomerDto) {
     await this.ensureVisible(user, id);
-    const hasWebsiteUrl = Object.prototype.hasOwnProperty.call(dto, "websiteUrl");
-    const nextWebsiteUrl = (dto as Partial<CreateCustomerDto> & { websiteUrl?: string | null }).websiteUrl;
-    const websiteDomain = typeof nextWebsiteUrl === "string" && nextWebsiteUrl ? extractDomain(nextWebsiteUrl) : null;
     return this.prisma.customer.update({
       where: { id },
-      data: {
-        ...dto,
-        ...(dto.name ? { normalizedName: normalizeCustomerName(dto.name) } : {}),
-        ...(hasWebsiteUrl ? { websiteDomain } : {})
-      }
+      data: buildCustomerUpdateData(dto)
     });
   }
 
@@ -265,6 +259,55 @@ function extractDomain(input: string) {
   } catch {
     return input.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0].toLowerCase();
   }
+}
+
+function buildCustomerUpdateData(dto: UpdateCustomerDto) {
+  const data: {
+    sourceId?: string | null;
+    typeId?: string | null;
+    ownerId?: string | null;
+    name?: string;
+    normalizedName?: string;
+    websiteUrl?: string | null;
+    websiteDomain?: string | null;
+    country?: string | null;
+    language?: string | null;
+    timezone?: string | null;
+    currency?: string | null;
+    tags?: string[];
+    notes?: string | null;
+  } = {};
+
+  if (hasOwn(dto, "sourceId")) data.sourceId = nullableUpdateString(dto.sourceId);
+  if (hasOwn(dto, "typeId")) data.typeId = nullableUpdateString(dto.typeId);
+  if (hasOwn(dto, "ownerId")) data.ownerId = nullableUpdateString(dto.ownerId);
+  if (dto.name !== undefined) {
+    data.name = dto.name;
+    data.normalizedName = normalizeCustomerName(dto.name);
+  }
+  if (hasOwn(dto, "websiteUrl")) {
+    const websiteUrl = nullableUpdateString(dto.websiteUrl);
+    data.websiteUrl = websiteUrl;
+    data.websiteDomain = websiteUrl ? extractDomain(websiteUrl) : null;
+  }
+  if (hasOwn(dto, "country")) data.country = nullableUpdateString(dto.country);
+  if (hasOwn(dto, "language")) data.language = nullableUpdateString(dto.language);
+  if (hasOwn(dto, "timezone")) data.timezone = nullableUpdateString(dto.timezone);
+  if (hasOwn(dto, "currency")) data.currency = nullableUpdateString(dto.currency);
+  if (dto.tags !== undefined) data.tags = dto.tags;
+  if (hasOwn(dto, "notes")) data.notes = nullableUpdateString(dto.notes);
+
+  return data;
+}
+
+function hasOwn<T extends object>(value: T, key: keyof T) {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+
+function nullableUpdateString(value: string | undefined | null) {
+  if (value == null) return null;
+  const trimmed = value.trim();
+  return !trimmed || trimmed === "{}" ? null : trimmed;
 }
 
 const DEFAULT_CUSTOMER_SOURCES = [

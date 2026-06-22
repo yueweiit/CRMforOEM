@@ -1,69 +1,18 @@
 import { useState } from "react";
-import {
-  EMAIL_DRAFT_PURPOSES,
-  emailDraftPurposeLabel,
-  normalizeEmailDraftPurpose
-} from "@oem-crm/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Inbox, Send, ShieldCheck } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
-import { apiGet, apiPatch, apiPost } from "../api/http";
-import { getCurrentUser, hasAnyPermission, hasPermission } from "../auth/permissions";
-import { AppSelect } from "../components/AppSelect";
-import { showClientToast } from "../components/Toast";
-import { Switch } from "../components/Switch";
-import { useSse } from "../hooks/useSse";
-import { formatDraftRecipient, formatDraftSender } from "../utils/email-format";
-
-type EmailAccount = {
-  id: string;
-  scope: "PERSONAL" | "SHARED";
-  name: string;
-  email: string;
-  smtpHost: string;
-  smtpPort: number;
-  smtpSecure: boolean;
-  smtpUsername: string;
-  imapHost: string;
-  imapPort: number;
-  imapSecure: boolean;
-  imapUsername: string;
-  dailySendLimit: number;
-  hourlySendLimit: number;
-  isActive: boolean;
-  lastSyncAt?: string;
-};
-
-type EmailDraft = {
-  id: string;
-  purpose?: string;
-  subject: string;
-  toEmail: string;
-  toNameSnapshot?: string;
-  fromEmailSnapshot?: string;
-  fromNameSnapshot?: string;
-  status: string;
-  emailAccount?: { id: string; name: string; email: string; scope?: string };
-  customer?: { id: string; name: string };
-  updatedAt: string;
-};
-
-type EmailThread = {
-  id: string;
-  subject: string;
-  customer?: { id: string; name: string };
-  lastMessageAt?: string;
-  messages?: Array<{ direction: string; status: string; subject: string; createdAt: string }>;
-};
-
-type EmailSyncAccountStatus = {
-  accountId: string;
-  connectionStatus: "connecting" | "idle" | "fetching" | "reconnecting" | "disconnected" | "auth_failed";
-  lastSyncAt?: string | null;
-  lastError?: string;
-  nextReconnectAt?: string | null;
-};
+import { apiGet, apiPatch, apiPost } from "../../api/http";
+import { getCurrentUser, hasAnyPermission, hasPermission } from "../../auth/permissions";
+import { AppSelect } from "../../components/AppSelect";
+import { Field } from "../../components/ui/Field";
+import { showClientToast } from "../../components/Toast";
+import { Switch } from "../../components/Switch";
+import { useSse } from "../../hooks/useSse";
+import { AccountTable, type EmailAccount, type EmailSyncAccountStatus } from "./AccountTable";
+import { DraftList, type EmailDraft } from "./DraftList";
+import { ThreadList, type EmailThread } from "./ThreadList";
 
 type EmailSyncStatus = { accounts: EmailSyncAccountStatus[] };
 
@@ -320,205 +269,6 @@ export function EmailCenterPage() {
   );
 }
 
-function DraftList({
-  drafts,
-  purposeFilter,
-  onPurposeFilterChange
-}: {
-  drafts: EmailDraft[];
-  purposeFilter: string;
-  onPurposeFilterChange: (value: string) => void;
-}) {
-  const filteredDrafts = purposeFilter
-    ? drafts.filter((draft) => normalizeEmailDraftPurpose(draft.purpose) === purposeFilter)
-    : drafts;
-
-  return (
-    <section className="table-panel">
-      <div className="panel-title">
-        <h2>邮件草稿</h2>
-        <span>{filteredDrafts.length} 封</span>
-      </div>
-
-      <div className="toolbar" style={{ marginBottom: 16 }}>
-        <label style={{ minWidth: 240 }}>
-          <span>邮件类型筛选：</span>
-          <AppSelect
-            variant="toolbar"
-            value={purposeFilter}
-            onChange={onPurposeFilterChange}
-            options={[
-              { value: "", label: "全部类型" },
-              ...EMAIL_DRAFT_PURPOSES.map((purpose) => ({ value: purpose, label: emailDraftPurposeLabel(purpose) }))
-            ]}
-          />
-        </label>
-      </div>
-
-      {filteredDrafts.length ? (
-        <table>
-          <thead>
-            <tr>
-              <th>邮件类型</th>
-              <th>主题</th>
-              <th>客户</th>
-              <th>发件人</th>
-              <th>收件人</th>
-              <th>状态</th>
-              <th>更新时间</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredDrafts.map((draft) => (
-              <tr key={draft.id}>
-                <td>{emailDraftPurposeLabel(draft.purpose)}</td>
-                <td>{draft.subject}</td>
-                <td>
-                  {draft.customer ? (
-                    <Link className="table-link" to={`/customers/${draft.customer.id}/email`}>
-                      {draft.customer.name}
-                    </Link>
-                  ) : (
-                    "-"
-                  )}
-                </td>
-                <td>{formatDraftSender(draft)}</td>
-                <td>{formatDraftRecipient(draft)}</td>
-                <td>
-                  <span className="status-pill">{draft.status}</span>
-                </td>
-                <td>{new Date(draft.updatedAt).toLocaleString()}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      ) : (
-        <div className="empty-state">
-          {drafts.length ? "当前筛选条件下暂无邮件草稿。" : "暂无邮件草稿。"}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function ThreadList({ threads }: { threads: EmailThread[] }) {
-  return (
-    <section className="table-panel">
-      <div className="panel-title">
-        <h2>邮件往来记录</h2>
-        <span>{threads.length} 条线程</span>
-      </div>
-      {threads.length ? (
-        <table>
-          <thead>
-            <tr>
-              <th>主题</th>
-              <th>客户</th>
-              <th>最近邮件</th>
-              <th>状态</th>
-              <th>时间</th>
-            </tr>
-          </thead>
-          <tbody>
-            {threads.map((thread) => (
-              <tr key={thread.id}>
-                <td>{thread.subject}</td>
-                <td>
-                  {thread.customer ? (
-                    <Link className="table-link" to={`/customers/${thread.customer.id}/email`}>
-                      {thread.customer.name}
-                    </Link>
-                  ) : (
-                    "-"
-                  )}
-                </td>
-                <td>{thread.messages?.[0]?.direction ?? "-"}</td>
-                <td>{thread.messages?.[0]?.status ?? "-"}</td>
-                <td>{thread.lastMessageAt ? new Date(thread.lastMessageAt).toLocaleString() : "-"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      ) : (
-        <div className="empty-state">暂无邮件往来。</div>
-      )}
-    </section>
-  );
-}
-
-function AccountTable({
-  rows,
-  statuses,
-  onEdit,
-  onTest,
-  onToggle
-}: {
-  rows: EmailAccount[];
-  statuses: EmailSyncAccountStatus[];
-  onEdit: (account: EmailAccount) => void;
-  onTest: (id: string) => void;
-  onToggle: (account: EmailAccount) => void;
-}) {
-  if (!rows.length) return <div className="empty-state">暂无邮箱账号。</div>;
-
-  const statusByAccount = new Map(statuses.map((status) => [status.accountId, status]));
-
-  return (
-    <table>
-      <thead>
-        <tr>
-          <th>名称</th>
-          <th>邮箱</th>
-          <th>范围</th>
-          <th>SMTP/IMAP</th>
-          <th>上限</th>
-          <th>同步状态</th>
-          <th>启用</th>
-          <th>操作</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((account) => {
-          const status = statusByAccount.get(account.id);
-          return (
-            <tr key={account.id}>
-              <td>{account.name}</td>
-              <td>{account.email}</td>
-              <td>{account.scope === "SHARED" ? "共享" : "个人"}</td>
-              <td>
-                {account.smtpHost}:{account.smtpPort} / {account.imapHost}:{account.imapPort}
-              </td>
-              <td>
-                {account.hourlySendLimit}/小时 / {account.dailySendLimit}/天
-              </td>
-              <td>
-                <div className="stacked-cell">
-                  <span className="status-pill">{syncStatusLabel(status?.connectionStatus, account.isActive)}</span>
-                  <span>{formatSyncTime(status?.lastSyncAt ?? account.lastSyncAt)}</span>
-                  {status?.lastError ? <small>{status.lastError}</small> : null}
-                </div>
-              </td>
-              <td>
-                <Switch checked={account.isActive} onChange={() => onToggle(account)} />
-              </td>
-              <td>
-                <div className="toolbar">
-                  <button className="secondary-button" onClick={() => onEdit(account)}>
-                    编辑
-                  </button>
-                  <button className="secondary-button" onClick={() => onTest(account.id)}>
-                    测试
-                  </button>
-                </div>
-              </td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
-  );
-}
-
 function MiniMetric(props: { icon: ReactNode; label: string; value: string }) {
   return (
     <section className="metric neutral">
@@ -528,34 +278,6 @@ function MiniMetric(props: { icon: ReactNode; label: string; value: string }) {
         <strong>{props.value}</strong>
       </div>
     </section>
-  );
-}
-
-function syncStatusLabel(status?: EmailSyncAccountStatus["connectionStatus"], isActive?: boolean) {
-  if (!isActive) return "未启用";
-
-  const labels: Record<EmailSyncAccountStatus["connectionStatus"], string> = {
-    idle: "监听中",
-    fetching: "同步中",
-    connecting: "连接中",
-    reconnecting: "重连中",
-    disconnected: "未连接",
-    auth_failed: "认证失败"
-  };
-
-  return status ? labels[status] : "未连接";
-}
-
-function formatSyncTime(value?: string | null) {
-  return value ? `最近同步 ${new Date(value).toLocaleString()}` : "尚未同步";
-}
-
-function Field(props: { label: string; value: string; onChange: (value: string) => void }) {
-  return (
-    <label>
-      <span>{props.label}</span>
-      <input value={props.value} onChange={(event) => props.onChange(event.target.value)} />
-    </label>
   );
 }
 
