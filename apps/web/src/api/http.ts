@@ -1,6 +1,7 @@
 import { showClientToast, showLoadingToast } from "../components/Toast";
+import { apiBasePath, appBasePath } from "../config/runtime";
 
-const API_BASE = "/api";
+const API_BASE = apiBasePath;
 
 type MutationToastOptions = {
   toast?: boolean;
@@ -213,8 +214,9 @@ export function clearSessionAndRedirect() {
   localStorage.removeItem("accessToken");
   localStorage.removeItem("refreshToken");
   localStorage.removeItem("currentUser");
-  if (window.location.pathname !== "/login") {
-    window.location.replace("/login");
+  const loginPath = `${appBasePath === "/" ? "" : appBasePath}/login`;
+  if (window.location.pathname !== loginPath) {
+    window.location.replace(loginPath);
   }
 }
 

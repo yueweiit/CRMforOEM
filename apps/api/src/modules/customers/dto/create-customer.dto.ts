@@ -1,10 +1,13 @@
+import { Transform } from "class-transformer";
 import { IsArray, IsOptional, IsString, IsUrl } from "class-validator";
+import { trimBlankToUndefined } from "../../../common/dto/transforms";
 
 export class CreateCustomerDto {
   @IsString()
   name!: string;
 
   @IsOptional()
+  @Transform(trimBlankToUndefined)
   @IsUrl({ require_protocol: false })
   websiteUrl?: string;
 

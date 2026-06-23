@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { apiBasePath } from "../config/runtime";
 
 type SseEventHandler = (data: any) => void;
 
@@ -10,7 +11,7 @@ function getEventSource(): EventSource | null {
   if (!token) return null;
 
   if (!globalSource || globalSource.readyState === EventSource.CLOSED) {
-    const url = `/api/events?token=${encodeURIComponent(token)}`;
+    const url = `${apiBasePath}/events?token=${encodeURIComponent(token)}`;
     globalSource = new EventSource(url);
     sourceVersion++;
   }

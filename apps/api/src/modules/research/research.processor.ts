@@ -29,7 +29,7 @@ export class ResearchProcessor extends WorkerHost {
       const context = await this.buildContext(organizationId, customerId, salesNotes);
       await this.prisma.aiGenerationRun.update({
         where: { id: report.aiGenerationRunId ?? "" },
-        data: { status: "RUNNING", rawInput: context as never }
+        data: { status: "RUNNING", rawInput: compactResearchRunInput(context) as never }
       }).catch(() => undefined);
 
       const startedAt = Date.now();
@@ -275,6 +275,109 @@ function stableStringify(value: unknown): string {
     }
     return val;
   });
+}
+
+function compactResearchRunInput(context: ResearchContextLike & { promptVersion?: string; salesNotes?: string }) {
+  return {
+    promptVersion: context.promptVersion,
+    customer: context.customer,
+    salesNotes: context.salesNotes,
+    websiteAnalysis: compactWebsiteAnalysis(context),
+    publicSearch: {
+      enabled: context.publicSearch.enabled,
+      warning: context.publicSearch.warning,
+      topResults: context.publicSearch.results
+        ?.slice(0, 5)
+        .map((item) => ({ title: item.title, url: item.url }))
+    },
+    companyKnowledge: {
+      productSamples: context.companyKnowledge?.products
+        ?.slice(0, 8)
+        .map((item) => ({ name: item.name, category: item.category })),
+      capabilitySamples: context.companyKnowledge?.capabilities
+        ?.slice(0, 6)
+        .map((item) => ({ name: item.name, category: item.category })),
+      caseStudySamples: context.companyKnowledge?.caseStudies
+        ?.slice(0, 5)
+        .map((item) => ({ title: item.title, market: item.market, category: item.category }))
+    },
+    inputSummary: {
+      contactCount: context.contacts?.length ?? 0,
+      companyProductCount: context.companyKnowledge?.products?.length ?? 0,
+      companyCapabilityCount: context.companyKnowledge?.capabilities?.length ?? 0,
+      companyCaseStudyCount: context.companyKnowledge?.caseStudies?.length ?? 0,
+      publicSearchEnabled: context.publicSearch.enabled,
+      publicSearchResultCount: context.publicSearch.results?.length ?? 0,
+      websiteAnalysisStatus: context.websiteSummary?.status ?? null,
+      websitePageCount: context.websiteSummary?.pages?.length ?? 0,
+      websiteProductCount: context.websiteSummary?.productCount ?? null,
+      websiteCompleteness: context.websiteSummary?.websiteCompleteness ?? null,
+      websiteInsightKeys: context.websiteInsights ? Object.keys(context.websiteInsights).sort() : []
+    },
+    sourceEvidence: context.sourceEvidence
+  };
+}
+
+function compactWebsiteAnalysis(context: ResearchContextLike) {
+  const summary = context.websiteSummary;
+  if (!summary) return null;
+  const insights = asRecord(context.websiteInsights);
+  return {
+    status: summary.status,
+    productCount: summary.productCount,
+    pricePositioning: summary.pricePositioning,
+    websiteCompleteness: summary.websiteCompleteness,
+    insights: {
+      businessSummary: compactText(insights.businessSummary),
+      customerProfile: compactText(insights.customerProfile),
+      mainBusiness: compactText(insights.mainBusiness),
+      productLineAnalysis: compactText(insights.productLineAnalysis),
+      brandPositioning: compactText(insights.brandPositioning),
+      marketChannelSignals: compactText(insights.marketChannelSignals),
+      priceCompetitiveness: insights.priceCompetitiveness,
+      missingCategoriesGap: compactUnknownList(insights.missingCategoriesGap, 8),
+      unknownFactors: compactUnknownList(insights.unknownFactors, 8),
+      evidencePages: compactUnknownList(insights.evidencePages, 8)
+    },
+    productCategories: compactUnknownList(summary.productCategories, 12),
+    pages: summary.pages
+      ?.slice(0, 12)
+      .map((page) => ({
+        url: page.url,
+        pageType: page.pageType,
+        title: page.title,
+        textSummary: compactText(page.textSummary)
+      }))
+  };
+}
+
+function compactUnknownList(value: unknown, limit: number) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, limit).map((item) => {
+    if (typeof item === "string") return compactText(item);
+    if (!item || typeof item !== "object" || Array.isArray(item)) return item;
+    return compactRecord(item as Record<string, unknown>);
+  });
+}
+
+function compactRecord(record: Record<string, unknown>) {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(record)) {
+    if (typeof value === "string") {
+      result[key] = compactText(value);
+    } else if (Array.isArray(value)) {
+      result[key] = compactUnknownList(value, 6);
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+function compactText(value: unknown, maxLength = 500) {
+  if (typeof value !== "string") return "";
+  const normalized = value.replace(/\s+/g, " ").trim();
+  return normalized.length > maxLength ? `${normalized.slice(0, maxLength)}...` : normalized;
 }
 
 // ── Output parser ──

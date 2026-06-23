@@ -1,4 +1,6 @@
+import { Transform } from "class-transformer";
 import { IsBoolean, IsEmail, IsInt, IsOptional, IsString, IsUrl, Max, Min } from "class-validator";
+import { trimBlankToUndefined } from "../../../common/dto/transforms";
 
 export class CreateContactDto {
   @IsOptional()
@@ -22,10 +24,12 @@ export class CreateContactDto {
   phone?: string;
 
   @IsOptional()
+  @Transform(trimBlankToUndefined)
   @IsUrl({ require_protocol: true })
   linkedinUrl?: string;
 
   @IsOptional()
+  @Transform(trimBlankToUndefined)
   @IsUrl({ require_protocol: true })
   sourceUrl?: string;
 

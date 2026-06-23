@@ -1,5 +1,6 @@
-import { Type } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 import { IsArray, IsDateString, IsNumber, IsOptional, IsString, IsUrl } from "class-validator";
+import { trimBlankToUndefined } from "../../../common/dto/transforms";
 
 export class UpsertKnowledgeDto {
   @IsOptional()
@@ -24,6 +25,7 @@ export class UpsertKnowledgeDto {
   targetMarkets?: string[];
 
   @IsOptional()
+  @Transform(trimBlankToUndefined)
   @IsUrl({ require_protocol: true })
   websiteUrl?: string;
 

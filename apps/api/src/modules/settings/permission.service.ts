@@ -75,8 +75,8 @@ export class PermissionService {
       return { roleCodes: [], permissions: [], dataScope: "SELF" };
     }
 
-    const directRoles = user.userRoles.map((ur) => ur.role);
-    const directRoleCodes = directRoles.map((r) => r.code);
+    const directRoles = user.userRoles.map((ur: (typeof user.userRoles)[number]) => ur.role);
+    const directRoleCodes = directRoles.map((r: (typeof directRoles)[number]) => r.code);
 
     // Collect all descendant role codes recursively
     const inheritedRoleCodes = new Set<string>();
@@ -119,9 +119,9 @@ export class PermissionService {
       permissionSet.add(grant.permission.code);
     }
 
-    const dataScope = directRoles.some((r) => r.dataScope === "ALL")
+    const dataScope = directRoles.some((r: (typeof directRoles)[number]) => r.dataScope === "ALL")
       ? "ALL"
-      : directRoles.some((r) => r.dataScope === "TEAM")
+      : directRoles.some((r: (typeof directRoles)[number]) => r.dataScope === "TEAM")
         ? "TEAM"
         : "SELF";
 
