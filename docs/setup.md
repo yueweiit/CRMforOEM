@@ -59,6 +59,7 @@ apps/api/prisma/migrations/*/migration.sql
 初始化命令：
 
 ```bash
+npx playwright install chromium
 npm install
 npm run db:generate
 npm run db:migrate

@@ -1,7 +1,7 @@
 import { Mail, LockKeyhole } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { apiPost } from "../api/http";
+import { login } from "../api/settings";
 
 type LoginResponse = {
   accessToken: string;
@@ -28,7 +28,7 @@ export function LoginPage() {
     setError("");
     setIsSubmitting(true);
     try {
-      const response = await apiPost<LoginResponse>("/auth/login", { email, password });
+      const response = await login<LoginResponse>(email, password);
       localStorage.setItem("accessToken", response.accessToken);
       localStorage.setItem("refreshToken", response.refreshToken);
       localStorage.setItem("currentUser", JSON.stringify(response.user));
