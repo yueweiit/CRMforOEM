@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { ImapFlow } from "imapflow";
-import { EmailSecretService } from "./email-secret.service";
+import { EmailSecretService } from "../accounts/email-secret.service";
 
 type EmailAccountLike = {
   id: string;

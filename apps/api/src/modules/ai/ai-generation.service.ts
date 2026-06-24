@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { AiContentVersionType, AiGenerationType } from "@oem-crm/shared";
 import { RequestUser } from "../../common/auth/current-user.decorator";
-import { PrismaService } from "../../prisma/prisma.service";
+import { PrismaService } from "../../infrastructure/prisma/prisma.service";
 import { AddAiContentVersionDto } from "./dto/add-ai-content-version.dto";
 
 @Injectable()

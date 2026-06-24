@@ -1,12 +1,11 @@
 import { Processor, WorkerHost } from "@nestjs/bullmq";
 import { Job } from "bullmq";
-import { PrismaService } from "../../prisma/prisma.service";
-import { AiGenerationService } from "../ai/ai-generation.service";
-import { AiProviderService } from "../ai/ai-provider.service";
-import { SettingsService } from "../settings/settings.service";
-import { buildEmailSystemPrompt } from "./email-prompt-builder";
+import { PrismaService } from "../../../infrastructure/prisma/prisma.service";
+import { AiGenerationService, AiProviderService } from "../../ai/ai.public";
+import { SettingsService } from "../../settings/settings.public";
+import { buildEmailSystemPrompt } from "../generation/email-prompt-builder";
 import { EMAIL_DRAFT_QUEUE } from "./email-draft.constants";
-import type { EmailGenerationContext } from "./email-generation-types";
+import type { EmailGenerationContext } from "../generation/types";
 
 type LegacyDraftContext = {
   purpose?: string;

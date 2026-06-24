@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { CustomerStage } from "@oem-crm/shared";
-import { PrismaService } from "../../prisma/prisma.service";
+import { PrismaService } from "../../infrastructure/prisma/prisma.service";
 
 type AdvanceCustomerStageInput = {
   customerId: string;

@@ -2,14 +2,14 @@ import { Injectable } from "@nestjs/common";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { CustomerStage, FollowUpTaskStatus, type FollowUpTaskType } from "@prisma/client";
 import { normalizeEmailDraftPurpose } from "@oem-crm/shared";
-import { PrismaService } from "../../prisma/prisma.service";
+import { PrismaService } from "../../../infrastructure/prisma/prisma.service";
 import { FOLLOW_UP_EMAIL_RULES, type FollowUpTaskRule } from "./follow-up-email-rules";
 import {
   FOLLOW_UP_TASK_DESCRIPTIONS,
   FOLLOW_UP_TASK_TITLES,
   FOLLOW_UP_TASK_TRIGGERS
 } from "./follow-up-rule-constants";
-import { SSE_EVENTS, FollowUpTaskChangedPayload } from "../../common/events/event-types";
+import { SSE_EVENTS, FollowUpTaskChangedPayload } from "../../../common/events/event-types";
 
 @Injectable()
 export class FollowUpRulesService {

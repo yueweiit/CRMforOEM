@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { RequestUser } from "../../common/auth/current-user.decorator";
 import { AuditAction } from "@prisma/client";
-import { PrismaService } from "../../prisma/prisma.service";
+import { PrismaService } from "../../infrastructure/prisma/prisma.service";
 import { UpsertKnowledgeDto } from "./dto/upsert-knowledge.dto";
 
 const ENTITY_MODEL_MAP = {

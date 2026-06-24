@@ -1,12 +1,12 @@
 import { EMAIL_DRAFT_PURPOSE_LABELS, normalizeEmailDraftPurpose } from "@oem-crm/shared";
-import type { EmailPromptConfigData } from "../settings/settings.service";
+import type { EmailPromptConfigData } from "../../settings/settings.public";
 import {
   EMAIL_PROMPT_BASE,
   EMAIL_PROMPT_FACT_SAFETY_HINT,
   EMAIL_PROMPT_FOLLOW_UP_HINT,
   EMAIL_PROMPT_RECIPIENT_HINT,
   EMAIL_PROMPT_TEMPLATES
-} from "./email-prompt-constants";
+} from "../drafts/constants";
 
 export function buildEmailSystemPrompt(
   purpose?: string,

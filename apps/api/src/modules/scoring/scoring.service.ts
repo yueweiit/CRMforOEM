@@ -2,10 +2,9 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import { AiGenerationType, CustomerStage, OemScoreBreakdown } from "@oem-crm/shared";
 import { RequestUser } from "../../common/auth/current-user.decorator";
 import { buildCustomerDataScopeWhere } from "../../common/query/data-scope";
-import { PrismaService } from "../../prisma/prisma.service";
-import { AiGenerationService } from "../ai/ai-generation.service";
-import { AiProviderService } from "../ai/ai-provider.service";
-import { DEFAULT_OEM_SCORING_WEIGHTS, mergeWithDefaults, type OemScoringWeights } from "../settings/settings.service";
+import { PrismaService } from "../../infrastructure/prisma/prisma.service";
+import { AiGenerationService, AiProviderService } from "../ai/ai.public";
+import { DEFAULT_OEM_SCORING_WEIGHTS, mergeWithDefaults, type OemScoringWeights } from "../settings/settings.public";
 
 type ScoreDimension = {
   key: keyof OemScoreBreakdown;

@@ -8,14 +8,10 @@ import { GenerateEmailDraftDto } from "./dto/generate-email-draft.dto";
 import { UpdateEmailAccountDto } from "./dto/update-email-account.dto";
 import { UpdateEmailDraftDto } from "./dto/update-email-draft.dto";
 import { EmailsService } from "./emails.service";
-import { ImapIdleService } from "./imap-idle.service";
 
 @Controller()
 export class EmailsController {
-  constructor(
-    private readonly emailsService: EmailsService,
-    private readonly imapIdleService: ImapIdleService
-  ) {}
+  constructor(private readonly emailsService: EmailsService) {}
 
   @Get("email-accounts")
   accounts(@CurrentUser() user: RequestUser) {
@@ -110,13 +106,13 @@ export class EmailsController {
 
   @Get("email-sync/status")
   syncStatus(@CurrentUser() user: RequestUser) {
-    return this.imapIdleService.getConnectionStatusesForUser(user);
+    return this.emailsService.syncStatus(user);
   }
 
   @RequireLiveSession()
   @RequireAnyPermissions("emails.accounts.manage_personal", "emails.accounts.manage_shared", "settings.manage")
   @Post("email-sync/run")
   runSync(@CurrentUser() user: RequestUser) {
-    return this.imapIdleService.manualSyncForUser(user.id);
+    return this.emailsService.runSync(user);
   }
 }

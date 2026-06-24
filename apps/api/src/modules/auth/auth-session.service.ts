@@ -2,7 +2,7 @@ import { Inject, Injectable, UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { OnEvent } from "@nestjs/event-emitter";
 import Redis from "ioredis";
-import { REDIS_CLIENT } from "../../common/redis/redis.module";
+import { REDIS_CLIENT } from "../../infrastructure/redis/redis.module";
 
 type AuthSessionPayload = {
   userId: string;

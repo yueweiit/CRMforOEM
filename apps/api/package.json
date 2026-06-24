@@ -10,7 +10,8 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "ts-node prisma/seed.ts",
-    "prisma:import-eva-customers": "ts-node prisma/import-eva-customers.ts",
+    "prisma:import-eva-customers": "ts-node scripts/import-eva-customers.ts",
+    "prisma:import-customers-xlsx": "ts-node scripts/import-customers-xlsx.ts",
     "prisma:studio": "prisma studio"
   },
   "prisma": {

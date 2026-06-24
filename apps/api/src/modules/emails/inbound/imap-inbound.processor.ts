@@ -1,8 +1,8 @@
 import { Processor, WorkerHost } from "@nestjs/bullmq";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { Job } from "bullmq";
-import { PrismaService } from "../../prisma/prisma.service";
-import { SSE_EVENTS, InboundMailReceivedPayload } from "../../common/events/event-types";
+import { PrismaService } from "../../../infrastructure/prisma/prisma.service";
+import { SSE_EVENTS, InboundMailReceivedPayload } from "../../../common/events/event-types";
 import { IMAP_INBOUND_QUEUE } from "./imap-inbound.constants";
 import { ImapInboundService } from "./imap-inbound.service";
 

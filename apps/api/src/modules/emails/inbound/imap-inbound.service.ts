@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
-import { PrismaService } from "../../prisma/prisma.service";
-import { FollowUpRulesService } from "../follow-ups/follow-up-rules.service";
+import { PrismaService } from "../../../infrastructure/prisma/prisma.service";
+import { FollowUpsService } from "../../follow-ups/follow-ups.public";
 
 export type InboundMessageInput = {
   accountId: string;
@@ -16,7 +16,7 @@ export type InboundMessageInput = {
 export class ImapInboundService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly followUpRules: FollowUpRulesService
+    private readonly followUps: FollowUpsService
   ) {}
 
   async findThreadForInbound(fromEmail: string, inReplyTo?: string) {
@@ -116,7 +116,7 @@ export class ImapInboundService {
       });
     }
 
-    await this.followUpRules.handleCustomerReplied(thread.customerId);
+    await this.followUps.handleCustomerReplied(thread.customerId);
 
     return {
       thread,

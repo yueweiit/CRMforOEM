@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { PrismaService } from "../../prisma/prisma.service";
+import { PrismaService } from "../../infrastructure/prisma/prisma.service";
 
 // Direct parent → child role relationships (not pre-flattened)
 const ROLE_INHERITANCE_MAP: Record<string, string[]> = {

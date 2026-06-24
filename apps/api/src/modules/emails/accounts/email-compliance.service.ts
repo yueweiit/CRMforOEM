@@ -1,8 +1,8 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import Redis from "ioredis";
-import { RequestUser } from "../../common/auth/current-user.decorator";
-import { PrismaService } from "../../prisma/prisma.service";
+import { RequestUser } from "../../../common/auth/current-user.decorator";
+import { PrismaService } from "../../../infrastructure/prisma/prisma.service";
 
 @Injectable()
 export class EmailComplianceService {

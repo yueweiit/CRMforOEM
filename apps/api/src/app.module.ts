@@ -6,8 +6,8 @@ import { EventEmitterModule } from "@nestjs/event-emitter";
 import { JwtAuthGuard } from "./common/guards/jwt-auth.guard";
 import { LiveSessionGuard } from "./common/guards/live-session.guard";
 import { PermissionsGuard } from "./common/guards/permissions.guard";
-import { RedisModule } from "./common/redis/redis.module";
-import { SseModule } from "./common/sse/sse.module";
+import { RedisModule } from "./infrastructure/redis/redis.module";
+import { SseModule } from "./infrastructure/sse/sse.module";
 import { AiModule } from "./modules/ai/ai.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { BackgroundTasksModule } from "./modules/background-tasks/background-tasks.module";
@@ -22,7 +22,7 @@ import { ResearchModule } from "./modules/research/research.module";
 import { ScoringModule } from "./modules/scoring/scoring.module";
 import { SettingsModule } from "./modules/settings/settings.module";
 import { WebsiteAnalysisModule } from "./modules/website-analysis/website-analysis.module";
-import { PrismaModule } from "./prisma/prisma.module";
+import { PrismaModule } from "./infrastructure/prisma/prisma.module";
 
 @Module({
   imports: [

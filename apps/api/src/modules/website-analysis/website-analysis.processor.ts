@@ -1,9 +1,8 @@
 import { Processor, WorkerHost } from "@nestjs/bullmq";
 import { WebsiteAnalysisResult } from "@oem-crm/shared";
 import { Job } from "bullmq";
-import { PrismaService } from "../../prisma/prisma.service";
-import { AiGenerationService } from "../ai/ai-generation.service";
-import { AiProviderService } from "../ai/ai-provider.service";
+import { PrismaService } from "../../infrastructure/prisma/prisma.service";
+import { AiGenerationService, AiProviderService } from "../ai/ai.public";
 import { WEBSITE_ANALYSIS_QUEUE } from "./website-analysis.constants";
 import { WebsiteCrawlerService } from "./website-crawler.service";
 

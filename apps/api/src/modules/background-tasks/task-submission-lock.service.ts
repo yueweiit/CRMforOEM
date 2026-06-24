@@ -1,6 +1,6 @@
 import { Inject, Injectable, ServiceUnavailableException } from "@nestjs/common";
 import Redis from "ioredis";
-import { REDIS_CLIENT } from "../../common/redis/redis.module";
+import { REDIS_CLIENT } from "../../infrastructure/redis/redis.module";
 
 @Injectable()
 export class TaskSubmissionLockService {

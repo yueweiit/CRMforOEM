@@ -3,11 +3,11 @@ import { EventEmitter2 } from "@nestjs/event-emitter";
 import { CustomerStage, FollowUpTaskStatus } from "@oem-crm/shared";
 import { RequestUser } from "../../common/auth/current-user.decorator";
 import { buildCustomerDataScopeWhere } from "../../common/query/data-scope";
-import { PrismaService } from "../../prisma/prisma.service";
-import { CustomerStageService } from "../customers/customer-stage.service";
+import { PrismaService } from "../../infrastructure/prisma/prisma.service";
+import { CustomerStageService } from "../customers/customers.public";
 import { CreateFollowUpTaskDto } from "./dto/create-follow-up-task.dto";
-import { FollowUpRulesService } from "./follow-up-rules.service";
-import { FOLLOW_UP_STAGE_RULES } from "./follow-up-stage-rules";
+import { FollowUpRulesService } from "./rules/follow-up-rules.service";
+import { FOLLOW_UP_STAGE_RULES } from "./rules/follow-up-stage-rules";
 import { UpdateFollowUpTaskDto } from "./dto/update-follow-up-task.dto";
 import { SSE_EVENTS, FollowUpTaskChangedPayload } from "../../common/events/event-types";
 
@@ -19,6 +19,14 @@ export class FollowUpsService {
     private readonly eventEmitter: EventEmitter2,
     private readonly customerStageService: CustomerStageService
   ) {}
+
+  async handleEmailSent(input: { customerId: string; actorUserId: string; purpose?: string }) {
+    return this.followUpRules.handleEmailSent(input);
+  }
+
+  async handleCustomerReplied(customerId: string) {
+    return this.followUpRules.handleCustomerReplied(customerId);
+  }
 
   async list(user: RequestUser, status?: string) {
     await this.followUpRules.syncExpiredFollowUps();

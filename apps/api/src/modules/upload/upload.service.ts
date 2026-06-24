@@ -2,7 +2,7 @@ import { Injectable, Logger, NotFoundException, OnModuleInit } from "@nestjs/com
 import { ConfigService } from "@nestjs/config";
 import { CreateBucketCommand, DeleteObjectCommand, GetObjectCommand, HeadBucketCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { PrismaService } from "../../prisma/prisma.service";
+import { PrismaService } from "../../infrastructure/prisma/prisma.service";
 
 @Injectable()
 export class UploadService implements OnModuleInit {

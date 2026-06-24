@@ -4,8 +4,8 @@ import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcrypt";
 import { randomUUID } from "crypto";
 import { RequestUser } from "../../common/auth/current-user.decorator";
-import { PrismaService } from "../../prisma/prisma.service";
-import { PermissionService } from "../settings/permission.service";
+import { PrismaService } from "../../infrastructure/prisma/prisma.service";
+import { PermissionService } from "../settings/settings.public";
 import { AuthSessionService } from "./auth-session.service";
 import { LoginDto } from "./dto/login.dto";
 

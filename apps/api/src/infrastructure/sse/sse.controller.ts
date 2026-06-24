@@ -3,7 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import { Request } from "express";
 import { Observable } from "rxjs";
-import { Public } from "../auth/public.decorator";
+import { Public } from "../../common/auth/public.decorator";
 import { SseService } from "./sse.service";
 
 @Controller()

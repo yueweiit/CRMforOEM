@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import type { AiGenerationRun, EmailDraft, ResearchReport, WebsiteAnalysis } from "@prisma/client";
 import { RequestUser } from "../../common/auth/current-user.decorator";
 import { buildCustomerDataScopeWhere } from "../../common/query/data-scope";
-import { PrismaService } from "../../prisma/prisma.service";
+import { PrismaService } from "../../infrastructure/prisma/prisma.service";
 
 export type CustomerBackgroundTaskType =
   | "WEBSITE_ANALYSIS"

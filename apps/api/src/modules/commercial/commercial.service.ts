@@ -2,8 +2,8 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import { CustomerStage } from "@oem-crm/shared";
 import { RequestUser } from "../../common/auth/current-user.decorator";
 import { buildCustomerDataScopeWhere } from "../../common/query/data-scope";
-import { PrismaService } from "../../prisma/prisma.service";
-import { CustomerStageService } from "../customers/customer-stage.service";
+import { PrismaService } from "../../infrastructure/prisma/prisma.service";
+import { CustomerStageService } from "../customers/customers.public";
 import { CreateQuoteDto } from "./dto/create-quote.dto";
 import { CreateSampleRequestDto } from "./dto/create-sample-request.dto";
 

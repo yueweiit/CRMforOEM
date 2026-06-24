@@ -4,10 +4,9 @@ import { Queue } from "bullmq";
 import { AiGenerationType } from "@oem-crm/shared";
 import { RequestUser } from "../../common/auth/current-user.decorator";
 import { buildCustomerDataScopeWhere } from "../../common/query/data-scope";
-import { PrismaService } from "../../prisma/prisma.service";
-import { AiGenerationService } from "../ai/ai-generation.service";
-import { AiProviderService } from "../ai/ai-provider.service";
-import { TaskSubmissionLockService } from "../background-tasks/task-submission-lock.service";
+import { PrismaService } from "../../infrastructure/prisma/prisma.service";
+import { AiGenerationService, AiProviderService } from "../ai/ai.public";
+import { TaskSubmissionLockService } from "../background-tasks/background-tasks.public";
 import { WEBSITE_ANALYSIS_QUEUE } from "./website-analysis.constants";
 
 @Injectable()

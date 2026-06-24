@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { promises as dns } from "node:dns";
 import * as nodemailer from "nodemailer";
-import { EmailSecretService } from "./email-secret.service";
+import { EmailSecretService } from "../accounts/email-secret.service";
 
 @Injectable()
 export class SmtpService {

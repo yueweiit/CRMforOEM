@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
 import { Subject } from "rxjs";
-import { SSE_EVENTS, InboundMailReceivedPayload, FollowUpTaskChangedPayload } from "../events/event-types";
+import { SSE_EVENTS, InboundMailReceivedPayload, FollowUpTaskChangedPayload } from "../../common/events/event-types";
 
 type SseConnection = {
   subject: Subject<MessageEvent>;
