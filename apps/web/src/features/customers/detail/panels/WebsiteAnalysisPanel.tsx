@@ -7,6 +7,10 @@ export function WebsiteAnalysisPanel({ customer }: { customer: CustomerDetail })
   const validPages = (analysis?.pages ?? []).filter((page) => !page.errorMessage);
   const failedPages = (analysis?.pages ?? []).filter((page) => page.errorMessage);
   const aiInsights = getWebsiteAiInsights(analysis);
+  const rawResult = asRecord(analysis?.rawResult);
+  const aiInsightError = getText(rawResult, "aiInsightError");
+  const hasCrawlerData = Boolean(analysis?.rawResult) || validPages.length > 0 || asArray(analysis?.productCategories).length > 0;
+  const canShowReport = analysis ? analysis.status !== "FAILED" || hasCrawlerData : false;
   return (
     <section className="panel">
       <div className="panel-title"><h2>客户官网分析</h2><span>{analysis ? statusText(analysis.status) : "未分析"}</span></div>
@@ -26,7 +30,11 @@ export function WebsiteAnalysisPanel({ customer }: { customer: CustomerDetail })
           ) : null}
           {analysis.status === "FAILED" ? <div className="error-state">{analysis.errorMessage ?? "官网分析失败，请检查官网是否可访问。"}</div> : null}
 
-          <WebsiteBusinessReportV2 analysis={analysis} insights={aiInsights} />
+          {analysis.status !== "FAILED" && aiInsightError ? (
+            <div className="warning-state">官网抓取已完成，AI总结生成失败，当前展示的是抓取结果与基础分析。失败原因：{aiInsightError}</div>
+          ) : null}
+
+          {canShowReport ? <WebsiteBusinessReportV2 analysis={analysis} insights={aiInsights} hasAiInsightError={Boolean(aiInsightError)} /> : null}
 
           <details className="ai-versions">
             <summary>抓取异常与技术明细</summary>
@@ -39,7 +47,7 @@ export function WebsiteAnalysisPanel({ customer }: { customer: CustomerDetail })
   );
 }
 
-function WebsiteBusinessReportV2({ analysis, insights }: { analysis: WebsiteAnalysis; insights?: WebsiteAiInsights }) {
+function WebsiteBusinessReportV2({ analysis, insights, hasAiInsightError }: { analysis: WebsiteAnalysis; insights?: WebsiteAiInsights; hasAiInsightError?: boolean }) {
   const summary = insights?.business_summary || "官网分析已完成，但暂未生成完整客户画像。建议重新分析或补充公开搜索能力。";
   const validPages = (analysis.pages ?? []).filter((page) => !page.errorMessage);
   return (
@@ -47,6 +55,7 @@ function WebsiteBusinessReportV2({ analysis, insights }: { analysis: WebsiteAnal
       <div className="analysis-report__summary">
         <span>客户分析结论</span>
         <p>{summary}</p>
+        {hasAiInsightError ? <p style={{ marginTop: 8, color: "#a16207", fontSize: 13 }}>AI总结未完成，以下内容优先基于官网抓取结果和系统基础分析生成。</p> : null}
         {insights?.our_data_quality_note ? <p style={{ marginTop: 8, color: "#b45309", fontSize: 13 }}>数据质量提示：{insights.our_data_quality_note}</p> : null}
       </div>
       <div className="analysis-grid">

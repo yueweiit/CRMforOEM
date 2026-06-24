@@ -25,7 +25,15 @@ export type ResearchContextLike = {
     caseStudies?: Array<{ title: string; market?: string | null; category?: string | null; summary: string }>;
   };
   publicSearch: { warning?: string; enabled?: boolean; results?: Array<{ title?: string; url?: string; snippet?: string }> };
-  sourceEvidence?: { websiteAnalysisStatus?: string | null; searchWarning?: string | null; contactCount?: number };
+  sourceEvidence?: {
+    websiteAnalysisStatus?: string | null;
+    searchWarning?: string | null;
+    contactCount?: number;
+    websiteUrls?: string[];
+    websitePages?: Array<{ url: string; pageType: string; title?: string | null }>;
+    publicSearchResults?: Array<{ title?: string; url?: string }>;
+    crmContacts?: Array<{ name?: string | null; title?: string | null; email?: string | null }>;
+  };
 };
 
 @Injectable()
@@ -123,7 +131,21 @@ export class ResearchContextBuilder {
       sourceEvidence: {
         websiteAnalysisStatus: websiteAnalysis?.status ?? null,
         searchWarning: publicSearch.warning ?? null,
-        contactCount: contacts.length
+        contactCount: contacts.length,
+        websiteUrls: (websiteAnalysis?.crawledUrls ?? []).slice(0, 12),
+        websitePages: (websiteAnalysis?.pages ?? [])
+          .filter((page) => !page.errorMessage)
+          .map((page) => ({ url: page.url, pageType: page.pageType, title: page.title }))
+          .sort(byPageTypeThenUrl)
+          .slice(0, 12),
+        publicSearchResults: (publicSearch.results ?? [])
+          .map((result) => ({ title: result.title, url: result.url }))
+          .sort(byUrl)
+          .slice(0, 8),
+        crmContacts: contacts
+          .map((contact) => ({ name: contact.name, title: contact.title, email: contact.email }))
+          .sort(byContactNameThenEmail)
+          .slice(0, 8)
       }
     };
   }
@@ -146,6 +168,12 @@ function byMarketThenCategoryThenTitle(a: { market?: string | null; category?: s
 function byQualityScoreDescThenEmail(a: { qualityScore?: number | null; email?: string | null }, b: { qualityScore?: number | null; email?: string | null }) {
   const sb = b.qualityScore ?? 0; const sa = a.qualityScore ?? 0;
   if (sa !== sb) return sb - sa;
+  return (a.email ?? "").localeCompare(b.email ?? "");
+}
+
+function byContactNameThenEmail(a: { name?: string | null; email?: string | null }, b: { name?: string | null; email?: string | null }) {
+  const an = a.name ?? ""; const bn = b.name ?? "";
+  if (an !== bn) return an.localeCompare(bn);
   return (a.email ?? "").localeCompare(b.email ?? "");
 }
 

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Message, Notification } from "@alifd/next";
 import "@alifd/next/lib/message/style.js";
 import "@alifd/next/lib/notification/style.js";
+import { appBasePath } from "../config/runtime";
 
 export type ToastType = "success" | "info" | "warning" | "error" | "notice" | "help";
 
@@ -197,19 +198,28 @@ function normalizeClientTitle(type: ToastType, title?: string) {
 }
 
 function renderServerContent(message: string, actionHref?: string, actionLabel?: string): ReactNode {
+  const href = actionHref ? toAppHref(actionHref, appBasePath) : undefined;
   return (
     <div className="crm-notification-body">
       <div className="crm-notification-message">{message}</div>
-      {actionHref && actionLabel ? (
+      {href && actionLabel ? (
         <div className="crm-notification-meta">
           <span />
-          <a className="crm-notification-link" href={actionHref}>
+          <a className="crm-notification-link" href={href}>
             {actionLabel}
           </a>
         </div>
       ) : null}
     </div>
   );
+}
+
+export function toAppHref(href: string, basePath = appBasePath) {
+  if (!href.startsWith("/") || href.startsWith("//") || basePath === "/") {
+    return href;
+  }
+
+  return href === basePath || href.startsWith(`${basePath}/`) ? href : `${basePath}${href}`;
 }
 
 export function ToastContainer() {

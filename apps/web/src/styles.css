@@ -488,7 +488,8 @@ a {
 }
 
 .loading-state,
-.error-state {
+.error-state,
+.warning-state {
   color: #52616b;
   font-weight: 700;
 }
@@ -502,6 +503,14 @@ a {
   border-color: #f2b9ba;
   background: #fff3f2;
   color: #9f1239;
+}
+
+.warning-state {
+  border: 1px solid #f6d58d;
+  border-radius: 8px;
+  background: #fff8e6;
+  color: #92400e;
+  padding: 12px 14px;
 }
 
 .panel-title {

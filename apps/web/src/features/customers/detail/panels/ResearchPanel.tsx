@@ -3,6 +3,7 @@ import { AnalysisSection, asArray, asRecord, getText, getStringArray, InsightLis
 import { MarkdownReport } from "../shared/Markdown";
 import { Detail } from "../shared/ui";
 import { EvidenceLinks } from "../shared/ui";
+import { buildResearchSourceEvidenceView, formatSourceBasisItem, hasResearchSourceEvidence } from "./research-source-evidence";
 
 export function ResearchPanel({ customer }: { customer: CustomerDetail }) {
   const report = customer.researchReports[0];
@@ -25,7 +26,7 @@ export function ResearchPanel({ customer }: { customer: CustomerDetail }) {
           {report.finalMarkdown ? <MarkdownReport content={report.finalMarkdown} /> : null}
           {!report.finalMarkdown && report.status === "SUCCEEDED" ? <div className="empty-state">背调任务已完成，但未返回可展示的 Markdown 报告，请查看 AI 版本记录或重新生成。</div> : null}
           <AnalysisSection title="来源依据">
-            <SourceEvidence evidence={report.sourceEvidence} />
+            <SourceEvidence evidence={report.sourceEvidence} reportJson={report.reportJson} />
           </AnalysisSection>
           <AiVersions run={report.aiGenerationRun} />
         </div>
@@ -34,13 +35,10 @@ export function ResearchPanel({ customer }: { customer: CustomerDetail }) {
   );
 }
 
-function SourceEvidence({ evidence }: { evidence?: unknown }) {
-  const record = asRecord(evidence);
-  const websiteUrls = getStringArray(record.websiteUrls).slice(0, 12);
-  const websitePages = asArray(record.websitePages).slice(0, 12);
-  const publicResults = asArray(record.publicSearchResults).slice(0, 8);
-  const contacts = asArray(record.crmContacts).slice(0, 8);
-  if (!websiteUrls.length && !websitePages.length && !publicResults.length && !contacts.length) {
+function SourceEvidence({ evidence, reportJson }: { evidence?: unknown; reportJson?: unknown }) {
+  const view = buildResearchSourceEvidenceView(evidence, reportJson);
+  const { websiteUrls, websitePages, publicSearchResults, crmContacts, sourceBasis } = view;
+  if (!hasResearchSourceEvidence(view)) {
     return <div className="empty-state">暂无可展示来源依据。</div>;
   }
   return (
@@ -56,10 +54,10 @@ function SourceEvidence({ evidence }: { evidence?: unknown }) {
         </div>
       ) : null}
       {websiteUrls.length ? <div className="analysis-row"><strong>抓取URL</strong><EvidenceLinks urls={websiteUrls} /></div> : null}
-      {publicResults.length ? (
+      {publicSearchResults.length ? (
         <div className="analysis-row">
           <strong>公开搜索结果</strong>
-          {publicResults.map((item, index) => {
+          {publicSearchResults.map((item, index) => {
             const result = asRecord(item);
             const title = getText(result, "title") || getText(result, "url") || `搜索结果 ${index + 1}`;
             const url = getText(result, "url");
@@ -67,13 +65,19 @@ function SourceEvidence({ evidence }: { evidence?: unknown }) {
           })}
         </div>
       ) : null}
-      {contacts.length ? (
+      {crmContacts.length ? (
         <div className="analysis-row">
           <strong>CRM联系人</strong>
-          {contacts.map((item, index) => {
+          {crmContacts.map((item, index) => {
             const contact = asRecord(item);
             return <span key={index}>{getText(contact, "name") || "未命名"} · {getText(contact, "email") || getText(contact, "phone") || "-"}</span>;
           })}
+        </div>
+      ) : null}
+      {sourceBasis.length ? (
+        <div className="analysis-row">
+          <strong>AI source basis</strong>
+          {sourceBasis.map((item, index) => <span key={index}>{formatSourceBasisItem(item, index)}</span>)}
         </div>
       ) : null}
     </div>

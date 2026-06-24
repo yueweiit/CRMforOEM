@@ -3,6 +3,7 @@ import { WebsiteAnalysisResult } from "@oem-crm/shared";
 import { Job } from "bullmq";
 import { PrismaService } from "../../infrastructure/prisma/prisma.service";
 import { AiGenerationService, AiProviderService } from "../ai/ai.public";
+import { buildBoundedWebsiteAiInput } from "./builders/website-ai-input.builder";
 import { WEBSITE_ANALYSIS_QUEUE } from "./website-analysis.constants";
 import { WebsiteCrawlerService } from "./website-crawler.service";
 
@@ -42,76 +43,9 @@ export class WebsiteAnalysisProcessor extends WorkerHost {
           capabilities: true
         }
       });
-      const aiInput = buildWebsiteAiInput(result, companyProfile);
-      const aiSummary = await this.aiProvider.complete({
-        system: websiteAnalysisPrompt(),
-        user: JSON.stringify(aiInput),
-        jsonMode: true
-      });
-      const aiInsights = parseWebsiteAiInsights(aiSummary.content, result);
+      const aiOutcome = await this.generateAiInsights(result, companyProfile, analysis.aiGenerationRunId);
 
-      if (analysis.aiGenerationRunId) {
-        await this.aiGeneration.markSucceeded(analysis.aiGenerationRunId, aiSummary.raw);
-        await this.aiGeneration.addRawAiVersion(analysis.aiGenerationRunId, aiSummary.content, aiInsights);
-      }
-
-      await this.prisma.websiteAnalysis.update({
-        where: { id: analysisId },
-        data: {
-          status: "SUCCEEDED",
-          completedAt: new Date(),
-          homePageTitle: result.pages.find((page) => page.pageType === "HOME")?.title,
-          detectedCountry: result.detectedCountry,
-          detectedLanguage: result.detectedLanguage,
-          detectedTimezone: result.detectedTimezone,
-          detectedCurrency: result.detectedCurrency,
-          crawledUrls: result.crawledUrls,
-          contactEvidence: result.contacts as never,
-          productCategories: result.productCategories as never,
-          productCount: result.productCount ?? result.productCategories.reduce((sum: number, item: { productCount?: number }) => sum + (item.productCount ?? 0), 0),
-          priceRange: result.priceRange as never,
-          pricePositioning: result.pricePositioning,
-          websiteCompleteness: result.websiteCompleteness,
-          imageStyle: result.imageStyle,
-          missingCategories: result.missingCategories as never,
-          opportunities: asStringArray(aiInsights.cooperation_opportunities, result.cooperationOpportunities) as never,
-          risks: asStringArray(aiInsights.risk_notes, result.risks) as never,
-          rawResult: { ...result, aiInsights } as never
-        }
-      });
-      await this.prisma.websiteAnalysisPage.createMany({
-        data: result.pages.map((page) => ({
-          websiteAnalysisId: analysisId,
-          url: page.url,
-          pageType: page.pageType as never,
-          title: page.title,
-          language: page.language,
-          textSummary: page.textSummary,
-          headings: page.headings as never,
-          links: page.links as never,
-          images: page.images as never,
-          contacts: page.contacts as never,
-          priceSignals: page.priceSignals as never,
-          depth: page.depth,
-          httpStatus: page.httpStatus,
-          errorMessage: page.errorMessage
-        }))
-      });
-      if (result.products.length) {
-        await this.prisma.websiteAnalysisProduct.createMany({
-          data: result.products.map((product) => ({
-            websiteAnalysisId: analysisId,
-            name: product.name,
-            category: product.category,
-            description: product.description,
-            keywords: product.keywords,
-            evidenceUrls: product.evidenceUrls,
-            imageUrls: product.imageUrls,
-            priceSignals: product.priceSignals as never,
-            confidence: product.confidence
-          }))
-        });
-      }
+      await this.persistCrawlerResult(analysisId, result, aiOutcome.aiInsights, aiOutcome.errorMessage);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown website analysis error";
       await this.prisma.websiteAnalysis.update({
@@ -122,6 +56,104 @@ export class WebsiteAnalysisProcessor extends WorkerHost {
         await this.aiGeneration.markFailed(analysis.aiGenerationRunId, message);
       }
       throw error;
+    }
+  }
+
+  private async generateAiInsights(
+    result: WebsiteAnalysisResult,
+    companyProfile: Parameters<typeof buildBoundedWebsiteAiInput>[1],
+    aiGenerationRunId?: string | null
+  ) {
+    try {
+      const aiInput = buildBoundedWebsiteAiInput(result, companyProfile);
+      const aiSummary = await this.aiProvider.complete({
+        system: websiteAnalysisPrompt(),
+        user: JSON.stringify(aiInput),
+        jsonMode: true
+      });
+      const aiInsights = parseWebsiteAiInsights(aiSummary.content, result);
+
+      if (aiGenerationRunId) {
+        await this.aiGeneration.markSucceeded(aiGenerationRunId, aiSummary.raw, aiSummary.tokenUsage);
+        await this.aiGeneration.addRawAiVersion(aiGenerationRunId, aiSummary.content, aiInsights);
+      }
+
+      return { aiInsights, errorMessage: undefined };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown AI website summary error";
+      if (aiGenerationRunId) {
+        await this.aiGeneration.markFailed(aiGenerationRunId, message);
+      }
+      return {
+        aiInsights: fallbackWebsiteAiInsights(result),
+        errorMessage: message
+      };
+    }
+  }
+
+  private async persistCrawlerResult(
+    analysisId: string,
+    result: WebsiteAnalysisResult,
+    aiInsights: WebsiteAiInsights,
+    aiInsightError?: string
+  ) {
+    await this.prisma.websiteAnalysis.update({
+      where: { id: analysisId },
+      data: {
+        status: "SUCCEEDED",
+        completedAt: new Date(),
+        homePageTitle: result.pages.find((page) => page.pageType === "HOME")?.title,
+        detectedCountry: result.detectedCountry,
+        detectedLanguage: result.detectedLanguage,
+        detectedTimezone: result.detectedTimezone,
+        detectedCurrency: result.detectedCurrency,
+        crawledUrls: result.crawledUrls,
+        contactEvidence: result.contacts as never,
+        productCategories: result.productCategories as never,
+        productCount: result.productCount ?? result.productCategories.reduce((sum: number, item: { productCount?: number }) => sum + (item.productCount ?? 0), 0),
+        priceRange: result.priceRange as never,
+        pricePositioning: result.pricePositioning,
+        websiteCompleteness: result.websiteCompleteness,
+        imageStyle: result.imageStyle,
+        missingCategories: result.missingCategories as never,
+        opportunities: asStringArray(aiInsights.cooperation_opportunities, result.cooperationOpportunities) as never,
+        risks: asStringArray(aiInsights.risk_notes, result.risks) as never,
+        rawResult: { ...result, aiInsights, aiInsightError } as never,
+        errorMessage: aiInsightError
+      }
+    });
+    await this.prisma.websiteAnalysisPage.createMany({
+      data: result.pages.map((page) => ({
+        websiteAnalysisId: analysisId,
+        url: page.url,
+        pageType: page.pageType as never,
+        title: page.title,
+        language: page.language,
+        textSummary: page.textSummary,
+        headings: page.headings as never,
+        links: page.links as never,
+        images: page.images as never,
+        contacts: page.contacts as never,
+        priceSignals: page.priceSignals as never,
+        depth: page.depth,
+        httpStatus: page.httpStatus,
+        errorMessage: page.errorMessage
+      }))
+    });
+    if (result.products.length) {
+      await this.prisma.websiteAnalysisProduct.createMany({
+        data: result.products.map((product) => ({
+          websiteAnalysisId: analysisId,
+          name: product.name,
+          category: product.category,
+          description: product.description,
+          keywords: product.keywords,
+          evidenceUrls: product.evidenceUrls,
+          imageUrls: product.imageUrls,
+          priceSignals: product.priceSignals as never,
+          confidence: product.confidence
+        }))
+      });
     }
   }
 }
@@ -166,87 +198,6 @@ function websiteAnalysisPrompt() {
     "",
     "总输出控制在2800中文字符以内。"
   ].join("\n");
-}
-
-function buildWebsiteAiInput(
-  result: WebsiteAnalysisResult,
-  companyProfile?: {
-    products: Array<{
-      name: string;
-      category: string;
-      material: string | null;
-      priceMin: unknown;
-      priceMax: unknown;
-      currency: string | null;
-      tags: string[];
-    }>;
-    capabilities: Array<{
-      name: string;
-      category: string;
-      moq: string | null;
-      leadTime: string | null;
-    }>;
-  } | null
-) {
-  const validPages = result.pages.filter((page) => !page.errorMessage);
-  const rawProducts = (companyProfile?.products ?? []).map((product) => {
-    const priceMin = product.priceMin != null ? Number(product.priceMin) : undefined;
-    const priceMax = product.priceMax != null ? Number(product.priceMax) : undefined;
-    return {
-      name: product.name,
-      category: product.category,
-      material: product.material,
-      priceMin: priceMin != null && Number.isFinite(priceMin) ? priceMin : undefined,
-      priceMax: priceMax != null && Number.isFinite(priceMax) ? priceMax : undefined,
-      currency: product.currency,
-      tags: product.tags
-    };
-  });
-  const completenessScore = (product: (typeof rawProducts)[number]) =>
-    (product.priceMin != null && product.priceMax != null ? 2 : 0) +
-    (product.tags.length > 0 ? 1 : 0) +
-    (product.material ? 1 : 0);
-  const groupedProducts = new Map<string, typeof rawProducts>();
-  for (const product of rawProducts) {
-    const bucket = groupedProducts.get(product.category) ?? [];
-    bucket.push(product);
-    groupedProducts.set(product.category, bucket);
-  }
-  const ourProducts = Array.from(groupedProducts.values())
-    .flatMap((bucket) => bucket.sort((a, b) => completenessScore(b) - completenessScore(a)).slice(0, 2))
-    .slice(0, 40);
-  const ourCapabilities = (companyProfile?.capabilities ?? []).map((capability) => ({
-    name: capability.name,
-    category: capability.category,
-    moq: capability.moq,
-    leadTime: capability.leadTime
-  }));
-
-  return {
-    detectedLanguage: result.detectedLanguage,
-    websiteCompleteness: result.websiteCompleteness,
-    pricePositioning: result.pricePositioning,
-    contacts: result.contacts,
-    productCategories: result.productCategories,
-    products: result.products.slice(0, 20),
-    opportunities: result.cooperationOpportunities,
-    risks: result.risks,
-    priceRange: result.priceRange,
-    pages: validPages.map((page) => ({
-      url: page.url,
-      pageType: page.pageType,
-      title: page.title,
-      headings: page.headings.slice(0, 12),
-      textSummary: page.textSummary?.slice(0, 2500)
-    })),
-    ourProducts,
-    ourCapabilities,
-    ourDataQuality: {
-      productCount: rawProducts.length,
-      capabilityCount: ourCapabilities.length,
-      isLikelyIncomplete: rawProducts.length < 10
-    }
-  };
 }
 
 function parseWebsiteAiInsights(content: string, result: WebsiteAnalysisResult): WebsiteAiInsights {
