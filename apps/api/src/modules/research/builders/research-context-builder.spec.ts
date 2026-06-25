@@ -47,6 +47,8 @@ const prisma = {
       pricePositioning: "unknown",
       websiteCompleteness: 80,
       productCategories: [],
+      products: [],
+      contactEvidence: [{ type: "email", value: "sales@example.com" }],
       rawResult: {
         aiInsights: {
           evidence_pages: [{ title: "Example Home", url: "https://example.com", reason: "homepage evidence" }]
@@ -60,6 +62,9 @@ const prisma = {
   },
   contact: {
     findMany: async () => contacts
+  },
+  followUpTask: {
+    findMany: async () => []
   }
 };
 
@@ -86,6 +91,9 @@ async function main() {
   ]);
   assert.deepEqual(evidence.crmContacts, [
     { name: "Alice", title: "Sales", email: "alice@example.com" }
+  ]);
+  assert.deepEqual((context.websiteSummary as Record<string, unknown>)?.contacts, [
+    { type: "email", value: "sales@example.com" }
   ]);
 }
 

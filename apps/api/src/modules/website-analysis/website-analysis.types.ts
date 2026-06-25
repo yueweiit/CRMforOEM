@@ -3,7 +3,7 @@ import type { WebsiteAnalysisResult } from "@oem-crm/shared";
 /**
  * Parsed AI insight object stored inside websiteAnalysis.rawResult.aiInsights.
  * 解析后的 AI 洞察对象存储在 websiteAnalysis.rawResult.aiInsights 中。 
-*/
+ */
 export type WebsiteAiInsights = {
   business_summary: string;
   customer_profile: string;
@@ -25,7 +25,7 @@ export type WebsiteAiInsights = {
     reason: string;
     data_quality_note: string;
   }>;
-  price_competitiveness: {
+   price_competitiveness: {
     level: "competitive" | "neutral" | "challenging" | "unknown";
     summary: string;
     price_nature_note: string;

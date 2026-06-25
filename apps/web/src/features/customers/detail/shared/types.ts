@@ -56,7 +56,7 @@ export type WebsiteAiInsights = {
   sales_entry_points?: string[];
   suggested_next_actions?: string[];
   risk_notes?: string[];
-  evidence_pages?: Array<{ title?: string; url?: string; reason?: string }>;
+  evidence_pages?: Array<{ sourceId?: string; title?: string; url?: string; reason?: string }>;
   missing_categories_gap?: Array<{
     category: string;
     customer_has: string;

@@ -16,6 +16,8 @@ export type ResearchContextLike = {
   websiteSummary?: {
     status?: string; productCount?: number | null; pricePositioning?: string | null;
     websiteCompleteness?: number | null; productCategories?: unknown;
+    products?: Array<{ name: string; category: string | null; description?: string | null; keywords?: string[] }>;
+    contacts?: Array<{ type: string; value: string; sourceUrl?: string }>;
     pages?: Array<{ url: string; pageType: string; title?: string | null; textSummary?: string | null }>;
   } | null;
   websiteInsights?: Record<string, unknown> | null;
@@ -25,6 +27,7 @@ export type ResearchContextLike = {
     caseStudies?: Array<{ title: string; market?: string | null; category?: string | null; summary: string }>;
   };
   publicSearch: { warning?: string; enabled?: boolean; results?: Array<{ title?: string; url?: string; snippet?: string }> };
+  followUpTasks?: Array<{ title: string; type: string; status: string; dueAt: string }>;
   sourceEvidence?: {
     websiteAnalysisStatus?: string | null;
     searchWarning?: string | null;
@@ -44,7 +47,7 @@ export class ResearchContextBuilder {
   ) {}
 
   async build(organizationId: string, customerId: string, salesNotes?: string) {
-    const [customer, websiteAnalysis, companyProfiles, contacts] = await Promise.all([
+    const [customer, websiteAnalysis, companyProfiles, contacts, followUpTasks] = await Promise.all([
       this.prisma.customer.findFirstOrThrow({
         where: { id: customerId, organizationId },
         include: { source: true, type: true }
@@ -57,7 +60,12 @@ export class ResearchContextBuilder {
         where: { organizationId },
         include: { capabilities: true, products: { take: 80 }, caseStudies: true }
       }),
-      this.prisma.contact.findMany({ where: { customerId } })
+      this.prisma.contact.findMany({ where: { customerId } }),
+      this.prisma.followUpTask.findMany({
+        where: { customerId },
+        orderBy: { createdAt: "desc" },
+        take: 20
+      })
     ]);
 
     const publicSearch = await this.searchProvider.searchCustomer({
@@ -113,6 +121,10 @@ export class ResearchContextBuilder {
             pricePositioning: websiteAnalysis.pricePositioning,
             websiteCompleteness: websiteAnalysis.websiteCompleteness,
             productCategories: websiteAnalysis.productCategories,
+            products: websiteAnalysis.products.map((p) => ({
+              name: p.name, category: p.category, description: p.description, keywords: p.keywords
+            })),
+            contacts: asContactList(websiteAnalysis.contactEvidence),
             pages: websiteAnalysis.pages
               .filter((p) => !p.errorMessage)
               .map((p) => ({ url: p.url, pageType: p.pageType, title: p.title, textSummary: p.textSummary }))
@@ -128,6 +140,9 @@ export class ResearchContextBuilder {
           .sort(byUrl)
       },
       salesNotes,
+      followUpTasks: followUpTasks.map((t) => ({
+        title: t.title, type: t.type, status: t.status, dueAt: t.dueAt.toISOString()
+      })),
       sourceEvidence: {
         websiteAnalysisStatus: websiteAnalysis?.status ?? null,
         searchWarning: publicSearch.warning ?? null,
@@ -189,4 +204,12 @@ function byUrl(a: { url?: string | null }, b: { url?: string | null }) {
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function asContactList(value: unknown): Array<{ type: string; value: string; sourceUrl?: string }> | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const mapped = value.filter((item): item is { type: string; value: string; sourceUrl?: string } =>
+    item && typeof item === "object" && typeof (item as Record<string, unknown>).type === "string" && typeof (item as Record<string, unknown>).value === "string"
+  );
+  return mapped.length ? mapped : undefined;
 }

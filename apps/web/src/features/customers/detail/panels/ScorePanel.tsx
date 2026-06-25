@@ -1,14 +1,21 @@
 import { MarkdownReport } from "../shared/Markdown";
 import type { CustomerDetail, OemScore } from "../shared/types";
 import { AnalysisSection, asArray, asRecord, getText, getNumber, stringifyInsight, InsightList, AiVersions, scoreLabel, gradeText } from "../shared/ui";
+import { getOemScorePanelDisplayState } from "./oem-score-panel-state";
 
-export function ScorePanel({ customer }: { customer: CustomerDetail }) {
+export function ScorePanel({ customer, isGenerating = false }: { customer: CustomerDetail; isGenerating?: boolean }) {
   const score = customer.oemFitScores[0];
   const strategy = asRecord(score?.developmentStrategy);
+  const displayState = getOemScorePanelDisplayState({
+    isGenerating,
+    score: score ? { score: score.score, grade: score.grade } : undefined
+  });
   return (
     <section className="panel">
-      <div className="panel-title"><h2>OEM适配评分</h2><span>{score ? `${score.score} / ${score.grade}` : "未评分"}</span></div>
-      {!score ? <div className="empty-state">尚未生成OEM评分。建议先完成官网分析和背调，再点击右上角"OEM评分"。</div> : (
+      <div className="panel-title"><h2>OEM适配评分</h2><span>{displayState.titleStatus}</span></div>
+      {displayState.showGeneratingNotice ? <div className="loading-state">OEM评分正在生成，完成后会自动刷新。</div> : null}
+      {displayState.showEmptyState ? <div className="empty-state">尚未生成OEM评分。建议先完成官网分析和背调，再点击右上角"OEM评分"。</div> : null}
+      {displayState.showExistingScore && score ? (
         <div className="page-stack">
           <div className="score-summary">
             <div className={`score-badge grade-${score.grade.toLowerCase()}`}>
@@ -53,7 +60,7 @@ export function ScorePanel({ customer }: { customer: CustomerDetail }) {
           ) : null}
           <AiVersions run={score.aiGenerationRun} />
         </div>
-      )}
+      ): null}
     </section>
   );
 }

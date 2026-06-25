@@ -81,7 +81,14 @@ export function CustomerDetailPage() {
     },
     onError: () => setMessage("背调任务提交失败，请刷新后重试。")
   });
-  const scoreMutation = useMutation({ mutationFn: () => createOemFitScore(id), onSuccess: () => { setMessage("OEM评分已生成。"); refreshCustomer(); } });
+  const scoreMutation = useMutation({
+    mutationFn: () => createOemFitScore(id),
+    onSuccess: () => {
+      setMessage("");
+      refreshCustomer();
+    },
+    onError: () => setMessage("OEM评分生成失败，请稍后重试。")
+  });
 
   return (
     <section className="page-stack">
@@ -106,7 +113,13 @@ export function CustomerDetailPage() {
           >
             {hasActiveTask("RESEARCH_REPORT") ? <ProcessingButtonLabel /> : "生成背调"}
           </button>
-          <button className="secondary-button" onClick={() => scoreMutation.mutate()} disabled={scoreMutation.isPending}>OEM评分</button>
+          <button
+            className={`secondary-button${scoreMutation.isPending ? " active-task" : ""}`}
+            onClick={() => scoreMutation.mutate()}
+            disabled={scoreMutation.isPending}
+          >
+            {scoreMutation.isPending ? <ProcessingButtonLabel /> : "OEM评分"}
+          </button>
         </div>
       </header>
 
@@ -123,11 +136,11 @@ export function CustomerDetailPage() {
       </nav>
 
       <CustomerTaskStrip tasks={activeTasks} />
-      {message ? <section className="panel loading-state">{message}</section> : null}
+      {message ? <section className="panel error-state">{message}</section> : null}
       {customerQuery.isLoading ? <section className="panel empty-state">正在加载客户详情...</section> : null}
       {customerQuery.isError && !customer ? <section className="panel error-state">客户详情加载失败，请重新登录或刷新页面。</section> : null}
       {customerQuery.isError && customer ? <section className="panel error-state">客户详情刷新失败，当前显示的是上一次加载的数据。</section> : null}
-      {customer ? <CustomerTab tab={tab} customer={customer} customerId={id} onChanged={refreshCustomer} /> : null}
+      {customer ? <CustomerTab tab={tab} customer={customer} customerId={id} onChanged={refreshCustomer} isOemScoreGenerating={scoreMutation.isPending} /> : null}
     </section>
   );
 }
@@ -141,10 +154,10 @@ function ProcessingButtonLabel() {
   );
 }
 
-function CustomerTab(props: { tab: string; customer: CustomerDetail; customerId: string; onChanged: () => void }) {
+function CustomerTab(props: { tab: string; customer: CustomerDetail; customerId: string; onChanged: () => void; isOemScoreGenerating: boolean }) {
   if (props.tab === "website-analysis") return <WebsiteAnalysisPanel customer={props.customer} />;
   if (props.tab === "research") return <ResearchPanel customer={props.customer} />;
-  if (props.tab === "oem-score") return <ScorePanel customer={props.customer} />;
+  if (props.tab === "oem-score") return <ScorePanel customer={props.customer} isGenerating={props.isOemScoreGenerating} />;
   if (props.tab === "email") return <EmailPanel customer={props.customer} customerId={props.customerId} onChanged={props.onChanged} />;
   if (props.tab === "follow-ups") return <FollowUpPanel tasks={props.customer.followUpTasks} />;
   if (props.tab === "quotes") return <QuotePanel customerId={props.customerId} />;

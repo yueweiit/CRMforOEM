@@ -1,11 +1,30 @@
 import { Injectable, ServiceUnavailableException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import type { AiCompletionResult } from "./ai-generation.types";
 
 export type AiCompletionInput = {
   system: string;
   user: string;
   jsonMode?: boolean;
 };
+
+export class AiProviderError extends Error {
+  public readonly statusCode?: number;
+  public readonly providerCode?: string;
+  public readonly retryAfterMs?: number;
+
+  constructor(message: string, details: {
+    statusCode?: number;
+    providerCode?: string;
+    retryAfterMs?: number;
+  } = {}) {
+    super(message);
+    this.name = "AiProviderError";
+    this.statusCode = details.statusCode;
+    this.providerCode = details.providerCode;
+    this.retryAfterMs = details.retryAfterMs;
+  }
+}
 
 @Injectable()
 export class AiProviderService {
@@ -15,7 +34,12 @@ export class AiProviderService {
     return this.config.get<string>("AI_MODEL", "gpt-4.1-mini");
   }
 
-  async complete(input: AiCompletionInput): Promise<{ content: string; raw: unknown; tokenUsage?: unknown }> {
+  /** Set AI_PROVIDER_SUPPORTS_JSON_RESPONSE_FORMAT=false for non-OpenAI providers */
+  private get supportsJsonResponseFormat(): boolean {
+    return this.config.get<string>("AI_PROVIDER_SUPPORTS_JSON_RESPONSE_FORMAT", "true") !== "false";
+  }
+
+  async complete(input: AiCompletionInput): Promise<AiCompletionResult> {
     const apiKey = this.config.get<string>("OPENAI_API_KEY");
     if (!apiKey) {
       const placeholder = input.jsonMode
@@ -27,7 +51,8 @@ export class AiProviderService {
           model: this.model,
           placeholder: true,
           input
-        }
+        },
+        finishReason: "stop"
       };
     }
 
@@ -47,28 +72,39 @@ export class AiProviderService {
             { role: "system", content: input.system },
             { role: "user", content: input.user }
           ],
-          temperature: 0.3
+          temperature: 0.3,
+          ...(input.jsonMode && this.supportsJsonResponseFormat ? { response_format: { type: "json_object" } } : {})
         }),
         signal: controller.signal
       });
 
       const rawText = await response.text().catch(() => "");
-      console.error("[AiProvider] HTTP", response.status, "- body:", rawText.slice(0, 500));
 
       if (!response.ok) {
+        console.error("[AiProvider] HTTP", response.status, "- body:", rawText.slice(0, 300));
+        const retryAfterMs = parseRetryAfter(response.headers.get("Retry-After"));
         let errMsg = "AI provider request failed";
+        let providerCode: string | undefined;
         try {
           const parsed = JSON.parse(rawText);
           errMsg = parsed.error?.message ?? errMsg;
+          providerCode = parsed.error?.code ?? parsed.error?.type;
         } catch {}
-        throw new ServiceUnavailableException(errMsg);
+        throw new AiProviderError(errMsg, {
+          statusCode: response.status,
+          providerCode,
+          retryAfterMs
+        });
       }
 
       let raw: Record<string, unknown> = {};
       try {
         raw = JSON.parse(rawText);
       } catch {
-        throw new ServiceUnavailableException(`AI provider returned non-JSON response. Body: ${rawText.slice(0, 300)}`);
+        throw new AiProviderError(
+          `AI provider returned non-JSON response. Body: ${rawText.slice(0, 300)}`,
+          { statusCode: response.status }
+        );
       }
 
       // Try multiple paths — some providers/models return content in non-standard fields
@@ -81,20 +117,39 @@ export class AiProviderService {
       }
 
       if (!content) {
-        throw new ServiceUnavailableException(`AI provider returned an empty response. Raw: ${rawText.slice(0, 300)}`);
+        throw new AiProviderError(
+          `AI provider returned an empty response. Raw: ${rawText.slice(0, 300)}`,
+          { statusCode: response.status }
+        );
       }
+
+      const finishReason =
+        (choice?.finish_reason as string | undefined) ??
+        (raw.finish_reason as string | undefined) ??
+        undefined;
 
       return {
         content,
         raw,
-        tokenUsage: raw.usage
+        tokenUsage: raw.usage,
+        finishReason
       };
     } catch (error) {
+      if (error instanceof AiProviderError) throw error;
       if (error instanceof ServiceUnavailableException) throw error;
       throw new ServiceUnavailableException(error instanceof Error ? error.message : "AI provider unavailable");
     } finally {
       clearTimeout(timeout);
     }
   }
+}
+
+function parseRetryAfter(header: string | null): number | undefined {
+  if (!header) return undefined;
+  const seconds = parseInt(header, 10);
+  if (!isNaN(seconds)) return seconds * 1000;
+  const date = new Date(header);
+  if (!isNaN(date.getTime())) return Math.max(0, date.getTime() - Date.now());
+  return undefined;
 }
 

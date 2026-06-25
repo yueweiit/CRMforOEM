@@ -189,6 +189,27 @@ export function getWebsiteAiInsights(analysis?: WebsiteAnalysis): WebsiteAiInsig
   };
 }
 
+export type WebsiteAiMetaView = {
+  mode: string;
+  status: string;
+  inputChars: number;
+  errorKind?: string;
+  errorMessage?: string;
+};
+
+export function getWebsiteAiMeta(analysis?: WebsiteAnalysis): WebsiteAiMetaView | undefined {
+  const raw = asRecord(analysis?.rawResult);
+  const meta = asRecord(raw.aiMeta);
+  if (!Object.keys(meta).length) return undefined;
+  return {
+    mode: getText(meta, "mode"),
+    status: getText(meta, "status"),
+    inputChars: getNumber(meta, "inputChars"),
+    errorKind: getText(meta, "errorKind") || undefined,
+    errorMessage: getText(meta, "errorMessage") || undefined
+  };
+}
+
 // ── Shared UI components ──
 
 export function SimpleRows({ rows, empty }: { rows: Array<{ id: string; title: string; meta: string }>; empty: string }) {

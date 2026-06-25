@@ -91,6 +91,14 @@ const processor = new WebsiteAnalysisProcessor(
     markFailed: async (_runId: string, message: string) => {
       aiFailures.push(message);
     }
+  } as never,
+  {
+    computeContentHash: (s: string) => s,
+    get: () => undefined,
+    set: () => undefined,
+    canCall: () => true,
+    recordCall: () => undefined,
+    getMaxCalls: () => 10
   } as never
 );
 
@@ -102,10 +110,15 @@ async function main() {
   assert.equal(pagesCreated.length, 1, "crawler pages should be persisted before/after AI failure");
   assert.equal(productsCreated.length, 1, "crawler products should be persisted before/after AI failure");
   assert.equal(aiFailures.length, 1, "AI generation run should record the provider failure");
+  const rawResult = (finalUpdate?.data?.rawResult ?? {}) as Record<string, unknown>;
+  const aiMeta = (rawResult.aiMeta ?? {}) as Record<string, unknown>;
+  assert.equal(aiMeta.status, "FAILED", "aiMeta.status should be FAILED when AI fails");
   assert.ok(
-    String(finalUpdate?.data?.errorMessage ?? "").includes("AI provider returned non-JSON response"),
-    "analysis should keep an AI warning message for the UI"
+    String(aiMeta.errorMessage ?? "").length > 0,
+    "aiMeta.errorMessage should contain the AI failure reason"
   );
+  assert.equal(finalUpdate?.data?.errorMessage ?? null, null,
+    "non-fatal AI errors should NOT set analysis-level errorMessage");
 }
 
 void main();

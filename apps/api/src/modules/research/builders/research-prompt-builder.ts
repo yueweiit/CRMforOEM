@@ -1,7 +1,25 @@
 import { RESEARCH_PROMPT_BUDGETS, RESEARCH_PROMPT_MAX_CHARS, type ResearchPromptBudget } from "../research.constants";
+import { buildResearchJsonSchemaPrompt } from "../research-report-schema";
 import type { ResearchContextLike } from "./research-context-builder";
 
 export function researchSystemPrompt() {
+  return [
+    "你是一名资深外贸 OEM/ODM 客户开发研究员。请只根据输入上下文和来源证据生成客户背调报告，不要编造未提供的信息。",
+    "无法从来源证据确认的信息必须写入 missing_info，或在字段中写“未从现有来源确认”。不要估算成立年份、员工人数、认证、合作伙伴或经营数据。",
+    "",
+    "companyKnowledge 是我方供应商资料，只能用于第8维度 summary_development_recommendations 的合作建议、推荐产品和开发策略，不得用于补充第1-7维度的客户背景事实。",
+    "第6维度 price_positioning 只描述客户官网或公开资料中的客户侧价格信号；我方价格匹配分析只能放在第8维度。",
+    "",
+    "必须返回严格 JSON 对象，且 sections 必须完全遵循下面的固定字段 schema。字段缺少证据时保留字段但填空字符串或空数组，并把原因写入 missing_info。",
+    buildResearchJsonSchemaPrompt(),
+    "",
+    "第1-7维度的 confirmed_facts 必须是已从来源证据中直接验证的事实；analysis 是基于来源的合理推断；missing_info 是当前无法确认但值得业务继续补充的信息。",
+    "第8维度可以结合 companyKnowledge 输出客户开发价值评级、开发优先级、推荐供货产品、邮件开发切入点、合作机会、潜在合作风险和下一步行动。",
+    "source_basis 要列出每个维度用到的官网 URL、公开搜索结果 URL 或 CRM/企业资料库来源说明。",
+    "markdown_report 必须是中文 Markdown，面向业务员和销售主管，可直接阅读。",
+    "总输出控制在 3000 个中文字符以内，确保 JSON 完整闭合，不要输出多余解释。"
+  ].join("\n");
+
   return `你是一名资深外贸OEM/ODM客户开发研究员。
 请只根据输入上下文和来源证据生成报告，不要编造未提供的信息。
 无法从来源证据确认的信息必须写"未从现有来源确认"，不要估算成立年份、员工人数、认证、合作伙伴或经营数据。
@@ -97,9 +115,7 @@ export function compactResearchRunInput(context: ResearchContextLike & { promptV
   };
 }
 
-// ── Internal helpers ──
-
-function buildResearchPromptInput(
+export function buildResearchPromptInput(
   context: ResearchContextLike & { promptVersion?: string; salesNotes?: string },
   budget: ResearchPromptBudget = RESEARCH_PROMPT_BUDGETS[0]
 ) {
@@ -214,6 +230,15 @@ function compactWebsiteAnalysis(context: ResearchContextLike, budget: ResearchPr
       evidencePages: compactUnknownList(insights.evidencePages, budget.genericListItems, budget)
     },
     productCategories: compactUnknownList(summary.productCategories, budget.productCategories, budget),
+    products: summary.products?.slice(0, budget.products).map((p) => ({
+      name: compactText(p.name, 120), category: compactText(p.category, 80),
+      description: compactText(p.description, budget.productDescriptionChars),
+      keywords: p.keywords?.slice(0, 6).map((k) => compactText(k, 40)) ?? []
+    })),
+    contacts: summary.contacts?.slice(0, budget.contacts).map((c) => ({
+      type: compactText(c.type, 40), value: compactText(c.value, 120),
+      sourceUrl: compactText(c.sourceUrl, 240)
+    })),
     pages: summary.pages?.slice(0, budget.pages).map((page) => ({
       url: compactText(page.url, 240), pageType: compactText(page.pageType, 60),
       title: compactText(page.title, 120), textSummary: compactText(page.textSummary, budget.pageTextChars)

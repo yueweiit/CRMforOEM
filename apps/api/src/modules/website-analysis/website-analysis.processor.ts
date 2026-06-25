@@ -2,31 +2,67 @@ import { Processor, WorkerHost } from "@nestjs/bullmq";
 import { WebsiteAnalysisResult } from "@oem-crm/shared";
 import { Job } from "bullmq";
 import { PrismaService } from "../../infrastructure/prisma/prisma.service";
-import { AiGenerationService, AiProviderService } from "../ai/ai.public";
+import {
+  AiGenerationService,
+  AiProviderService,
+  AiRetryService,
+  AiBudgetService,
+  AiTextCompressor,
+  AiSummaryCache,
+  AiRetryExhaustedError,
+  AI_FINAL_TARGET_CHARS,
+  AI_FINAL_WARNING_CHARS,
+  AI_FINAL_HARD_LIMIT_CHARS,
+  AI_GLOBAL_HARD_LIMIT_CHARS
+} from "../ai/ai.public";
+import type { AiErrorKind, AiGenerationMeta, SummaryPipelineMeta } from "../ai/ai.public";
 import { buildBoundedWebsiteAiInput } from "./builders/website-ai-input.builder";
+import { buildWebsiteAiBatchInput } from "./builders/website-ai-batch-input.builder";
+import type { BatchGroupSummary } from "./builders/website-ai-batch-input.builder";
+import { buildWebsiteEvidenceInventory } from "./builders/website-evidence-inventory.builder";
+import { buildWebsiteGroups } from "./builders/website-evidence-grouper";
 import { WEBSITE_ANALYSIS_QUEUE } from "./website-analysis.constants";
 import { WebsiteCrawlerService } from "./website-crawler.service";
+import { parseWebsiteAiInsights, fallbackWebsiteAiInsights } from "./parsers/website-ai-insight.parser";
+import type { WebsiteAiInsights } from "./website-analysis.types";
+import type { WebsiteAnalysisCompanyProfile } from "./website-analysis.types";
+
+type AiOutcome = {
+  aiInsights: WebsiteAiInsights;
+  errorMessage?: string;
+  aiMeta: AiGenerationMeta;
+  summaryPipeline?: SummaryPipelineMeta;
+  sourceEvidence: {
+    pages: Array<{ sourceId: string; url: string; title?: string; pageType: string }>;
+    products: Array<{ sourceId: string; name: string; category?: string; evidenceUrls: string[] }>;
+    contacts: Array<{ sourceId: string; type: string; value: string; sourceUrl?: string }>;
+  };
+};
 
 @Processor(WEBSITE_ANALYSIS_QUEUE)
 export class WebsiteAnalysisProcessor extends WorkerHost {
+  private readonly retry: AiRetryService;
+  private readonly budget: AiBudgetService;
+  private readonly compressor: AiTextCompressor;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly crawler: WebsiteCrawlerService,
-    private readonly aiProvider: AiProviderService,
-    private readonly aiGeneration: AiGenerationService
+    aiProvider: AiProviderService,
+    private readonly aiGeneration: AiGenerationService,
+    private readonly cache: AiSummaryCache
   ) {
     super();
+    this.budget = new AiBudgetService();
+    this.compressor = new AiTextCompressor();
+    this.retry = new AiRetryService(aiProvider, this.budget);
   }
 
   async process(job: Job<{ analysisId: string; customerId: string; websiteUrl: string }>) {
     const { analysisId, websiteUrl } = job.data;
     const analysis = await this.prisma.websiteAnalysis.findUniqueOrThrow({
       where: { id: analysisId },
-      include: {
-        customer: {
-          select: { organizationId: true }
-        }
-      }
+      include: { customer: { select: { organizationId: true } } }
     });
     await this.prisma.websiteAnalysis.update({
       where: { id: analysisId },
@@ -38,14 +74,11 @@ export class WebsiteAnalysisProcessor extends WorkerHost {
       const result = await this.crawler.analyze(websiteUrl);
       const companyProfile = await this.prisma.companyProfile.findFirst({
         where: { organizationId },
-        include: {
-          products: { take: 80 },
-          capabilities: true
-        }
+        include: { products: { take: 80 }, capabilities: true }
       });
       const aiOutcome = await this.generateAiInsights(result, companyProfile, analysis.aiGenerationRunId);
 
-      await this.persistCrawlerResult(analysisId, result, aiOutcome.aiInsights, aiOutcome.errorMessage);
+      await this.persistCrawlerResult(analysisId, result, aiOutcome);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown website analysis error";
       await this.prisma.websiteAnalysis.update({
@@ -61,32 +94,288 @@ export class WebsiteAnalysisProcessor extends WorkerHost {
 
   private async generateAiInsights(
     result: WebsiteAnalysisResult,
-    companyProfile: Parameters<typeof buildBoundedWebsiteAiInput>[1],
+    companyProfile: WebsiteAnalysisCompanyProfile,
     aiGenerationRunId?: string | null
-  ) {
-    try {
-      const aiInput = buildBoundedWebsiteAiInput(result, companyProfile);
-      const aiSummary = await this.aiProvider.complete({
-        system: websiteAnalysisPrompt(),
-        user: JSON.stringify(aiInput),
-        jsonMode: true
-      });
-      const aiInsights = parseWebsiteAiInsights(aiSummary.content, result);
+  ): Promise<AiOutcome> {
+    const t0 = Date.now();
+    const evidence = buildWebsiteEvidenceInventory(result);
+    const directInput = buildBoundedWebsiteAiInput(result, companyProfile);
+    const directPayload = JSON.stringify(directInput);
+    const inputChars = directPayload.length;
 
-      if (aiGenerationRunId) {
-        await this.aiGeneration.markSucceeded(aiGenerationRunId, aiSummary.raw, aiSummary.tokenUsage);
-        await this.aiGeneration.addRawAiVersion(aiGenerationRunId, aiSummary.content, aiInsights);
+    let mode: AiGenerationMeta["mode"] = "DIRECT";
+    let aiInsights: WebsiteAiInsights;
+    let errorMessage: string | undefined;
+    let errorKind: AiGenerationMeta["errorKind"];
+    let summaryPipeline: SummaryPipelineMeta | undefined;
+    let parseOk = false;
+
+    // Build source evidence regardless of path
+    const sourceEvidence = {
+      pages: evidence
+        .filter((e) => e.kind === "PAGE")
+        .map((e) => ({ sourceId: e.sourceId, url: e.url, title: e.title, pageType: e.pageType })),
+      products: evidence
+        .filter((e) => e.kind === "PRODUCT")
+        .map((e) => ({ sourceId: e.sourceId, name: e.name, category: e.category, evidenceUrls: e.evidenceUrls })),
+      contacts: evidence
+        .filter((e) => e.kind === "CONTACT")
+        .map((e) => ({ sourceId: e.sourceId, type: e.type, value: e.value, sourceUrl: e.sourceUrl }))
+    };
+
+    const cacheScope = aiGenerationRunId ?? `website-${Date.now()}`;
+    const cachePromptVersion = "website-analysis-v1";
+    const maxCalls = this.cache.getMaxCalls(evidence.length, result.pages.length);
+
+    try {
+      if (inputChars > AI_GLOBAL_HARD_LIMIT_CHARS) {
+        const groups = buildWebsiteGroups(evidence, result);
+        if (!groups.length) {
+          mode = "SKIPPED";
+          return {
+            aiInsights: fallbackWebsiteAiInsights(result),
+            errorMessage: "AI input exceeds global hard limit and no groups available — AI skipped",
+            aiMeta: {
+              mode, status: "SKIPPED", inputChars,
+              estimatedInputTokens: Math.ceil(inputChars / 2),
+              attemptCount: 0, retryCount: 0,
+              durationMs: Date.now() - t0,
+              errorKind: "INPUT_TOO_LARGE",
+              errorMessage: "AI input exceeds 30,000 chars global hard limit"
+            },
+            summaryPipeline: undefined,
+            sourceEvidence
+          };
+        }
+        mode = "BATCH_SUMMARY";
+      } else if (inputChars <= AI_FINAL_WARNING_CHARS) {
+        mode = "DIRECT";
+      } else {
+        mode = "BATCH_SUMMARY";
       }
 
-      return { aiInsights, errorMessage: undefined };
+      if (mode === "DIRECT") {
+        const contentHash = this.cache.computeContentHash(directPayload);
+        const cacheKey = { scope: cacheScope, groupName: "direct", batchIndex: 0, contentHash, promptVersion: cachePromptVersion };
+        let completionContent: string;
+
+        const cached = this.cache.get(cacheKey);
+        if (cached) {
+          completionContent = cached;
+        } else if (this.cache.canCall(cacheScope, maxCalls)) {
+          const completion = await this.retry.completeWithRetry({
+            system: websiteAnalysisPrompt(),
+            user: directPayload,
+            jsonMode: true
+          });
+          this.cache.recordCall(cacheScope);
+          this.cache.set(cacheKey, completion.content);
+          completionContent = completion.content;
+        } else {
+          // Call limit reached, use fallback
+          return {
+            aiInsights: fallbackWebsiteAiInsights(result),
+            errorMessage: "AI call limit reached — using fallback",
+            aiMeta: {
+              mode: "FALLBACK", status: "SKIPPED", inputChars,
+              estimatedInputTokens: Math.ceil(inputChars / 2),
+              attemptCount: 0, retryCount: 0,
+              durationMs: Date.now() - t0,
+              errorKind: "UNKNOWN",
+              errorMessage: `Call limit ${maxCalls} reached for scope ${cacheScope}`
+            },
+            summaryPipeline: undefined,
+            sourceEvidence
+          };
+        }
+
+        const parsed = parseWebsiteAiInsights(completionContent, result);
+        aiInsights = parsed.ok ? parsed.data : parsed.fallback;
+        parseOk = parsed.ok;
+        if (!parsed.ok) {
+          errorKind = parsed.reason as AiGenerationMeta["errorKind"];
+          errorMessage = parsed.warnings.join("; ") || `AI parse failed: ${parsed.reason}`;
+        }
+
+      } else {
+        // BATCH_SUMMARY mode
+        const groups = buildWebsiteGroups(evidence, result);
+        const groupMap: SummaryPipelineMeta["groups"] = {};
+
+        if (!groups.length) {
+          // No groups — fallback to direct with cache
+          const contentHash = this.cache.computeContentHash(directPayload);
+          const cacheKey = { scope: cacheScope, groupName: "direct", batchIndex: 0, contentHash, promptVersion: cachePromptVersion };
+          let completionContent: string;
+
+          const cached = this.cache.get(cacheKey);
+          if (cached) {
+            completionContent = cached;
+          } else if (this.cache.canCall(cacheScope, maxCalls)) {
+            const completion = await this.retry.completeWithRetry({
+              system: websiteAnalysisPrompt(),
+              user: directPayload,
+              jsonMode: true
+            });
+            this.cache.recordCall(cacheScope);
+            this.cache.set(cacheKey, completion.content);
+            completionContent = completion.content;
+          } else {
+            return {
+              aiInsights: fallbackWebsiteAiInsights(result),
+              errorMessage: "AI call limit reached — using fallback",
+              aiMeta: {
+                mode: "FALLBACK", status: "SKIPPED", inputChars,
+                estimatedInputTokens: Math.ceil(inputChars / 2),
+                attemptCount: 0, retryCount: 0,
+                durationMs: Date.now() - t0,
+                errorKind: "UNKNOWN",
+                errorMessage: `Call limit ${maxCalls} reached for scope ${cacheScope}`
+              },
+              summaryPipeline: undefined,
+              sourceEvidence
+            };
+          }
+
+          const parsed = parseWebsiteAiInsights(completionContent, result);
+          aiInsights = parsed.ok ? parsed.data : parsed.fallback;
+          parseOk = parsed.ok;
+          if (!parsed.ok) {
+            errorKind = parsed.reason as AiGenerationMeta["errorKind"];
+            errorMessage = parsed.warnings.join("; ") || `AI parse failed: ${parsed.reason}`;
+          }
+        } else {
+          const batchInput = buildWebsiteAiBatchInput(groups, companyProfile);
+          batchInput.groups = this.compressor.compressFinalInput(batchInput.groups, {
+            targetChars: AI_FINAL_TARGET_CHARS,
+            hardLimitChars: AI_FINAL_HARD_LIMIT_CHARS
+          }) as BatchGroupSummary[];
+
+          const finalPayload = JSON.stringify(batchInput);
+          const contentHash = this.cache.computeContentHash(finalPayload);
+          const cacheKey = { scope: cacheScope, groupName: "batch", batchIndex: 0, contentHash, promptVersion: cachePromptVersion };
+          let completionContent: string;
+
+          const cached = this.cache.get(cacheKey);
+          if (cached) {
+            completionContent = cached;
+          } else if (this.cache.canCall(cacheScope, maxCalls)) {
+            const completion = await this.retry.completeWithRetry({
+              system: websiteAnalysisPrompt(),
+              user: finalPayload,
+              jsonMode: true
+            });
+            this.cache.recordCall(cacheScope);
+            this.cache.set(cacheKey, completion.content);
+            completionContent = completion.content;
+          } else {
+            return {
+              aiInsights: fallbackWebsiteAiInsights(result),
+              errorMessage: "AI call limit reached — using fallback",
+              aiMeta: {
+                mode: "FALLBACK", status: "SKIPPED", inputChars,
+                estimatedInputTokens: Math.ceil(inputChars / 2),
+                attemptCount: 0, retryCount: 0,
+                durationMs: Date.now() - t0,
+                errorKind: "UNKNOWN",
+                errorMessage: `Call limit ${maxCalls} reached for scope ${cacheScope}`
+              },
+              summaryPipeline: undefined,
+              sourceEvidence
+            };
+          }
+
+          const parsed = parseWebsiteAiInsights(completionContent, result);
+          aiInsights = parsed.ok ? parsed.data : parsed.fallback;
+          parseOk = parsed.ok;
+          if (!parsed.ok) {
+            errorKind = parsed.reason as AiGenerationMeta["errorKind"];
+            errorMessage = parsed.warnings.join("; ") || `AI parse failed: ${parsed.reason}`;
+          }
+
+          // Set group status based on actual parse result
+          const groupStatus = parsed.ok ? "succeeded" as const : "fallback" as const;
+          for (const group of groups) {
+            groupMap[group.groupName] = {
+              status: groupStatus,
+              batchCount: 1,
+              failedBatchCount: parsed.ok ? 0 : 1,
+              sourceCount: group.sourceIds.length
+            };
+          }
+
+          summaryPipeline = {
+            status: parsed.ok ? "succeeded" : "partial_succeeded",
+            mode: "BATCH_SUMMARY",
+            inputChars,
+            finalInputChars: finalPayload.length,
+            attemptCount: 1,
+            retryCount: 0,
+            groups: groupMap,
+            errors: parsed.warnings.map((w) => ({
+              scope: "final",
+              errorKind: "INVALID_JSON" as const,
+              message: w
+            }))
+          };
+        }
+      }
+
+      if (aiGenerationRunId) {
+        if (parseOk) {
+          await this.aiGeneration.markSucceeded(aiGenerationRunId,
+            { choices: [{ message: { content: JSON.stringify(aiInsights) } }] },
+            undefined
+          );
+          await this.aiGeneration.addRawAiVersion(aiGenerationRunId, JSON.stringify(aiInsights), aiInsights);
+        } else {
+          await this.aiGeneration.markFailed(aiGenerationRunId,
+            errorMessage || `AI parse failed: ${errorKind ?? "UNKNOWN"}`
+          );
+        }
+      }
+
+      return {
+        aiInsights,
+        aiMeta: {
+          mode,
+          status: parseOk ? "SUCCEEDED" : "FAILED",
+          inputChars,
+          estimatedInputTokens: Math.ceil(inputChars / 2),
+          attemptCount: 1,
+          retryCount: 0,
+          durationMs: Date.now() - t0,
+          errorKind: parseOk ? undefined : errorKind,
+          errorMessage: parseOk ? undefined : errorMessage
+        },
+        summaryPipeline,
+        sourceEvidence
+      };
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown AI website summary error";
       if (aiGenerationRunId) {
         await this.aiGeneration.markFailed(aiGenerationRunId, message);
       }
+
+      const caughtErrorKind: AiGenerationMeta["errorKind"] =
+        error instanceof AiRetryExhaustedError ? error.errorKind : errorKind;
+
       return {
         aiInsights: fallbackWebsiteAiInsights(result),
-        errorMessage: message
+        errorMessage: toUserFacingAiErrorMessage(caughtErrorKind ?? "UNKNOWN", message),
+        aiMeta: {
+          mode,
+          status: "FAILED",
+          inputChars,
+          estimatedInputTokens: Math.ceil(inputChars / 2),
+          attemptCount: 3,
+          retryCount: 3,
+          durationMs: Date.now() - t0,
+          errorKind: caughtErrorKind,
+          errorMessage: message
+        },
+        summaryPipeline,
+        sourceEvidence
       };
     }
   }
@@ -94,9 +383,10 @@ export class WebsiteAnalysisProcessor extends WorkerHost {
   private async persistCrawlerResult(
     analysisId: string,
     result: WebsiteAnalysisResult,
-    aiInsights: WebsiteAiInsights,
-    aiInsightError?: string
+    aiOutcome: AiOutcome
   ) {
+    const { aiInsights, aiMeta, summaryPipeline, sourceEvidence } = aiOutcome;
+    // Only set errorMessage for fatal crawler-level errors; AI quality goes in aiMeta
     await this.prisma.websiteAnalysis.update({
       where: { id: analysisId },
       data: {
@@ -118,8 +408,15 @@ export class WebsiteAnalysisProcessor extends WorkerHost {
         missingCategories: result.missingCategories as never,
         opportunities: asStringArray(aiInsights.cooperation_opportunities, result.cooperationOpportunities) as never,
         risks: asStringArray(aiInsights.risk_notes, result.risks) as never,
-        rawResult: { ...result, aiInsights, aiInsightError } as never,
-        errorMessage: aiInsightError
+        rawResult: {
+          ...result,
+          aiInsights,
+          aiInsightError: aiOutcome.errorMessage,
+          aiMeta,
+          summaryPipeline,
+          sourceEvidence
+        } as never,
+        errorMessage: undefined // Non-fatal AI errors don't set analysis-level errorMessage
       }
     });
     await this.prisma.websiteAnalysisPage.createMany({
@@ -158,14 +455,6 @@ export class WebsiteAnalysisProcessor extends WorkerHost {
   }
 }
 
-function safeJson(input: string) {
-  try {
-    return JSON.parse(input);
-  } catch {
-    return undefined;
-  }
-}
-
 function websiteAnalysisPrompt() {
   return [
     "你是一名资深外贸OEM/ODM客户开发分析师。",
@@ -176,7 +465,7 @@ function websiteAnalysisPrompt() {
     "",
     "business_summary 用2-4句话概括该客户是谁、主营方向、值得开发的原因。",
     "cooperation_opportunities、sales_entry_points、suggested_next_actions、risk_notes、unknown_factors 均为中文数组，每项简洁具体。",
-    "evidence_pages 只放有效页面，包含 title、url、reason。",
+    "evidence_pages 只放有效页面，包含 title、url、reason，可选 sourceId 对应输入中的页面/产品编号。",
     "",
     "【约束】",
     "brand_positioning 只能基于官网自我描述的定位，不得输出确定的高端/中端/低端品牌档次结论。",
@@ -200,199 +489,16 @@ function websiteAnalysisPrompt() {
   ].join("\n");
 }
 
-function parseWebsiteAiInsights(content: string, result: WebsiteAnalysisResult): WebsiteAiInsights {
-  const parsed = safeJson(content);
-  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-    const record = parsed as Record<string, unknown>;
-    return {
-      business_summary: asText(record.business_summary) || fallbackBusinessSummary(result),
-      customer_profile: asText(record.customer_profile) || "官网未明确展示完整客户画像。",
-      main_business: asText(record.main_business) || fallbackMainBusiness(result),
-      product_line_analysis: asText(record.product_line_analysis) || fallbackProductLine(result),
-      brand_positioning: asText(record.brand_positioning) || result.pricePositioning || "官网未明确展示。",
-      market_channel_signals: asText(record.market_channel_signals) || "官网未明确展示渠道信息。",
-      oem_opportunity_assessment: asText(record.oem_opportunity_assessment) || "可结合品牌页、产品线和联系方式进一步确认OEM/ODM合作机会。",
-      cooperation_opportunities: asStringArray(record.cooperation_opportunities, result.cooperationOpportunities),
-      sales_entry_points: asStringArray(record.sales_entry_points, ["引用官网品牌/产品线信息，先询问其新品开发或补充供应需求。"]),
-      suggested_next_actions: asStringArray(record.suggested_next_actions, ["补充关键联系人。", "确认其采购模式和目标品类。"]),
-      risk_notes: asStringArray(record.risk_notes, result.risks),
-      evidence_pages: asEvidencePages(record.evidence_pages, result),
-      missing_categories_gap: asMissingCategoriesGap(record.missing_categories_gap),
-      price_competitiveness: asPriceCompetitiveness(record.price_competitiveness),
-      unknown_factors: asStringArray(record.unknown_factors, [
-        "采购周期",
-        "实际采购量级",
-        "当前供应商关系",
-        "关键决策人联系方式",
-        "预算范围",
-        "认证要求"
-      ]),
-      our_data_quality_note: asText(record.our_data_quality_note) || ""
-    };
-  }
-  return fallbackWebsiteAiInsights(result);
-}
-
-type ReturnTypeFallback = {
-  detectedLanguage?: string;
-  websiteCompleteness?: number;
-  pricePositioning?: string;
-  productCategories: Array<{ name: string; evidenceUrls: string[]; keywords: string[]; productCount?: number }>;
-  cooperationOpportunities: string[];
-  risks: string[];
-  pages: Array<{ url: string; pageType: string; title?: string; textSummary?: string; errorMessage?: string }>;
-  contacts: Array<{ type: string; value: string; sourceUrl?: string }>;
-};
-
-type WebsiteAiInsights = {
-  business_summary: string;
-  customer_profile: string;
-  main_business: string;
-  product_line_analysis: string;
-  brand_positioning: string;
-  market_channel_signals: string;
-  oem_opportunity_assessment: string;
-  cooperation_opportunities: string[];
-  sales_entry_points: string[];
-  suggested_next_actions: string[];
-  risk_notes: string[];
-  evidence_pages: Array<{ title: string; url: string; reason: string }>;
-  missing_categories_gap: Array<{
-    category: string;
-    customer_has: string;
-    we_can_supply: string;
-    opportunity_score: number;
-    reason: string;
-    data_quality_note: string;
-  }>;
-  price_competitiveness: {
-    level: "competitive" | "neutral" | "challenging" | "unknown";
-    summary: string;
-    price_nature_note: string;
-  };
-  unknown_factors: string[];
-  our_data_quality_note: string;
-};
-
-function fallbackWebsiteAiInsights(result: ReturnTypeFallback): WebsiteAiInsights {
-  return {
-    business_summary: fallbackBusinessSummary(result),
-    customer_profile: "官网展示了品牌、产品/行业页面和联系方式，适合先作为品牌型或渠道型潜在客户跟进；更多企业规模与采购模式需补充公开搜索或人工确认。",
-    main_business: fallbackMainBusiness(result),
-    product_line_analysis: fallbackProductLine(result),
-    brand_positioning: result.pricePositioning || "官网未明确展示价格定位。",
-    market_channel_signals: "官网现有内容可见品牌与零售相关信号，但渠道、采购模式和核心品类仍需人工确认。",
-    oem_opportunity_assessment: "适合用“产品开发、包装设计、私标/定制补充、稳定供货”作为首轮试探方向。",
-    cooperation_opportunities: result.cooperationOpportunities,
-    sales_entry_points: ["引用官网品牌/产品线信息开场，避免模板化开发。", "优先询问其新品开发、补充品类或供应链备选需求。"],
-    suggested_next_actions: ["补充采购/产品负责人邮箱或LinkedIn。", "确认目标品类后再生成个性化英文开发邮件。"],
-    risk_notes: result.risks,
-    evidence_pages: asEvidencePages([], result),
-    missing_categories_gap: [],
-    price_competitiveness: {
-      level: "unknown",
-      summary: "客户官网价格通常为零售价或MSRP，或缺少可确认的B2B/wholesale/trade价格信号，暂不进行价格竞争力判断。",
-      price_nature_note: "注意：客户官网价格通常为零售价或MSRP，与我方OEM供货价不属于同一价格体系。只有出现wholesale、trade price、distributor price等B2B价格信号时，才可做方向性比较。"
-    },
-    unknown_factors: ["采购周期", "实际采购量级", "当前供应商关系", "关键决策人联系方式", "预算范围", "认证要求"],
-    our_data_quality_note: ""
-  };
-}
-
-function fallbackBusinessSummary(result: ReturnTypeFallback) {
-  const categories = result.productCategories.map((item) => item.name).filter(Boolean).slice(0, 4);
-  const contacts = result.contacts.some((contact) => contact.type === "email") ? "官网留有公开邮箱" : "官网公开联系方式有限";
-  return `官网显示该客户具备品牌/产品展示页面，当前识别到${categories.length ? ` ${categories.join("、")} 等方向` : "若干产品或业务方向"}，${contacts}。建议作为潜在OEM/ODM开发对象继续补充联系人和采购模式信息。`;
-}
-
-function fallbackMainBusiness(result: ReturnTypeFallback) {
-  const categories = result.productCategories.map((item) => item.name).filter(Boolean);
-  return categories.length ? `官网识别到的主营/展示方向包括：${categories.join("、")}。` : "官网未识别到清晰产品分类。";
-}
-
-function fallbackProductLine(result: ReturnTypeFallback) {
-  if (!result.productCategories.length) return "官网未识别到清晰产品线，需要人工查看产品页或补充官网内容。";
-  return result.productCategories
-    .map((item) => `${item.name}${item.keywords?.length ? `（关键词：${item.keywords.slice(0, 5).join("、")}）` : ""}`)
-    .join("；");
-}
-
-function asText(value: unknown) {
-  return typeof value === "string" ? value.trim() : "";
-}
-
 function asStringArray(value: unknown, fallback: string[]) {
   if (!Array.isArray(value)) return fallback;
   const items = value.map((item) => (typeof item === "string" ? item.trim() : "")).filter(Boolean);
   return items.length ? items : fallback;
 }
 
-function asEvidencePages(value: unknown, result: ReturnTypeFallback) {
-  if (Array.isArray(value)) {
-    const pages = value
-      .map((item) => {
-        if (!item || typeof item !== "object" || Array.isArray(item)) return undefined;
-        const record = item as Record<string, unknown>;
-        const url = asText(record.url);
-        if (!url) return undefined;
-        return {
-          title: asText(record.title) || url,
-          url,
-          reason: asText(record.reason) || "官网有效页面"
-        };
-      })
-      .filter((item): item is { title: string; url: string; reason: string } => Boolean(item));
-    if (pages.length) return pages.slice(0, 8);
-  }
-  return result.pages
-    .filter((page) => !page.errorMessage)
-    .slice(0, 8)
-    .map((page) => ({
-      title: page.title || page.url,
-      url: page.url,
-      reason: `${page.pageType} 页面用于支撑客户分析`
-    }));
-}
-
-function asMissingCategoriesGap(value: unknown): WebsiteAiInsights["missing_categories_gap"] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((item) => {
-      if (!item || typeof item !== "object" || Array.isArray(item)) return undefined;
-      const record = item as Record<string, unknown>;
-      const category = asText(record.category);
-      if (!category) return undefined;
-      return {
-        category,
-        customer_has: asText(record.customer_has) || "未明确展示",
-        we_can_supply: asText(record.we_can_supply) || "需人工确认",
-        opportunity_score:
-          typeof record.opportunity_score === "number" && record.opportunity_score >= 1 && record.opportunity_score <= 10
-            ? record.opportunity_score
-            : 5,
-        reason: asText(record.reason) || "基于官网产品类目与我方产能的交叉比对",
-        data_quality_note: asText(record.data_quality_note) || ""
-      };
-    })
-    .filter((item): item is WebsiteAiInsights["missing_categories_gap"][number] => Boolean(item))
-    .slice(0, 10);
-}
-
-function asPriceCompetitiveness(value: unknown): WebsiteAiInsights["price_competitiveness"] {
-  if (value && typeof value === "object" && !Array.isArray(value)) {
-    const record = value as Record<string, unknown>;
-    const { level } = record;
-    if (level === "competitive" || level === "neutral" || level === "challenging" || level === "unknown") {
-      return {
-        level,
-        summary: asText(record.summary) || "未提供价格竞争力摘要。",
-        price_nature_note: asText(record.price_nature_note) || "注意：客户官网价格通常为零售价或MSRP，与我方OEM供货价不属于同一价格体系。"
-      };
-    }
-  }
-  return {
-    level: "unknown",
-    summary: "客户官网价格通常为零售价或MSRP，或缺少可确认的B2B/wholesale/trade价格信号，暂不进行价格竞争力判断。",
-    price_nature_note: "注意：客户官网价格通常为零售价或MSRP，与我方OEM供货价不属于同一价格体系。"
-  };
+function toUserFacingAiErrorMessage(errorKind: AiErrorKind | string, rawMessage: string): string {
+  if (errorKind === "NETWORK") return "无法连接到AI服务，请检查网络或稍后重试。";
+  if (errorKind === "TIMEOUT") return "AI服务响应超时，请稍后重试。";
+  if (errorKind === "AUTH") return "AI服务认证失败，请联系管理员。";
+  if (errorKind === "RATE_LIMIT") return "AI服务请求过于频繁，请稍后重试。";
+  return rawMessage;
 }

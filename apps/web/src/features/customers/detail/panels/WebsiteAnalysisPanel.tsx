@@ -1,16 +1,33 @@
 import type { CustomerDetail, WebsiteAnalysis, WebsiteAiInsights, WebsiteAnalysisPage, WebsiteAnalysisProduct } from "../shared/types";
-import { AnalysisSection, asArray, asRecord, getText, getNumber, getStringArray, stringifyInsight, InsightList, EvidenceLinks, statusText, isPendingStatus, contactTypeLabel, pageTypeLabel, shortUrl, categoryName, readablePriceRange, fallbackProductLineText, getWebsiteAiInsights } from "../shared/ui";
+import { AnalysisSection, asArray, asRecord, getText, getNumber, getStringArray, stringifyInsight, InsightList, EvidenceLinks, statusText, isPendingStatus, contactTypeLabel, pageTypeLabel, shortUrl, categoryName, readablePriceRange, fallbackProductLineText, getWebsiteAiInsights, getWebsiteAiMeta } from "../shared/ui";
+import type { WebsiteAiMetaView } from "../shared/ui";
 import { Detail } from "../shared/ui";
+import { shouldShowWebsiteAnalysisReport } from "./website-analysis-panel-state";
 
 export function WebsiteAnalysisPanel({ customer }: { customer: CustomerDetail }) {
   const analysis = customer.websiteAnalyses[0];
   const validPages = (analysis?.pages ?? []).filter((page) => !page.errorMessage);
   const failedPages = (analysis?.pages ?? []).filter((page) => page.errorMessage);
   const aiInsights = getWebsiteAiInsights(analysis);
+  const aiMeta = getWebsiteAiMeta(analysis);
   const rawResult = asRecord(analysis?.rawResult);
+  const sourceEvidence = asRecord(rawResult.sourceEvidence);
   const aiInsightError = getText(rawResult, "aiInsightError");
   const hasCrawlerData = Boolean(analysis?.rawResult) || validPages.length > 0 || asArray(analysis?.productCategories).length > 0;
-  const canShowReport = analysis ? analysis.status !== "FAILED" || hasCrawlerData : false;
+  const canShowReport = shouldShowWebsiteAnalysisReport(analysis?.status, hasCrawlerData);
+
+  if (analysis && isPendingStatus(analysis.status)) {
+    return (
+      <section className="panel">
+        <div className="panel-title"><h2>客户官网分析</h2><span>{statusText(analysis.status)}</span></div>
+        {!customer.websiteUrl ? <div className="empty-state">请先在概览里补充并保存客户官网 URL，然后再发起官网分析。</div> : null}
+        <div className="page-stack">
+          <div className="loading-state">官网分析正在后台处理中，完成后会自动刷新。</div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="panel">
       <div className="panel-title"><h2>客户官网分析</h2><span>{analysis ? statusText(analysis.status) : "未分析"}</span></div>
@@ -33,8 +50,9 @@ export function WebsiteAnalysisPanel({ customer }: { customer: CustomerDetail })
           {analysis.status !== "FAILED" && aiInsightError ? (
             <div className="warning-state">官网抓取已完成，AI总结生成失败，当前展示的是抓取结果与基础分析。失败原因：{aiInsightError}</div>
           ) : null}
+          {analysis.status !== "FAILED" && !aiInsightError && aiMeta ? <AiStatusWarning meta={aiMeta} /> : null}
 
-          {canShowReport ? <WebsiteBusinessReportV2 analysis={analysis} insights={aiInsights} hasAiInsightError={Boolean(aiInsightError)} /> : null}
+          {canShowReport ? <WebsiteBusinessReportV2 analysis={analysis} insights={aiInsights} aiMeta={aiMeta} hasAiInsightError={Boolean(aiInsightError)} sourceEvidence={sourceEvidence} /> : null}
 
           <details className="ai-versions">
             <summary>抓取异常与技术明细</summary>
@@ -47,7 +65,7 @@ export function WebsiteAnalysisPanel({ customer }: { customer: CustomerDetail })
   );
 }
 
-function WebsiteBusinessReportV2({ analysis, insights, hasAiInsightError }: { analysis: WebsiteAnalysis; insights?: WebsiteAiInsights; hasAiInsightError?: boolean }) {
+function WebsiteBusinessReportV2({ analysis, insights, aiMeta, hasAiInsightError, sourceEvidence }: { analysis: WebsiteAnalysis; insights?: WebsiteAiInsights; aiMeta?: WebsiteAiMetaView; hasAiInsightError?: boolean; sourceEvidence?: Record<string, unknown> }) {
   const summary = insights?.business_summary || "官网分析已完成，但暂未生成完整客户画像。建议重新分析或补充公开搜索能力。";
   const validPages = (analysis.pages ?? []).filter((page) => !page.errorMessage);
   return (
@@ -55,7 +73,9 @@ function WebsiteBusinessReportV2({ analysis, insights, hasAiInsightError }: { an
       <div className="analysis-report__summary">
         <span>客户分析结论</span>
         <p>{summary}</p>
-        {hasAiInsightError ? <p style={{ marginTop: 8, color: "#a16207", fontSize: 13 }}>AI总结未完成，以下内容优先基于官网抓取结果和系统基础分析生成。</p> : null}
+        {hasAiInsightError || aiMeta?.status === "FAILED" ? <p style={{ marginTop: 8, color: "#a16207", fontSize: 13 }}>AI总结未完成，以下内容优先基于官网抓取结果和系统基础分析生成。</p> : null}
+        {aiMeta?.status === "PARTIAL" ? <p style={{ marginTop: 8, color: "#a16207", fontSize: 13 }}>AI分析部分完成，部分分组使用规则兜底。已成功信息已纳入以下报告。</p> : null}
+        {aiMeta?.status === "SKIPPED" ? <p style={{ marginTop: 8, color: "#a16207", fontSize: 13 }}>AI总结因输入过大或信息量不足跳过。以下内容基于官网抓取结果和系统基础分析。</p> : null}
         {insights?.our_data_quality_note ? <p style={{ marginTop: 8, color: "#b45309", fontSize: 13 }}>数据质量提示：{insights.our_data_quality_note}</p> : null}
       </div>
       <div className="analysis-grid">
@@ -111,6 +131,9 @@ function WebsiteBusinessReportV2({ analysis, insights, hasAiInsightError }: { an
           </AnalysisSection>
           <AnalysisSection title="待补充信息">
             <UnknownFactorsList items={insights?.unknown_factors} />
+          </AnalysisSection>
+          <AnalysisSection title="来源追溯">
+            <SourceEvidenceSection data={sourceEvidence} />
           </AnalysisSection>
         </div>
       </div>
@@ -292,6 +315,60 @@ function WebsitePageList({ pages, fallbackUrls }: { pages?: WebsiteAnalysisPage[
           <EvidenceLinks urls={[page.url]} />
         </div>
       ))}
+    </div>
+  );
+}
+
+function AiStatusWarning({ meta }: { meta: WebsiteAiMetaView }) {
+  if (meta.status === "SUCCEEDED") return null;
+  const messages: Record<string, string> = {
+    PARTIAL: "官网数据较多，AI分析部分完成。已成功分组仍参与报告生成，完整抓取数据可在技术明细中查看。",
+    FAILED: "官网抓取已完成，但AI总结未完整生成。当前展示的是抓取结果与系统基础分析，建议稍后重试AI总结。",
+    SKIPPED: "因输入过大或信息量不足跳过AI总结，当前展示基础抓取报告。完整抓取数据仍保存在技术明细中。"
+  };
+  const message = messages[meta.status] || `AI状态：${meta.status}${meta.errorMessage ? ` — ${meta.errorMessage}` : ""}`;
+  return (
+    <div className="warning-state">{message}</div>
+  );
+}
+
+type SourceEvidenceData = Record<string, unknown>;
+
+function SourceEvidenceSection({ data }: { data?: SourceEvidenceData }) {
+  const pages = asArray((data as Record<string, unknown> | undefined)?.pages);
+  const products = asArray((data as Record<string, unknown> | undefined)?.products);
+  const contacts = asArray((data as Record<string, unknown> | undefined)?.contacts);
+  const hasAny = pages.length > 0 || products.length > 0 || contacts.length > 0;
+
+  if (!hasAny) return <div className="empty-state">暂无可追溯的原始证据来源。完整抓取数据请查看下方"抓取异常与技术明细"。</div>;
+
+  return (
+    <div className="analysis-list">
+      {pages.length > 0 ? (
+        <div className="analysis-row">
+          <strong>抓取页面 ({pages.length})</strong>
+          <span>{pages.slice(0, 6).map((page) => {
+            const record = asRecord(page);
+            return getText(record, "title") || shortUrl(getText(record, "url"));
+          }).join("、")}{pages.length > 6 ? ` 等${pages.length}个页面` : ""}</span>
+          <EvidenceLinks urls={pages.map((page) => getText(asRecord(page), "url")).filter(Boolean)} />
+        </div>
+      ) : null}
+      {products.length > 0 ? (
+        <div className="analysis-row">
+          <strong>识别产品 ({products.length})</strong>
+          <span>{products.slice(0, 6).map((product) => getText(asRecord(product), "name")).filter(Boolean).join("、")}{products.length > 6 ? ` 等${products.length}个产品` : ""}</span>
+        </div>
+      ) : null}
+      {contacts.length > 0 ? (
+        <div className="analysis-row">
+          <strong>公开联系方式 ({contacts.length})</strong>
+          <span>{contacts.slice(0, 4).map((contact) => {
+            const record = asRecord(contact);
+            return `${contactTypeLabel(getText(record, "type"))}: ${getText(record, "value")}`;
+          }).join("、")}{contacts.length > 4 ? ` 等${contacts.length}个` : ""}</span>
+        </div>
+      ) : null}
     </div>
   );
 }
