@@ -39,7 +39,7 @@ export function buildResearchBatchAiInput(
   };
 }
 
-function compactResearchEvidenceItem(item: ResearchEvidenceItem): ResearchBatchGroupItem {
+export function compactResearchEvidenceItem(item: ResearchEvidenceItem): ResearchBatchGroupItem {
   switch (item.kind) {
     case "CUSTOMER_PROFILE":
       return {

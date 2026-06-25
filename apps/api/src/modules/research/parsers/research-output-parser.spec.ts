@@ -111,6 +111,8 @@ function main() {
   assert.ok(prompt.includes("social_media_accounts"));
   assert.ok(prompt.includes("hot_products"));
   assert.ok(prompt.includes("cooperation_entry_opportunities"));
+  assert.equal(prompt.includes("\"markdown_report\""), false, "AI prompt should not require markdown_report; backend builds markdown from sections");
+  assert.equal(prompt.includes("markdown_report 必须"), false, "AI prompt should not force markdown_report generation");
 }
 
 main();

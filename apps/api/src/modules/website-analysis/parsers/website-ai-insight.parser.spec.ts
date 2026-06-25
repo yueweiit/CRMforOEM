@@ -239,7 +239,7 @@ function run() {
     );
     assert.equal(result.ok, true);
     assert.equal(result.data.evidence_pages.length, 1, "evidence page with valid sourceId is preserved");
-    assert.equal(result.data.evidence_pages[0].title, "Home");
+    assert.equal(result.data.evidence_pages[0].title, "Example Home");
     assert.equal(result.data.evidence_pages[0].sourceId, "page:0", "valid sourceId is preserved in evidence page");
   }
 

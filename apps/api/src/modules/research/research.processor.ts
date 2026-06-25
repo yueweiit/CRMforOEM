@@ -7,12 +7,14 @@ import {
   AiTextCompressor,
   AiSummaryCache,
   AiRetryExhaustedError,
+  AI_BATCH_TARGET_CHARS,
+  AI_BATCH_HARD_LIMIT_CHARS,
   AI_FINAL_TARGET_CHARS,
   AI_FINAL_WARNING_CHARS,
   AI_FINAL_HARD_LIMIT_CHARS,
   AI_GLOBAL_HARD_LIMIT_CHARS
 } from "../ai/ai.public";
-import type { AiErrorKind, AiGenerationMeta, SummaryPipelineMeta } from "../ai/ai.public";
+import type { AiErrorKind, AiGenerationMeta, SummaryPipelineGroupStatus, SummaryPipelineMeta } from "../ai/ai.public";
 import { RESEARCH_REPORT_QUEUE } from "./research.constants";
 import { ResearchContextBuilder } from "./builders/research-context-builder";
 import { ResearchReportRunService } from "./services/research-report-run.service";
@@ -27,9 +29,10 @@ import { buildMarkdownReportV2, parseResearchOutput } from "./parsers/research-o
 import type { ResearchParsedOutput } from "./parsers/research-output-parser";
 import {
   buildResearchEvidenceInventory,
-  buildResearchGroups
+  buildResearchGroups,
+  type ResearchEvidenceGroup
 } from "./builders/research-evidence-grouper";
-import { buildResearchBatchAiInput } from "./builders/research-batch-input.builder";
+import { compactResearchEvidenceItem } from "./builders/research-batch-input.builder";
 import {
   RESEARCH_RECOMMENDATION_FIELDS,
   RESEARCH_SECTION_ORDER,
@@ -81,20 +84,8 @@ export class ResearchProcessor extends WorkerHost {
         durationMs: outcome.aiMeta.durationMs ?? 0
       };
 
-      if (outcome.parseOk || outcome.parsed) {
-        if (outcome.parseOk) {
-          return this.reportRun.persistSuccess({
-            reportId, customerId,
-            aiGenerationRunId: report.aiGenerationRunId,
-            parsed: outcome.parsed as Record<string, unknown> & { title: string; markdown_report: string },
-            sourceEvidence: outcome.sourceEvidence,
-            searchEnabled: context.publicSearch.enabled,
-            aiMeta: outcome.aiMeta,
-            summaryPipeline: outcome.summaryPipeline,
-            completion
-          });
-        }
-        return this.reportRun.persistPartial({
+      if (outcome.parseOk) {
+        return this.reportRun.persistSuccess({
           reportId, customerId,
           aiGenerationRunId: report.aiGenerationRunId,
           parsed: outcome.parsed as Record<string, unknown> & { title: string; markdown_report: string },
@@ -102,12 +93,22 @@ export class ResearchProcessor extends WorkerHost {
           searchEnabled: context.publicSearch.enabled,
           aiMeta: outcome.aiMeta,
           summaryPipeline: outcome.summaryPipeline,
-          completion,
-          errorMessage: outcome.errorMessage
+          completion
         });
       }
 
-      throw new Error(outcome.errorMessage ?? "AI generation produced no usable output");
+      // Parse failed but fallback data is available
+      return this.reportRun.persistPartial({
+        reportId, customerId,
+        aiGenerationRunId: report.aiGenerationRunId,
+        parsed: outcome.parsed as Record<string, unknown> & { title: string; markdown_report: string },
+        sourceEvidence: outcome.sourceEvidence,
+        searchEnabled: context.publicSearch.enabled,
+        aiMeta: outcome.aiMeta,
+        summaryPipeline: outcome.summaryPipeline,
+        completion,
+        errorMessage: outcome.errorMessage
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown research report error";
       await this.reportRun.persistFailure(reportId, report.aiGenerationRunId, message);
@@ -204,81 +205,197 @@ export class ResearchProcessor extends WorkerHost {
           };
         }
       } else {
-        // BATCH_SUMMARY: build group-based input with compression
-        const batchInput = buildResearchBatchAiInput(groups, context.customer.name);
-        batchInput.groups = this.compressor.compressFinalInput(batchInput.groups, {
-          targetChars: AI_FINAL_TARGET_CHARS,
-          hardLimitChars: AI_FINAL_HARD_LIMIT_CHARS
-        }) as typeof batchInput.groups;
-
-        let batchPayload = JSON.stringify(batchInput);
-
-        // The wrapper (customerName + promptVersion + JSON structure) adds overhead beyond groups.
-        // Re-compress with a reduced budget if the full payload still exceeds the hard limit.
-        if (batchPayload.length > AI_FINAL_HARD_LIMIT_CHARS) {
-          const wrapperOverhead = JSON.stringify({ ...batchInput, groups: [] }).length;
-          const effectiveHardLimit = Math.max(AI_FINAL_TARGET_CHARS, AI_FINAL_HARD_LIMIT_CHARS - wrapperOverhead);
-          batchInput.groups = this.compressor.compressFinalInput(batchInput.groups, {
-            targetChars: Math.min(AI_FINAL_TARGET_CHARS, effectiveHardLimit),
-            hardLimitChars: effectiveHardLimit
-          }) as typeof batchInput.groups;
-          batchPayload = JSON.stringify(batchInput);
-        }
-
-        const contentHash = this.cache.computeContentHash(batchPayload);
-        const cacheKey = { scope: cacheScope, groupName: "batch", batchIndex: 0, contentHash, promptVersion: cachePromptVersion };
-
-        const cached = this.cache.get(cacheKey);
-        if (cached) {
-          completionContent = cached;
-        } else if (this.cache.canCall(cacheScope, maxCalls)) {
-          const completion = await this.retry.completeWithRetry({
-            system: researchSystemPrompt(),
-            user: batchPayload,
-            jsonMode: true
-          });
-          this.cache.recordCall(cacheScope);
-          this.cache.set(cacheKey, completion.content);
-          completionContent = completion.content;
-        } else {
-          return {
-            parsed: fallbackParsedOutput(context),
-            errorMessage: "AI call limit reached — using fallback",
-            aiMeta: {
-              mode: "FALLBACK", status: "SKIPPED", inputChars: budgetedInputChars,
-              estimatedInputTokens: Math.ceil(budgetedInputChars / 2),
-              attemptCount: 0, retryCount: 0,
-              durationMs: Date.now() - t0,
-              errorKind: "UNKNOWN",
-              errorMessage: `Call limit ${maxCalls} reached for scope ${cacheScope}`
-            },
-            summaryPipeline: undefined,
-            sourceEvidence,
-            parseOk: false
-          };
-        }
-
-        const groupStatus = "succeeded" as const;
+        // BATCH_SUMMARY: per-group summaries → merge → final report
+        mode = "BATCH_SUMMARY";
+        const perGroupPromptVersion = "research-per-group-v1";
         const groupMap: SummaryPipelineMeta["groups"] = {};
+        const groupResults: Array<{
+          groupName: string;
+          status: SummaryPipelineGroupStatus;
+          content: string;
+          sourceCount: number;
+        }> = [];
+        const pipelineErrors: SummaryPipelineMeta["errors"] = [];
+        let firstErrorKind: AiErrorKind | undefined;
+        let firstErrorMessage: string | undefined;
+
+        // Phase 1: Per-group summaries
         for (const group of groups) {
+          const perGroupInput = buildPerGroupSummaryInput(group, context.customer.name);
+          let perGroupPayload = JSON.stringify(perGroupInput);
+
+          // Compress if group exceeds batch hard limit
+          if (perGroupPayload.length > AI_BATCH_HARD_LIMIT_CHARS) {
+            const compressedItems = this.compressor.compressFinalInput(
+              perGroupInput.items as unknown[],
+              { targetChars: AI_BATCH_TARGET_CHARS, hardLimitChars: AI_BATCH_HARD_LIMIT_CHARS }
+            );
+            perGroupInput.items = compressedItems as typeof perGroupInput.items;
+            perGroupPayload = JSON.stringify(perGroupInput);
+          }
+
+          const contentHash = this.cache.computeContentHash(perGroupPayload);
+          const cacheKey = {
+            scope: cacheScope,
+            groupName: group.groupName,
+            batchIndex: 0,
+            contentHash,
+            promptVersion: perGroupPromptVersion
+          };
+
+          let groupSummaryContent: string;
+          const cached = this.cache.get(cacheKey);
+          if (cached) {
+            groupSummaryContent = cached;
+          } else if (this.cache.canCall(cacheScope, maxCalls)) {
+            try {
+              const completion = await this.retry.completeWithRetry({
+                system: PER_GROUP_SUMMARY_SYSTEM_PROMPT,
+                user: perGroupPayload,
+                jsonMode: true
+              });
+              this.cache.recordCall(cacheScope);
+              this.cache.set(cacheKey, completion.content);
+              groupSummaryContent = completion.content;
+            } catch (error) {
+              if (!firstErrorKind && error instanceof AiRetryExhaustedError) {
+                firstErrorKind = error.errorKind;
+                firstErrorMessage = error.message;
+              }
+              groupMap[group.groupName] = {
+                status: "failed",
+                batchCount: 1,
+                failedBatchCount: 1,
+                sourceCount: group.sourceIds.length
+              };
+              pipelineErrors.push({
+                scope: "group",
+                groupName: group.groupName,
+                errorKind: error instanceof AiRetryExhaustedError ? error.errorKind : "UNKNOWN",
+                message: error instanceof Error ? error.message : String(error)
+              });
+              continue;
+            }
+          } else {
+            groupMap[group.groupName] = {
+              status: "skipped",
+              batchCount: 0,
+              failedBatchCount: 0,
+              sourceCount: group.sourceIds.length
+            };
+            continue;
+          }
+
+          groupResults.push({
+            groupName: group.groupName,
+            status: "succeeded",
+            content: groupSummaryContent,
+            sourceCount: group.sourceIds.length
+          });
           groupMap[group.groupName] = {
-            status: groupStatus,
+            status: "succeeded",
             batchCount: 1,
             failedBatchCount: 0,
             sourceCount: group.sourceIds.length
           };
         }
 
+        // Phase 2: Build summaryPipeline from real per-group results
+        const succeededResults = groupResults.filter((r) => r.status === "succeeded");
+        const pipelineStatus: SummaryPipelineGroupStatus =
+          succeededResults.length === groups.length ? "succeeded"
+          : succeededResults.length > 0 ? "partial_succeeded"
+          : "failed";
+
         summaryPipeline = {
-          status: "succeeded",
+          status: pipelineStatus,
           mode: "BATCH_SUMMARY",
           inputChars: budgetedInputChars,
-          finalInputChars: batchPayload.length,
+          finalInputChars: 0,
           attemptCount: 1,
           retryCount: 0,
           groups: groupMap,
-          errors: []
+          errors: pipelineErrors
         };
+
+        if (succeededResults.length === 0) {
+          return {
+            parsed: fallbackParsedOutput(context),
+            aiMeta: {
+              mode,
+              status: "FAILED",
+              inputChars: budgetedInputChars,
+              estimatedInputTokens: Math.ceil(budgetedInputChars / 2),
+              attemptCount: groups.length,
+              retryCount: 0,
+              durationMs: Date.now() - t0,
+              errorKind: firstErrorKind ?? "UNKNOWN",
+              errorMessage: firstErrorMessage ?? "All per-group summaries failed"
+            },
+            summaryPipeline,
+            sourceEvidence,
+            parseOk: false,
+            errorMessage: "All per-group summaries failed — AI unavailable for all groups"
+          };
+        }
+
+        // Build merged input from successful summaries
+        const mergedInput = buildMergedSummaryInput(succeededResults, context.customer.name);
+        let mergedPayload = JSON.stringify(mergedInput);
+
+        // Compress merged input if exceeds final hard limit
+        if (mergedPayload.length > AI_FINAL_HARD_LIMIT_CHARS) {
+          mergedInput.groupSummaries = this.compressor.compressFinalInput(
+            mergedInput.groupSummaries as unknown[],
+            { targetChars: AI_FINAL_TARGET_CHARS, hardLimitChars: AI_FINAL_HARD_LIMIT_CHARS }
+          ) as typeof mergedInput.groupSummaries;
+          mergedPayload = JSON.stringify(mergedInput);
+        }
+
+        summaryPipeline.finalInputChars = mergedPayload.length;
+
+        // Phase 3: Final AI call with merged summaries
+        const finalContentHash = this.cache.computeContentHash(mergedPayload);
+        const finalCacheKey = {
+          scope: cacheScope,
+          groupName: "final",
+          batchIndex: 0,
+          contentHash: finalContentHash,
+          promptVersion: cachePromptVersion
+        };
+
+        const finalCached = this.cache.get(finalCacheKey);
+        if (finalCached) {
+          completionContent = finalCached;
+        } else if (this.cache.canCall(cacheScope, maxCalls)) {
+          const completion = await this.retry.completeWithRetry({
+            system: researchSystemPrompt(),
+            user: mergedPayload,
+            jsonMode: true
+          });
+          this.cache.recordCall(cacheScope);
+          this.cache.set(finalCacheKey, completion.content);
+          completionContent = completion.content;
+        } else {
+          return {
+            parsed: fallbackParsedOutput(context),
+            errorMessage: "AI call limit reached — using fallback",
+            aiMeta: {
+              mode: "FALLBACK",
+              status: "SKIPPED",
+              inputChars: budgetedInputChars,
+              estimatedInputTokens: Math.ceil(budgetedInputChars / 2),
+              attemptCount: 0,
+              retryCount: 0,
+              durationMs: Date.now() - t0,
+              errorKind: "UNKNOWN",
+              errorMessage: `Call limit ${maxCalls} reached for scope ${cacheScope}`
+            },
+            summaryPipeline,
+            sourceEvidence,
+            parseOk: false
+          };
+        }
       }
 
       const parsed = parseResearchOutput(completionContent, context.customer.name, context.publicSearch.warning);
@@ -301,16 +418,12 @@ export class ResearchProcessor extends WorkerHost {
         };
       }
 
-      // Parse failed — use fallback
+      // Parse failed — use fallback; keep per-group statuses intact
       errorKind = parsed.reason as AiGenerationMeta["errorKind"];
       errorMessage = parsed.warnings.join("; ") || `AI parse failed: ${parsed.reason}`;
 
       if (summaryPipeline) {
         summaryPipeline.status = "partial_succeeded";
-        for (const g of Object.values(summaryPipeline.groups)) {
-          g.status = "failed";
-          g.failedBatchCount = g.batchCount;
-        }
         summaryPipeline.errors.push({
           scope: "final",
           errorKind: errorKind ?? "INVALID_JSON",
@@ -341,6 +454,20 @@ export class ResearchProcessor extends WorkerHost {
       const caughtErrorKind: AiGenerationMeta["errorKind"] =
         error instanceof AiRetryExhaustedError ? error.errorKind : errorKind;
 
+      if (summaryPipeline) {
+        summaryPipeline.status = "partial_succeeded";
+        summaryPipeline.attemptCount = error instanceof AiRetryExhaustedError ? error.attemptCount : 1;
+        summaryPipeline.retryCount = error instanceof AiRetryExhaustedError ? error.retryCount : 0;
+        summaryPipeline.errors.push({
+          scope: "provider",
+          errorKind: caughtErrorKind ?? "UNKNOWN",
+          message
+        });
+      }
+
+      const actualAttempts = error instanceof AiRetryExhaustedError ? error.attemptCount : 1;
+      const actualRetries = error instanceof AiRetryExhaustedError ? error.retryCount : 0;
+
       return {
         parsed: fallbackParsedOutput(context),
         aiMeta: {
@@ -348,8 +475,8 @@ export class ResearchProcessor extends WorkerHost {
           status: "FAILED",
           inputChars: budgetedInputChars,
           estimatedInputTokens: Math.ceil(budgetedInputChars / 2),
-          attemptCount: 3,
-          retryCount: 3,
+          attemptCount: actualAttempts,
+          retryCount: actualRetries,
           durationMs: Date.now() - t0,
           errorKind: caughtErrorKind,
           errorMessage: message
@@ -361,6 +488,45 @@ export class ResearchProcessor extends WorkerHost {
       };
     }
   }
+}
+
+// ── Per-group summary pipeline ──
+
+const PER_GROUP_SUMMARY_SYSTEM_PROMPT = [
+  "你是一名外贸OEM/ODM客户开发研究员。请根据以下证据组提取与该客户背调维度相关的关键事实。",
+  "只输出严格 JSON 对象，不要包含解释、备注或代码块标记：",
+  '{"summary": "该维度证据的关键事实总结（中文，200字以内）", "key_facts": ["从证据中提取的事实"], "missing": ["该维度明显缺失的信息"]}',
+  "只从给定证据中提取，不要编造信息。如果证据不足以得出结论，在 missing 中说明。"
+].join("\n");
+
+function buildPerGroupSummaryInput(group: ResearchEvidenceGroup, customerName: string) {
+  return {
+    customerName,
+    groupName: group.groupName,
+    itemCount: group.items.length,
+    items: group.items.map(compactResearchEvidenceItem)
+  };
+}
+
+function buildMergedSummaryInput(
+  succeededResults: Array<{ groupName: string; content: string; sourceCount: number }>,
+  customerName: string
+) {
+  return {
+    customerName,
+    promptVersion: "research-report-v5",
+    groupSummaries: succeededResults.map((r) => {
+      let parsed: unknown;
+      try { parsed = JSON.parse(r.content); } catch {
+        const match = r.content.match(/\{[\s\S]*\}/);
+        if (match) try { parsed = JSON.parse(match[0]); } catch { /* use raw */ }
+      }
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return { groupName: r.groupName, sourceCount: r.sourceCount, ...(parsed as Record<string, unknown>) };
+      }
+      return { groupName: r.groupName, sourceCount: r.sourceCount, summary: r.content.slice(0, 800) };
+    })
+  };
 }
 
 function fallbackParsedOutput(context: { customer: { name: string }; publicSearch: { warning?: string } }): ResearchParsedOutput {

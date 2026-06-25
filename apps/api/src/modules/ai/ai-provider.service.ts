@@ -34,9 +34,11 @@ export class AiProviderService {
     return this.config.get<string>("AI_MODEL", "gpt-4.1-mini");
   }
 
-  /** Set AI_PROVIDER_SUPPORTS_JSON_RESPONSE_FORMAT=false for non-OpenAI providers */
   private get supportsJsonResponseFormat(): boolean {
-    return this.config.get<string>("AI_PROVIDER_SUPPORTS_JSON_RESPONSE_FORMAT", "true") !== "false";
+    const configured = this.config.get<string>("AI_PROVIDER_SUPPORTS_JSON_RESPONSE_FORMAT");
+    if (configured !== undefined) return configured !== "false";
+    const baseUrl = this.config.get<string>("AI_BASE_URL", "https://api.openai.com/v1").toLowerCase();
+    return baseUrl.includes("api.openai.com");
   }
 
   async complete(input: AiCompletionInput): Promise<AiCompletionResult> {
@@ -101,6 +103,12 @@ export class AiProviderService {
       try {
         raw = JSON.parse(rawText);
       } catch {
+        if (!rawText.trim()) {
+          throw new AiProviderError(
+            "AI provider returned an empty response body",
+            { statusCode: response.status }
+          );
+        }
         throw new AiProviderError(
           `AI provider returned non-JSON response. Body: ${rawText.slice(0, 300)}`,
           { statusCode: response.status }
@@ -152,4 +160,3 @@ function parseRetryAfter(header: string | null): number | undefined {
   if (!isNaN(date.getTime())) return Math.max(0, date.getTime() - Date.now());
   return undefined;
 }
-

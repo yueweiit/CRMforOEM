@@ -16,8 +16,8 @@ export function researchSystemPrompt() {
     "第1-7维度的 confirmed_facts 必须是已从来源证据中直接验证的事实；analysis 是基于来源的合理推断；missing_info 是当前无法确认但值得业务继续补充的信息。",
     "第8维度可以结合 companyKnowledge 输出客户开发价值评级、开发优先级、推荐供货产品、邮件开发切入点、合作机会、潜在合作风险和下一步行动。",
     "source_basis 要列出每个维度用到的官网 URL、公开搜索结果 URL 或 CRM/企业资料库来源说明。",
-    "markdown_report 必须是中文 Markdown，面向业务员和销售主管，可直接阅读。",
-    "总输出控制在 3000 个中文字符以内，确保 JSON 完整闭合，不要输出多余解释。"
+    "后端会根据 sections 生成中文 Markdown 报告，你只需要返回结构化 JSON。",
+    "总输出控制在 2200 个中文字符以内，确保 JSON 完整闭合，不要输出多余解释。"
   ].join("\n");
 
   return `你是一名资深外贸OEM/ODM客户开发研究员。

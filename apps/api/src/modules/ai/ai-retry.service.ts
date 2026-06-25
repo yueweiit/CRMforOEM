@@ -3,6 +3,14 @@ import { AiProviderService, AiProviderError, type AiCompletionInput } from "./ai
 import { AiBudgetService } from "./ai-budget.service";
 import { type AiErrorKind, type AiCompletionResult, isRetryableAiErrorKind, AI_GLOBAL_HARD_LIMIT_CHARS } from "./ai-generation.types";
 
+function tryParseJson(input: string): unknown | undefined {
+  try { return JSON.parse(input); } catch {
+    const match = input.match(/\{[\s\S]*\}/);
+    if (!match) return undefined;
+    try { return JSON.parse(match[0]); } catch { return undefined; }
+  }
+}
+
 type RetryOptions = {
   maxAttempts?: number;
   jsonMode?: boolean;
@@ -15,7 +23,7 @@ type Attempt = {
 
 const DEFAULT_ATTEMPTS: Attempt[] = [
   { delayMs: 0, repairJson: false },
-  { delayMs: 1_000, repairJson: false },
+  { delayMs: 1_000, repairJson: true },
   { delayMs: 3_000, repairJson: true }
 ];
 
@@ -38,11 +46,15 @@ export class AiRetryService {
     let lastErrorKind: AiErrorKind = "UNKNOWN";
     let lastErrorMessage: string | undefined;
     let pendingRetryMs = 0;
+    let actualAttempts = 0;
+    let actualRetries = 0;
 
     // Pre-flight check: base input must be under global limit
     this.budget.assertGlobalLimit(input.user);
 
     for (const attempt of attempts) {
+      actualAttempts++;
+      if (actualAttempts > 1) actualRetries++;
       const delay = Math.max(attempt.delayMs, pendingRetryMs);
       pendingRetryMs = 0;
       if (delay > 0) {
@@ -78,9 +90,7 @@ export class AiRetryService {
         }
 
         if (expectsJson) {
-          try {
-            JSON.parse(completion.content);
-          } catch {
+          if (!tryParseJson(completion.content)) {
             lastErrorKind = "INVALID_JSON";
             lastErrorMessage = "AI returned invalid JSON";
             continue;
@@ -103,17 +113,21 @@ export class AiRetryService {
       }
     }
 
-    throw new AiRetryExhaustedError(lastErrorKind, lastErrorMessage);
+    throw new AiRetryExhaustedError(lastErrorKind, lastErrorMessage, { attemptCount: actualAttempts, retryCount: actualRetries });
   }
 }
 
 export class AiRetryExhaustedError extends Error {
   public readonly errorKind: AiErrorKind;
+  public readonly attemptCount: number;
+  public readonly retryCount: number;
 
-  constructor(kind: AiErrorKind, message?: string) {
+  constructor(kind: AiErrorKind, message?: string, counts?: { attemptCount: number; retryCount: number }) {
     super(message ?? `AI retry exhausted (${kind})`);
     this.name = "AiRetryExhaustedError";
     this.errorKind = kind;
+    this.attemptCount = counts?.attemptCount ?? 1;
+    this.retryCount = counts?.retryCount ?? 0;
   }
 }
 

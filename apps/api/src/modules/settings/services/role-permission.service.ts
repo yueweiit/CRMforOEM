@@ -1,14 +1,10 @@
 import { ForbiddenException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
 import { RequestUser } from "../../../common/auth/current-user.decorator";
 import { hasPermission } from "../../../common/auth/permission.utils";
 import { PrismaService } from "../../../infrastructure/prisma/prisma.service";
 import { toStringArray } from "../prompts/settings-email-prompt.defaults";
 import type { UpdateRolePermissionsDto } from "../dto/settings.dto";
 import { UserManagementService } from "./user-management.service";
-
-type PermissionRow = { code: string; id: string; dependsOn: unknown };
-type RoleWithPerms = { code: string; rolePermissions: Array<{ permission: { code: string } }> };
 
 @Injectable()
 export class RolePermissionService {
@@ -52,7 +48,7 @@ export class RolePermissionService {
     const allPerms = await this.prisma.permission.findMany({
       where: { organizationId: user.organizationId }
     });
-    const permByCode = new Map<string, PermissionRow>(allPerms.map((p: PermissionRow) => [p.code, p]));
+    const permByCode = new Map(allPerms.map((p) => [p.code, p]));
 
     const expandedCodes = new Set<string>();
     const queue = [...dto.permissionCodes];
@@ -72,9 +68,9 @@ export class RolePermissionService {
       .map((code) => permByCode.get(code)?.id)
       .filter((id): id is string => Boolean(id));
 
-    const oldCodes = (role as RoleWithPerms).rolePermissions.map((rp) => rp.permission.code).sort();
+    const oldCodes = role.rolePermissions.map((rp) => rp.permission.code).sort();
 
-    await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    await this.prisma.$transaction(async (tx) => {
       await tx.rolePermission.deleteMany({ where: { roleId } });
       if (expandedPermIds.length > 0) {
         await tx.rolePermission.createMany({

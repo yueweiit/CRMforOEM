@@ -98,7 +98,11 @@ export function fallbackWebsiteAiInsights(result: WebsiteAnalysisResult): Websit
 // ── Helpers ──
 
 function safeJson(input: string) {
-  try { return JSON.parse(input); } catch { return undefined; }
+  try { return JSON.parse(input); } catch {
+    const match = input.match(/\{[\s\S]*\}/);
+    if (!match) return undefined;
+    try { return JSON.parse(match[0]); } catch { return undefined; }
+  }
 }
 
 function asText(value: unknown) {
@@ -137,18 +141,33 @@ function asEvidencePages(value: unknown, result: WebsiteAnalysisResult, warnings
         if (!item || typeof item !== "object" || Array.isArray(item)) return undefined;
         const record = item as Record<string, unknown>;
         const sourceId = asText(record.sourceId);
-        const url = asText(record.url);
+        const aiUrl = asText(record.url);
 
         if (sourceId && !sourceIndex.has(sourceId)) {
           warnings.push(`AI referenced unknown sourceId "${sourceId}" in evidence_pages — discarded`);
           return undefined;
         }
 
-        if (!url) return undefined;
+        if (sourceId) {
+          const canonical = sourceIndex.get(sourceId)!;
+          if (canonical.canonicalUrl && canonical.canonicalUrl !== aiUrl) {
+            warnings.push(`AI URL for sourceId "${sourceId}" differs from canonical — using canonical`);
+          }
+          const url = canonical.canonicalUrl || aiUrl;
+          if (!url) return undefined;
+          return {
+            sourceId,
+            title: canonical.canonicalTitle || asText(record.title) || url,
+            url,
+            reason: asText(record.reason) || "官网有效页面"
+          };
+        }
+
+        if (!aiUrl) return undefined;
         return {
-          sourceId: sourceId || undefined,
-          title: asText(record.title) || url,
-          url,
+          sourceId: undefined,
+          title: asText(record.title) || aiUrl,
+          url: aiUrl,
           reason: asText(record.reason) || "官网有效页面"
         };
       })
@@ -167,11 +186,11 @@ function asEvidencePages(value: unknown, result: WebsiteAnalysisResult, warnings
     }));
 }
 
-function buildResultSourceIndex(result: WebsiteAnalysisResult): Set<string> {
-  const index = new Set<string>();
-  result.pages.forEach((_, i) => index.add(`page:${i}`));
-  result.products.forEach((_, i) => index.add(`product:${i}`));
-  result.contacts.forEach((_, i) => index.add(`contact:${i}`));
+function buildResultSourceIndex(result: WebsiteAnalysisResult): Map<string, { canonicalUrl: string; canonicalTitle: string }> {
+  const index = new Map<string, { canonicalUrl: string; canonicalTitle: string }>();
+  result.pages.forEach((page, i) => index.set(`page:${i}`, { canonicalUrl: page.url, canonicalTitle: page.title || page.url }));
+  result.products.forEach((product, i) => index.set(`product:${i}`, { canonicalUrl: product.evidenceUrls?.[0] ?? "", canonicalTitle: product.name }));
+  result.contacts.forEach((contact, i) => index.set(`contact:${i}`, { canonicalUrl: contact.sourceUrl ?? "", canonicalTitle: `${contact.type}: ${contact.value}` }));
   return index;
 }
 

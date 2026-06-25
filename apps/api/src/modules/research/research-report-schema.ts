@@ -125,7 +125,6 @@ ${sectionLines.join(",\n")},
 ${recommendationLines.join(",\n")}
     }
   },
-  "source_basis": [{"section": "section_key", "source": "source_type", "evidence": "specific evidence"}],
-  "markdown_report": "Chinese Markdown report"
+  "source_basis": [{"section": "section_key", "source": "source_type", "evidence": "specific evidence"}]
 }`;
 }
