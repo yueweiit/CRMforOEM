@@ -46,13 +46,15 @@ export class AuthService {
       ttlSeconds: refreshTtlSeconds
     });
 
+    // Cache permissions in Redis to keep JWT small
+    await this.authSessionService.cachePermissions(user.id, effective.permissions, refreshTtlSeconds);
+
     const accessPayload = {
       sub: user.id,
       organizationId: user.organizationId,
       teamId: user.teamId,
       sessionId,
       roleCodes: effective.roleCodes,
-      permissions: effective.permissions,
       dataScope: effective.dataScope,
       permissionVersion,
       type: "access" as const
@@ -145,6 +147,9 @@ export class AuthService {
       refreshTtlSeconds
     );
 
+    // Cache permissions in Redis to keep JWT small
+    await this.authSessionService.cachePermissions(user.id, effective.permissions, refreshTtlSeconds);
+
     return {
       accessToken: this.jwt.sign(
         {
@@ -153,7 +158,6 @@ export class AuthService {
           teamId: user.teamId,
           sessionId: payload.sessionId,
           roleCodes: effective.roleCodes,
-          permissions: effective.permissions,
           dataScope: effective.dataScope,
           permissionVersion,
           type: "access" as const

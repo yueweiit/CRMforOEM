@@ -11,7 +11,7 @@ export function buildWebsiteEvidenceInventory(
       sourceId: `page:${index}`,
       kind: "PAGE",
       url: page.url,
-      title: page.title,
+      title: page.title ?? "",
       pageType: page.pageType,
       textSummary: page.textSummary,
       headings: page.headings,
@@ -27,8 +27,8 @@ export function buildWebsiteEvidenceInventory(
     evidence.push({
       sourceId: `product:${index}`,
       kind: "PRODUCT",
-      name: product.name,
-      category: product.category,
+      name: product.name ?? "",
+      category: product.category ?? "",
       description: product.description,
       keywords: product.keywords,
       evidenceUrls: product.evidenceUrls,
@@ -41,9 +41,9 @@ export function buildWebsiteEvidenceInventory(
     evidence.push({
       sourceId: `contact:${index}`,
       kind: "CONTACT",
-      type: contact.type,
+      type: contact.type ?? "",
       value: contact.value,
-      sourceUrl: contact.sourceUrl
+      sourceUrl: contact.sourceUrl ?? "",
     });
   }
 

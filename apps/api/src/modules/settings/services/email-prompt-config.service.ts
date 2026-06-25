@@ -15,11 +15,11 @@ export class EmailPromptConfigService {
     const rows = await this.prisma.emailPromptConfig.findMany({
       where: { organizationId: user.organizationId }
     });
-    const rowByPurpose = new Map(rows.map((row) => [row.purpose, row]));
+    const rowByPurpose = new Map(rows.map((row: { purpose: string; [key: string]: unknown }) => [row.purpose, row]));
     const result: Record<string, EmailPromptConfigData> = {};
     for (const purpose of EMAIL_DRAFT_PURPOSES) {
       const row = rowByPurpose.get(purpose);
-      result[purpose] = row ? mergeEmailPromptDefaults(row as EmailPromptConfigRow) : { ...DEFAULT_EMAIL_PROMPT_CONFIGS[purpose] };
+      result[purpose] = row ? mergeEmailPromptDefaults(row as unknown as EmailPromptConfigRow) : { ...DEFAULT_EMAIL_PROMPT_CONFIGS[purpose] };
     }
     return result;
   }

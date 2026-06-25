@@ -1,5 +1,67 @@
 import type { WebsiteAnalysisResult } from "@oem-crm/shared";
 
+// ── Evidence grouping types ──
+
+export type EvidenceGroupName =
+  | "brand_about"
+  | "product_catalog"
+  | "contact_channel"
+  | "price_region"
+  | "oem_opportunity"
+  | "risk_signal"
+  | "uncertain";
+
+export type WebsiteEvidenceItem =
+  | {
+      sourceId: string;
+      kind: "PAGE";
+      url: string;
+      title: string;
+      pageType: string;
+      textSummary?: string;
+      headings: string[];
+      contacts: unknown[];
+      priceSignals: unknown[];
+      depth: number;
+      httpStatus?: number;
+      errorMessage?: string;
+    }
+  | {
+      sourceId: string;
+      kind: "PRODUCT";
+      name: string;
+      category: string;
+      description?: string;
+      keywords: string[];
+      evidenceUrls: string[];
+      priceSignals: unknown[];
+      confidence: number;
+    }
+  | {
+      sourceId: string;
+      kind: "CONTACT";
+      type: string;
+      value: string;
+      sourceUrl: string;
+    };
+
+export type EvidenceGroupAssignment = {
+  sourceId: string;
+  url?: string;
+  title?: string;
+  primaryGroup: EvidenceGroupName;
+  groups: EvidenceGroupName[];
+  confidence: number;
+  reasons: string[];
+  selectedForAi: boolean;
+};
+
+export type WebsiteEvidenceGroup = {
+  groupName: EvidenceGroupName;
+  items: WebsiteEvidenceItem[];
+  sourceIds: string[];
+};
+
 /**
  * Parsed AI insight object stored inside websiteAnalysis.rawResult.aiInsights.
  * 解析后的 AI 洞察对象存储在 websiteAnalysis.rawResult.aiInsights 中。 
@@ -16,7 +78,7 @@ export type WebsiteAiInsights = {
   sales_entry_points: string[];
   suggested_next_actions: string[];
   risk_notes: string[];
-  evidence_pages: Array<{ title: string; url: string; reason: string }>;
+  evidence_pages: Array<{ sourceId?: string; title: string; url: string; reason: string }>;
   missing_categories_gap: Array<{
     category: string;
     customer_has: string;

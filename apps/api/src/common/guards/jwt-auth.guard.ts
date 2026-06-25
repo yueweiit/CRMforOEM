@@ -2,6 +2,7 @@ import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from
 import { ConfigService } from "@nestjs/config";
 import { Reflector } from "@nestjs/core";
 import { JwtService } from "@nestjs/jwt";
+import { AuthSessionService } from "../../modules/auth/auth-session.service";
 import { IS_PUBLIC_KEY } from "../auth/public.decorator";
 
 @Injectable()
@@ -9,7 +10,8 @@ export class JwtAuthGuard implements CanActivate {
   constructor(
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
-    private readonly reflector: Reflector
+    private readonly reflector: Reflector,
+    private readonly authSession: AuthSessionService
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -33,7 +35,6 @@ export class JwtAuthGuard implements CanActivate {
       organizationId: string;
       teamId?: string;
       roleCodes?: string[];
-      permissions?: string[];
       dataScope?: string;
       sessionId?: string;
       permissionVersion?: number;
@@ -52,12 +53,15 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException("Invalid token type");
     }
 
+    // Fetch permissions from Redis cache (stored at login/refresh) instead of JWT
+    const permissions = await this.authSession.getCachedPermissions(payload.sub) ?? [];
+
     request.user = {
       id: payload.sub,
       organizationId: payload.organizationId,
       teamId: payload.teamId,
       roleCodes: payload.roleCodes ?? [],
-      permissions: payload.permissions ?? [],
+      permissions,
       dataScope: payload.dataScope ?? "SELF",
       sessionId: payload.sessionId,
       permissionVersion: payload.permissionVersion,

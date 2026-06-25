@@ -33,7 +33,7 @@ export class UserManagementService {
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (existing) throw new ConflictException("User email already exists");
 
-    return this.prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const created = await tx.user.create({
         data: {
           organizationId: user.organizationId,
@@ -54,7 +54,7 @@ export class UserManagementService {
     const wasActive = existing.isActive;
     const wasTeamId = existing.teamId;
 
-    const updated = await this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const result = await tx.user.update({
         where: { id },
         data: {
@@ -103,7 +103,7 @@ export class UserManagementService {
       where: { roleId },
       select: { userId: true }
     });
-    const affectedDirectUserIds = directUsers.map((ur) => ur.userId);
+    const affectedDirectUserIds = directUsers.map((ur: { userId: string }) => ur.userId);
 
     const parentRoleCodes = this.permissionService.getParentRoleCodes(roleCode);
     let affectedInheritedUserIds: string[] = [];
@@ -112,13 +112,13 @@ export class UserManagementService {
         where: { organizationId, code: { in: parentRoleCodes } },
         select: { id: true }
       });
-      const parentRoleIds = parentRoles.map((r) => r.id);
+      const parentRoleIds = parentRoles.map((r: { id: string }) => r.id);
       if (parentRoleIds.length > 0) {
         const inheritedUsers = await this.prisma.userRole.findMany({
           where: { roleId: { in: parentRoleIds } },
           select: { userId: true }
         });
-        affectedInheritedUserIds = [...new Set(inheritedUsers.map((ur) => ur.userId))];
+        affectedInheritedUserIds = Array.from(new Set<string>(inheritedUsers.map((ur: { userId: string }) => ur.userId)));
       }
     }
 
@@ -141,7 +141,7 @@ export class UserManagementService {
     await tx.userRole.deleteMany({ where: { userId } });
     if (!roles.length) return;
     await tx.userRole.createMany({
-      data: roles.map((role) => ({ userId, roleId: role.id })),
+      data: roles.map((role: { id: string }) => ({ userId, roleId: role.id })),
       skipDuplicates: true
     });
   }

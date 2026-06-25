@@ -229,6 +229,26 @@ export class AuthSessionService {
     }
   }
 
+  async cachePermissions(userId: string, permissions: string[], ttlSeconds?: number): Promise<void> {
+    await this.redis.set(
+      this.permissionsCacheKey(userId),
+      JSON.stringify(permissions),
+      "EX",
+      ttlSeconds ?? this.refreshTtlSeconds
+    );
+  }
+
+  async getCachedPermissions(userId: string): Promise<string[] | null> {
+    try {
+      const raw = await this.redis.get(this.permissionsCacheKey(userId));
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
   // ── Key helpers ──
 
   private sessionKey(sessionId: string) {
@@ -241,5 +261,9 @@ export class AuthSessionService {
 
   private permissionVersionKey(userId: string) {
     return `auth:user:${userId}:permissionVersion`;
+  }
+
+  private permissionsCacheKey(userId: string) {
+    return `auth:user:${userId}:permissions`;
   }
 }
