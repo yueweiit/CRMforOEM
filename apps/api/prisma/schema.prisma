@@ -572,8 +572,7 @@ model Certificate {
   certType         String
   issuer           String?
   validUntil       DateTime?
-  /// @deprecated Use fileAssetIds instead
-  fileAssetId      String?
+  description      String?  @db.Text
   fileAssetIds     String[] @default([])
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -593,8 +592,6 @@ model CaseStudy {
   summary          String
   result           String?
   cooperationDate  DateTime?
-  /// @deprecated Use fileAssetIds instead
-  fileAssetId      String?
   fileAssetIds     String[] @default([])
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt

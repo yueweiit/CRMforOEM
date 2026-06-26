@@ -86,6 +86,7 @@ const fieldMap: Record<string, Field[]> = {
     { key: "certType", label: "证书类型", required: true, placeholder: "ISO / CE / FDA / OTHER" },
     { key: "issuer", label: "签发机构" },
     { key: "validUntil", label: "有效期", type: "date" },
+    { key: "description", label: "证书说明", type: "textarea" },
     { key: "fileAssetIds", label: "证书文件", type: "file", multiple: true }
   ],
   cases: [

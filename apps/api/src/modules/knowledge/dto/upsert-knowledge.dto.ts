@@ -115,10 +115,6 @@ export class UpsertKnowledgeDto {
   @IsString()
   content?: string;
 
-  @IsOptional()
-  @IsString()
-  fileAssetId?: string;
-
   // ── CompanyProfile ──
 
   @IsOptional()

@@ -148,9 +148,9 @@ export class KnowledgeService {
         certType: requireField(dto.certType, "certType"),
         issuer: dto.issuer,
         validUntil: dto.validUntil ? new Date(dto.validUntil) : undefined,
-        fileAssetId: dto.fileAssetId,
+        description: dto.description,
         fileAssetIds: dto.fileAssetIds ?? []
-      }
+      } as never
     });
   }
 
@@ -171,7 +171,6 @@ export class KnowledgeService {
         category: dto.category,
         summary: requireField(dto.summary, "summary"),
         result: dto.result,
-        fileAssetId: dto.fileAssetId,
         fileAssetIds: dto.fileAssetIds ?? []
       }
     });
@@ -260,7 +259,7 @@ export class KnowledgeService {
           certType: dto.certType,
           issuer: dto.issuer,
           validUntil: dto.validUntil ? new Date(dto.validUntil) : undefined,
-          fileAssetId: dto.fileAssetId,
+          description: dto.description,
           fileAssetIds: dto.fileAssetIds
         }) as never });
         await this.audit({ user, action: "UPDATE", entityType: "certificates", entityId: id, before: beforeSnapshot, after: result });
@@ -278,7 +277,6 @@ export class KnowledgeService {
           category: dto.category,
           summary: dto.summary,
           result: dto.result,
-          fileAssetId: dto.fileAssetId,
           fileAssetIds: dto.fileAssetIds
         }) as never });
         await this.audit({ user, action: "UPDATE", entityType: "case-studies", entityId: id, before: beforeSnapshot, after: result });
