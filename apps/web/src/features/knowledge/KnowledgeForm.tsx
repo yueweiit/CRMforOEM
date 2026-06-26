@@ -1,3 +1,4 @@
+import { DeleteIconButton } from "../../components/DeleteIconButton";
 import { FileUpload } from "../../components/FileUpload";
 import { splitList } from "../../shared/utils/string";
 
@@ -123,7 +124,7 @@ function SpecificationEditor(props: {
                 <strong>{pair.key}</strong>
                 <span>{pair.value}</span>
               </div>
-              <button className="secondary-button" onClick={() => props.onRemove(pair.key)} type="button">删除</button>
+              <DeleteIconButton onClick={() => props.onRemove(pair.key)} />
             </div>
           ))}
         </div>

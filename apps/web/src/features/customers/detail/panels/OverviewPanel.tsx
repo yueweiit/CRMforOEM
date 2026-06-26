@@ -1,18 +1,24 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Dialog } from "@alifd/next";
+import "@alifd/next/lib/dialog/style.js";
 import { NotebookTabs } from "lucide-react";
 import { STAGE_LABELS, stageLabel } from "@oem-crm/shared";
-import { createCustomerContact, getCustomerFilterOptions, updateCustomer, updateCustomerStage } from "../../../../api/customers";
+import { createCustomerContact, deleteCustomerContact, getCustomerFilterOptions, updateCustomer, updateCustomerContact, updateCustomerStage } from "../../../../api/customers";
 import { AppSelect } from "../../../../components/AppSelect";
+import { AddIconButton } from "../../../../components/AddIconButton";
+import { DeleteIconButton } from "../../../../components/DeleteIconButton";
 import { Field } from "../../../../components/ui/Field";
 import { splitList } from "../../../../shared/utils/string";
 import type { CustomerOptions } from "../../../../shared/types/customer";
-import type { CustomerDetail } from "../shared/types";
+import type { Contact, CustomerDetail } from "../shared/types";
 import { Detail } from "../shared/ui";
 
 function defaultContactForm() {
   return { name: "", title: "", email: "", phone: "", qualityScore: "50", isDecisionMaker: false };
 }
+
+type ContactForm = ReturnType<typeof defaultContactForm>;
 
 function customerToForm(customer: CustomerDetail) {
   return {
@@ -36,6 +42,9 @@ export function OverviewPanel({ customer, customerId, onChanged }: { customer: C
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState(customerToForm(customer));
   const [contact, setContact] = useState(defaultContactForm());
+  const [contactDialogMode, setContactDialogMode] = useState<"create" | "edit" | null>(null);
+  const [editingContactId, setEditingContactId] = useState("");
+  const [pendingDeleteContactId, setPendingDeleteContactId] = useState("");
   const { data: options } = useQuery({
     queryKey: ["customer-filter-options"],
     queryFn: () => getCustomerFilterOptions<CustomerOptions>()
@@ -72,11 +81,136 @@ export function OverviewPanel({ customer, customerId, onChanged }: { customer: C
     }
   });
   const createContact = useMutation({
-    mutationFn: () => createCustomerContact(customerId, { ...contact, qualityScore: Number(contact.qualityScore || 0), isDecisionMaker: contact.isDecisionMaker }),
-    onSuccess: () => { setContact(defaultContactForm()); onChanged(); }
+    mutationFn: () => createCustomerContact(customerId, buildContactPayload(contact)),
+    onSuccess: () => {
+      resetContactDialog();
+      onChanged();
+    }
   });
+  const updateContact = useMutation({
+    mutationFn: () => updateCustomerContact(customerId, editingContactId, buildContactPayload(contact)),
+    onSuccess: () => {
+      resetContactDialog();
+      onChanged();
+    }
+  });
+  const deleteContact = useMutation({
+    mutationFn: (contactId: string) => deleteCustomerContact(customerId, contactId),
+    onSuccess: () => {
+      setPendingDeleteContactId("");
+      onChanged();
+    }
+  });
+  const isContactSaving = createContact.isPending || updateContact.isPending;
+
+  function openCreateContactDialog() {
+    setEditingContactId("");
+    setContact(defaultContactForm());
+    setContactDialogMode("create");
+  }
+
+  function openEditContactDialog(item: Contact) {
+    setEditingContactId(item.id);
+    setContact(contactToForm(item));
+    setContactDialogMode("edit");
+  }
+
+  function closeContactDialog() {
+    if (isContactSaving) return;
+    resetContactDialog();
+  }
+
+  function resetContactDialog() {
+    setContactDialogMode(null);
+    setEditingContactId("");
+    setContact(defaultContactForm());
+  }
+
+  function submitContact() {
+    if (contactDialogMode === "edit") {
+      updateContact.mutate();
+      return;
+    }
+    createContact.mutate();
+  }
+
+  function closeDeleteContactDialog() {
+    if (deleteContact.isPending) return;
+    setPendingDeleteContactId("");
+  }
+
+  function confirmDeleteContact() {
+    if (!pendingDeleteContactId) return;
+    deleteContact.mutate(pendingDeleteContactId);
+  }
   return (
     <div className="content-grid">
+      <Dialog
+        v2
+        className="crm-delete-dialog contact-dialog"
+        title={contactDialogMode === "edit" ? "编辑联系人" : "新增联系人"}
+        visible={Boolean(contactDialogMode)}
+        footer={(
+          <div className="toolbar crm-dialog-footer">
+            <button className="secondary-button" disabled={isContactSaving} onClick={closeContactDialog} type="button">
+              取消
+            </button>
+            <button className="primary-button" disabled={isContactSaving} onClick={submitContact} type="button">
+              {isContactSaving ? "保存中..." : contactDialogMode === "edit" ? "保存修改" : "新增联系人"}
+            </button>
+          </div>
+        )}
+        onClose={closeContactDialog}
+      >
+        <div className="form-grid compact-form contact-dialog-form">
+          <Field label="姓名" value={contact.name} onChange={(name) => setContact({ ...contact, name })} />
+          <Field label="职位" value={contact.title} onChange={(title) => setContact({ ...contact, title })} />
+          <Field label="邮箱" value={contact.email} onChange={(email) => setContact({ ...contact, email })} />
+          <Field label="电话" value={contact.phone} onChange={(phone) => setContact({ ...contact, phone })} />
+          <div className="contact-meta-row">
+            <label className="contact-inline-field contact-score-field">
+              <span>质量分</span>
+              <input
+                inputMode="numeric"
+                value={contact.qualityScore}
+                onChange={(event) => setContact({ ...contact, qualityScore: event.target.value })}
+              />
+            </label>
+            <label className="contact-inline-field contact-checkbox-field">
+              <span>关键决策人</span>
+              <input
+                checked={contact.isDecisionMaker}
+                type="checkbox"
+                onChange={(event) => setContact({ ...contact, isDecisionMaker: event.target.checked })}
+              />
+            </label>
+          </div>
+        </div>
+        {createContact.isError || updateContact.isError ? <div className="error-state">联系人保存失败，请检查邮箱或分数字段。</div> : null}
+      </Dialog>
+
+      <Dialog
+        v2
+        className="crm-delete-dialog"
+        title="确认删除联系人"
+        visible={Boolean(pendingDeleteContactId)}
+        footer={(
+          <div className="toolbar crm-dialog-footer">
+            <button className="secondary-button" disabled={deleteContact.isPending} onClick={closeDeleteContactDialog} type="button">
+              取消
+            </button>
+            {deleteContact.isPending ? (
+              <button className="primary-button" disabled type="button">处理中...</button>
+            ) : (
+              <DeleteIconButton className="primary-button" onClick={confirmDeleteContact} />
+            )}
+          </div>
+        )}
+        onClose={closeDeleteContactDialog}
+      >
+        确认删除这个联系人吗？删除后将无法恢复。
+      </Dialog>
+
       <section className="panel">
         <div className="panel-title">
           <h2>客户概览</h2>
@@ -165,20 +299,66 @@ export function OverviewPanel({ customer, customerId, onChanged }: { customer: C
         )}
       </section>
       <section className="panel">
-        <div className="panel-title"><h2>联系人</h2><span>{customer.contacts.length} 个</span></div>
-        <div className="task-list">
-          {customer.contacts.map((item) => <div className="task-row" key={item.id}><NotebookTabs size={16} /><div><strong>{item.name || item.email || "未命名联系人"}</strong><span>{item.title ?? "-"} · {item.email ?? "-"} · {item.phone ?? "-"}</span></div><span className="status-pill">{item.qualityScore}</span></div>)}
-          {!customer.contacts.length ? <div className="empty-state">暂无联系人。</div> : null}
+        <div className="panel-title">
+          <h2>联系人</h2>
+          <div className="toolbar">
+            
+            <AddIconButton label="新增联系人" onClick={openCreateContactDialog} />
+          </div>
         </div>
-        <div className="form-grid compact-form">
-          <Field label="姓名" value={contact.name} onChange={(name) => setContact({ ...contact, name })} />
-          <Field label="职位" value={contact.title} onChange={(title) => setContact({ ...contact, title })} />
-          <Field label="邮箱" value={contact.email} onChange={(email) => setContact({ ...contact, email })} />
-          <Field label="电话" value={contact.phone} onChange={(phone) => setContact({ ...contact, phone })} />
-          <Field label="质量分" value={contact.qualityScore} onChange={(qualityScore) => setContact({ ...contact, qualityScore })} />
-          <div><button className="secondary-button" disabled={createContact.isPending} onClick={() => createContact.mutate()}>新增联系人</button></div>
+        <div className="task-list">
+          {customer.contacts.map((item) => (
+            <div className="task-row contact-row" key={item.id}>
+              <NotebookTabs size={16} />
+              <button className="contact-row-main" onClick={() => openEditContactDialog(item)} type="button">
+                <strong>
+                  {item.name || item.email || "未命名联系人"}
+                  {item.isDecisionMaker ? <span className="status-pill contact-role-pill">决策人</span> : null}
+                </strong>
+                <span>{item.title ?? "-"} · {item.email ?? "-"}</span>
+              </button>
+              <div className="contact-row-actions">
+                <span className="status-pill">{item.qualityScore}</span>
+                <DeleteIconButton onClick={() => setPendingDeleteContactId(item.id)} />
+              </div>
+            </div>
+          ))}
+          {!customer.contacts.length ? <div className="empty-state">暂无联系人。</div> : null}
         </div>
       </section>
     </div>
   );
+}
+
+function contactToForm(contact: Contact): ContactForm {
+  return {
+    name: contact.name ?? "",
+    title: contact.title ?? "",
+    email: contact.email ?? "",
+    phone: contact.phone ?? "",
+    qualityScore: String(contact.qualityScore ?? 50),
+    isDecisionMaker: Boolean(contact.isDecisionMaker)
+  };
+}
+
+function buildContactPayload(contact: ContactForm) {
+  return {
+    name: blankToUndefined(contact.name),
+    title: blankToUndefined(contact.title),
+    email: blankToUndefined(contact.email),
+    phone: blankToUndefined(contact.phone),
+    qualityScore: clampScore(contact.qualityScore),
+    isDecisionMaker: contact.isDecisionMaker
+  };
+}
+
+function blankToUndefined(value: string) {
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function clampScore(value: string) {
+  const score = Number(value || 0);
+  if (!Number.isFinite(score)) return 0;
+  return Math.min(100, Math.max(0, Math.round(score)));
 }

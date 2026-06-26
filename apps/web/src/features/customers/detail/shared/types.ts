@@ -21,7 +21,18 @@ export type CustomerDetail = {
   followUpTasks: FollowUpTask[];
 };
 
-export type Contact = { id: string; name?: string; title?: string; email?: string; phone?: string; linkedinUrl?: string; qualityScore: number; isDecisionMaker: boolean };
+export type Contact = {
+  id: string;
+  name?: string;
+  title?: string;
+  department?: string;
+  email?: string;
+  phone?: string;
+  linkedinUrl?: string;
+  sourceUrl?: string;
+  qualityScore: number;
+  isDecisionMaker: boolean;
+};
 export type WebsiteAnalysis = Record<string, unknown> & {
   id: string;
   status: string;

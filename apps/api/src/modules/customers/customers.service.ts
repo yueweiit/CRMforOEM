@@ -7,6 +7,7 @@ import { AssignCustomerDto } from "./dto/assign-customer.dto";
 import { ChangeCustomerStageDto } from "./dto/change-customer-stage.dto";
 import { CreateContactDto } from "./dto/create-contact.dto";
 import { CreateCustomerDto } from "./dto/create-customer.dto";
+import { UpdateContactDto } from "./dto/update-contact.dto";
 import { UpdateCustomerDto } from "./dto/update-customer.dto";
 
 @Injectable()
@@ -224,16 +225,27 @@ export class CustomersService {
     return this.prisma.contact.create({
       data: {
         customerId,
-        name: dto.name,
-        title: dto.title,
-        department: dto.department,
-        email: dto.email,
-        phone: dto.phone,
-        linkedinUrl: dto.linkedinUrl,
-        sourceUrl: dto.sourceUrl,
-        qualityScore: dto.qualityScore ?? 0,
-        isDecisionMaker: dto.isDecisionMaker ?? false
+        ...buildContactCreateData(dto)
       }
+    });
+  }
+
+  async updateContact(user: RequestUser, customerId: string, contactId: string, dto: UpdateContactDto) {
+    await this.ensureVisible(user, customerId);
+    await this.ensureContactBelongsToCustomer(customerId, contactId);
+
+    return this.prisma.contact.update({
+      where: { id: contactId },
+      data: buildContactUpdateData(dto)
+    });
+  }
+
+  async deleteContact(user: RequestUser, customerId: string, contactId: string) {
+    await this.ensureVisible(user, customerId);
+    await this.ensureContactBelongsToCustomer(customerId, contactId);
+
+    return this.prisma.contact.delete({
+      where: { id: contactId }
     });
   }
 
@@ -245,6 +257,16 @@ export class CustomersService {
       throw new NotFoundException("Customer not found");
     }
     return customer;
+  }
+
+  private async ensureContactBelongsToCustomer(customerId: string, contactId: string) {
+    const contact = await this.prisma.contact.findFirst({
+      where: { id: contactId, customerId }
+    });
+    if (!contact) {
+      throw new NotFoundException("Contact not found");
+    }
+    return contact;
   }
 }
 
@@ -308,6 +330,46 @@ function nullableUpdateString(value: string | undefined | null) {
   if (value == null) return null;
   const trimmed = value.trim();
   return !trimmed || trimmed === "{}" ? null : trimmed;
+}
+
+function buildContactCreateData(dto: CreateContactDto) {
+  return {
+    name: dto.name,
+    title: dto.title,
+    department: dto.department,
+    email: dto.email,
+    phone: dto.phone,
+    linkedinUrl: dto.linkedinUrl,
+    sourceUrl: dto.sourceUrl,
+    qualityScore: dto.qualityScore ?? 0,
+    isDecisionMaker: dto.isDecisionMaker ?? false
+  };
+}
+
+function buildContactUpdateData(dto: UpdateContactDto) {
+  const data: {
+    name?: string | null;
+    title?: string | null;
+    department?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    linkedinUrl?: string | null;
+    sourceUrl?: string | null;
+    qualityScore?: number;
+    isDecisionMaker?: boolean;
+  } = {};
+
+  if (hasOwn(dto, "name")) data.name = nullableUpdateString(dto.name);
+  if (hasOwn(dto, "title")) data.title = nullableUpdateString(dto.title);
+  if (hasOwn(dto, "department")) data.department = nullableUpdateString(dto.department);
+  if (hasOwn(dto, "email")) data.email = nullableUpdateString(dto.email);
+  if (hasOwn(dto, "phone")) data.phone = nullableUpdateString(dto.phone);
+  if (hasOwn(dto, "linkedinUrl")) data.linkedinUrl = nullableUpdateString(dto.linkedinUrl);
+  if (hasOwn(dto, "sourceUrl")) data.sourceUrl = nullableUpdateString(dto.sourceUrl);
+  if (dto.qualityScore !== undefined) data.qualityScore = dto.qualityScore;
+  if (dto.isDecisionMaker !== undefined) data.isDecisionMaker = dto.isDecisionMaker;
+
+  return data;
 }
 
 const DEFAULT_CUSTOMER_SOURCES = [

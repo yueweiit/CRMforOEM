@@ -786,6 +786,46 @@ td small {
   gap: 10px;
 }
 
+.icon-button {
+  align-items: center;
+  display: inline-flex;
+  justify-content: center;
+  min-width: 40px;
+  padding: 0 10px;
+}
+
+.delete-icon-button {
+  background: white;
+  border-color: #fecdd3;
+  color: #BA564C;
+}
+
+.delete-icon-button:hover {
+  background: #fff1f2;
+  border-color: #f2b5b0;
+  color: #BA564C;
+}
+
+.delete-icon-glyph {
+  background: currentColor;
+  display: block;
+  height: 17px;
+  mask: var(--delete-icon-url) center / contain no-repeat;
+  -webkit-mask: var(--delete-icon-url) center / contain no-repeat;
+  width: 17px;
+}
+
+.add-icon-button {
+  background: white;
+  border-color: #c9e5d8;
+  color: #0f766e;
+}
+
+.add-icon-button:hover {
+  background: #e8f5ef;
+  border-color: #a9d7c5;
+}
+
 .search-box,
 .input-with-icon {
   display: flex;
@@ -961,6 +1001,92 @@ td small {
 .task-row.overdue {
   border-left: 3px solid #dc2626;
   background: #fef2f2;
+}
+
+.contact-row {
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+}
+
+.contact-row-main {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+  min-width: 0;
+}
+
+.contact-row-main strong {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.contact-row-main:hover strong {
+  color: #0f766e;
+}
+
+.contact-row-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.contact-role-pill {
+  min-height: 22px;
+  padding: 0 8px;
+}
+
+.contact-dialog-form {
+  margin-top: 4px;
+}
+
+.contact-meta-row {
+  align-items: center;
+  display: grid;
+  gap: 16px;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.contact-meta-row .contact-inline-field {
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  min-height: 40px;
+}
+
+.contact-meta-row .contact-inline-field span {
+  color: #45525c;
+  font-size: 13px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.form-grid .contact-score-field input {
+  border: 1px solid #d7dcd2;
+  border-radius: 7px;
+  flex: 0 0 74px;
+  font-weight: 700;
+  height: 38px;
+  max-width: 74px;
+  min-height: 38px;
+  padding: 0 10px;
+  width: 74px;
+}
+
+.form-grid .contact-checkbox-field input {
+  flex: 0 0 18px;
+  height: 18px;
+  margin: 0;
+  max-width: 18px;
+  min-height: 18px;
+  width: 18px;
 }
 
 .priority-pill {
@@ -1732,10 +1858,26 @@ td small {
   line-height: 1.7;
 }
 
+.contact-dialog.next-dialog {
+  margin-top: 92px;
+}
+
+.contact-dialog.next-dialog-v2 .next-dialog-header {
+  padding-top: 40px;
+}
+
+.contact-dialog.next-dialog-v2 .next-dialog-header + .next-dialog-body {
+  padding-top: 10px;
+}
+
 
 @media (max-width: 640px) {
   .next-notification {
     width: calc(100vw - 24px) !important;
+  }
+
+  .contact-dialog.next-dialog {
+    margin-top: 40px;
   }
 }
 

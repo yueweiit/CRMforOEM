@@ -1,4 +1,4 @@
-import { apiGet, apiPatch, apiPost } from "./http";
+import { apiDelete, apiGet, apiPatch, apiPost } from "./http";
 
 type MutationOptions = { toast?: boolean };
 
@@ -28,6 +28,14 @@ export function updateCustomerStage<T = unknown>(id: string, payload: { stage: s
 
 export function createCustomerContact<T = unknown>(customerId: string, payload: unknown) {
   return apiPost<T>(`/customers/${customerId}/contacts`, payload);
+}
+
+export function updateCustomerContact<T = unknown>(customerId: string, contactId: string, payload: unknown) {
+  return apiPatch<T>(`/customers/${customerId}/contacts/${contactId}`, payload);
+}
+
+export function deleteCustomerContact<T = unknown>(customerId: string, contactId: string) {
+  return apiDelete<T>(`/customers/${customerId}/contacts/${contactId}`);
 }
 
 export function getCustomerBackgroundTasks<T = unknown>(id: string) {

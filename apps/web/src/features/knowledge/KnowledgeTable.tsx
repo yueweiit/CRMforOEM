@@ -1,4 +1,5 @@
 import { EmptyState } from "../../components/ui/EmptyState";
+import { DeleteIconButton } from "../../components/DeleteIconButton";
 import type { Field } from "./KnowledgeForm";
 
 export type KnowledgeRecord = Record<string, unknown> & {
@@ -34,7 +35,7 @@ export function KnowledgeTable(props: {
             <td>
               <div className="toolbar">
                 <button className="secondary-button" onClick={() => props.onEdit(row)}>编辑</button>
-                <button className="secondary-button" onClick={() => props.onDelete(row.id)}>删除</button>
+                <DeleteIconButton onClick={() => props.onDelete(row.id)} />
               </div>
             </td>
           </tr>

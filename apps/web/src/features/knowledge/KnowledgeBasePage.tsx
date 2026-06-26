@@ -5,6 +5,7 @@ import "@alifd/next/lib/dialog/style.js";
 import { Award, Boxes, BriefcaseBusiness, Factory, FileText, Plus } from "lucide-react";
 import { NavLink, useParams } from "react-router-dom";
 import { getCompanyProfile, updateCompanyProfile, getBrands, createBrand, updateBrand, deleteBrand, getProducts, createProduct, updateProduct, deleteProduct, getOemCapabilities, createOemCapability, updateOemCapability, deleteOemCapability, getCertificates, createCertificate, updateCertificate, deleteCertificate, getCaseStudies, createCaseStudy, updateCaseStudy, deleteCaseStudy, getEmailMaterials, createEmailMaterial, updateEmailMaterial, deleteEmailMaterial } from "../../api/knowledge";
+import { DeleteIconButton } from "../../components/DeleteIconButton";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { LoadingState } from "../../components/ui/LoadingState";
 import { inferToastType, showClientToast } from "../../components/Toast";
@@ -334,9 +335,11 @@ export function KnowledgeBasePage() {
             <button className="secondary-button" disabled={deleteMutation.isPending} onClick={closeDeleteDialog} type="button">
               取消
             </button>
-            <button className="primary-button" disabled={deleteMutation.isPending} onClick={confirmDeleteRow} type="button">
-              {deleteMutation.isPending ? "删除中..." : "删除"}
-            </button>
+            {deleteMutation.isPending ? (
+              <button className="primary-button" disabled type="button">处理中...</button>
+            ) : (
+              <DeleteIconButton className="primary-button" onClick={confirmDeleteRow} />
+            )}
           </div>
         )}
         onClose={closeDeleteDialog}

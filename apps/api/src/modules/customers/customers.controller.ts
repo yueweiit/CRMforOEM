@@ -1,9 +1,10 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
 import { CurrentUser, RequestUser } from "../../common/auth/current-user.decorator";
 import { AssignCustomerDto } from "./dto/assign-customer.dto";
 import { ChangeCustomerStageDto } from "./dto/change-customer-stage.dto";
 import { CreateContactDto } from "./dto/create-contact.dto";
 import { CreateCustomerDto } from "./dto/create-customer.dto";
+import { UpdateContactDto } from "./dto/update-contact.dto";
 import { UpdateCustomerDto } from "./dto/update-customer.dto";
 import { CustomersService } from "./customers.service";
 
@@ -54,5 +55,20 @@ export class CustomersController {
   @Post(":id/contacts")
   createContact(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: CreateContactDto) {
     return this.customersService.createContact(user, id, dto);
+  }
+
+  @Patch(":id/contacts/:contactId")
+  updateContact(
+    @CurrentUser() user: RequestUser,
+    @Param("id") id: string,
+    @Param("contactId") contactId: string,
+    @Body() dto: UpdateContactDto
+  ) {
+    return this.customersService.updateContact(user, id, contactId, dto);
+  }
+
+  @Delete(":id/contacts/:contactId")
+  deleteContact(@CurrentUser() user: RequestUser, @Param("id") id: string, @Param("contactId") contactId: string) {
+    return this.customersService.deleteContact(user, id, contactId);
   }
 }

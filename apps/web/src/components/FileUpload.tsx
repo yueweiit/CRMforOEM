@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { apiDelete, apiGet, apiGetBlob, apiUpload } from "../api/http";
+import { DeleteIconButton } from "./DeleteIconButton";
 
 type FileAssetMeta = {
   id: string;
@@ -221,7 +222,7 @@ export function FileUpload(props: FileUploadProps) {
               )}
               <div className="toolbar">
                 <button className="secondary-button" onClick={() => void openRaw(item)} type="button">预览</button>
-                <button className="secondary-button" disabled={busy} onClick={() => void handleRemove(item.id)} type="button">删除</button>
+                <DeleteIconButton disabled={busy} onClick={() => void handleRemove(item.id)} />
               </div>
             </div>
           ))}
