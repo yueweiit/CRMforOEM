@@ -1,13 +1,90 @@
 import { InjectQueue } from "@nestjs/bullmq";
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { Queue } from "bullmq";
 import { AiGenerationType } from "@oem-crm/shared";
 import { RequestUser } from "../../common/auth/current-user.decorator";
+import { asFiniteScore, asRecord, asStringArray } from "../../common/input-sanitizers";
 import { buildCustomerDataScopeWhere } from "../../common/query/data-scope";
 import { PrismaService } from "../../infrastructure/prisma/prisma.service";
 import { AiGenerationService, AiProviderService } from "../ai/ai.public";
 import { BackgroundTaskStaleService, TaskSubmissionLockService } from "../background-tasks/background-tasks.public";
 import { WEBSITE_ANALYSIS_QUEUE } from "./website-analysis.constants";
+
+type WebsiteAnalysisUpdateDto = {
+  opportunities?: string[];
+  risks?: string[];
+  aiInsights?: Record<string, unknown>;
+};
+
+const EDITABLE_AI_INSIGHT_TEXT_FIELDS = [
+  "business_summary",
+  "customer_profile",
+  "main_business",
+  "product_line_analysis",
+  "brand_positioning",
+  "market_channel_signals",
+  "oem_opportunity_assessment",
+  "our_data_quality_note"
+] as const;
+
+const EDITABLE_AI_INSIGHT_STRING_ARRAY_FIELDS = [
+  "cooperation_opportunities",
+  "sales_entry_points",
+  "suggested_next_actions",
+  "risk_notes",
+  "unknown_factors"
+] as const;
+
+function buildEditableAiInsights(existing: Record<string, unknown>, incoming: Record<string, unknown>) {
+  const merged: Record<string, unknown> = { ...existing };
+
+  for (const key of EDITABLE_AI_INSIGHT_TEXT_FIELDS) {
+    const value = incoming[key];
+    if (typeof value === "string") {
+      merged[key] = value.trim();
+    }
+  }
+
+  for (const key of EDITABLE_AI_INSIGHT_STRING_ARRAY_FIELDS) {
+    if (!(key in incoming)) continue;
+    merged[key] = asStringArray(incoming[key]);
+  }
+
+  if (Array.isArray(incoming.missing_categories_gap)) {
+    const existingItems = Array.isArray(existing.missing_categories_gap) ? existing.missing_categories_gap : [];
+    merged.missing_categories_gap = incoming.missing_categories_gap.map((item, index) => {
+      const record = asRecord(item);
+      const existingRecord = asRecord(existingItems[index]);
+      return {
+        category: typeof record.category === "string" ? record.category.trim() : "",
+        customer_has: typeof record.customer_has === "string" ? record.customer_has.trim() : "",
+        we_can_supply: typeof record.we_can_supply === "string" ? record.we_can_supply.trim() : "",
+        opportunity_score: asFiniteScore(record.opportunity_score, asFiniteScore(existingRecord.opportunity_score, 5)),
+        reason: typeof record.reason === "string" ? record.reason.trim() : "",
+        data_quality_note: typeof record.data_quality_note === "string" ? record.data_quality_note.trim() : ""
+      };
+    });
+  }
+
+  const incomingPrice = asRecord(incoming.price_competitiveness);
+  if (Object.keys(incomingPrice).length) {
+    const existingPrice = asRecord(existing.price_competitiveness);
+    const level = typeof incomingPrice.level === "string" ? incomingPrice.level : existingPrice.level;
+    merged.price_competitiveness = {
+      level: level === "competitive" || level === "neutral" || level === "challenging" || level === "unknown" ? level : "unknown",
+      summary: typeof incomingPrice.summary === "string" ? incomingPrice.summary.trim() : String(existingPrice.summary ?? ""),
+      price_nature_note: typeof incomingPrice.price_nature_note === "string" ? incomingPrice.price_nature_note.trim() : String(existingPrice.price_nature_note ?? "")
+    };
+  }
+
+  if (existing.evidence_pages !== undefined) {
+    merged.evidence_pages = existing.evidence_pages;
+  } else {
+    delete merged.evidence_pages;
+  }
+
+  return merged;
+}
 
 @Injectable()
 export class WebsiteAnalysisService {
@@ -196,11 +273,14 @@ export class WebsiteAnalysisService {
     if (!analysis) {
       throw new NotFoundException("Website analysis not found");
     }
+    if (analysis.status === "QUEUED" || analysis.status === "RUNNING") {
+      throw new BadRequestException("Cannot delete analysis while it is still running");
+    }
     await this.prisma.websiteAnalysis.delete({ where: { id } });
     return { deleted: true };
   }
 
-  async updateById(user: RequestUser, id: string, dto: { opportunities?: string[]; risks?: string[] }) {
+  async updateById(user: RequestUser, id: string, dto: WebsiteAnalysisUpdateDto) {
     const analysis = await this.prisma.websiteAnalysis.findFirst({
       where: { id, customer: buildCustomerDataScopeWhere(user) }
     });
@@ -210,6 +290,23 @@ export class WebsiteAnalysisService {
     const data: Record<string, unknown> = {};
     if (dto.opportunities !== undefined) data.opportunities = dto.opportunities;
     if (dto.risks !== undefined) data.risks = dto.risks;
+
+    if (dto.aiInsights !== undefined) {
+      const rawResult = asRecord(analysis.rawResult);
+      const existingAiInsights = asRecord(rawResult.aiInsights);
+      const aiInsights = buildEditableAiInsights(existingAiInsights, dto.aiInsights);
+      data.rawResult = {
+        ...rawResult,
+        aiInsights
+      };
+      if ("cooperation_opportunities" in dto.aiInsights) {
+        data.opportunities = asStringArray(aiInsights.cooperation_opportunities);
+      }
+      if ("risk_notes" in dto.aiInsights) {
+        data.risks = asStringArray(aiInsights.risk_notes);
+      }
+    }
+
     return this.prisma.websiteAnalysis.update({ where: { id }, data });
   }
 

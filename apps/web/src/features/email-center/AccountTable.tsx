@@ -1,4 +1,5 @@
 import { EmptyState } from "../../components/ui/EmptyState";
+import { EditIconButton } from "../../components/EditIconButton";
 import { Switch } from "../../components/Switch";
 
 export type EmailAccount = {
@@ -85,9 +86,7 @@ export function AccountTable({
               </td>
               <td>
                 <div className="toolbar">
-                  <button className="secondary-button" onClick={() => onEdit(account)}>
-                    编辑
-                  </button>
+                  <EditIconButton onClick={() => onEdit(account)} />
                   <button className="secondary-button" onClick={() => onTest(account.id)}>
                     测试
                   </button>

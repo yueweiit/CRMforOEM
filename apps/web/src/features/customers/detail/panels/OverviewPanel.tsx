@@ -8,6 +8,7 @@ import { createCustomerContact, deleteCustomerContact, getCustomerFilterOptions,
 import { AppSelect } from "../../../../components/AppSelect";
 import { AddIconButton } from "../../../../components/AddIconButton";
 import { DeleteIconButton } from "../../../../components/DeleteIconButton";
+import { EditIconButton } from "../../../../components/EditIconButton";
 import { Field } from "../../../../components/ui/Field";
 import { splitList } from "../../../../shared/utils/string";
 import type { CustomerOptions } from "../../../../shared/types/customer";
@@ -223,7 +224,7 @@ export function OverviewPanel({ customer, customerId, onChanged }: { customer: C
                 </button>
               </>
             ) : (
-              <button className="secondary-button" onClick={() => setIsEditing(true)}>编辑资料</button>
+              <EditIconButton label="编辑资料" onClick={() => setIsEditing(true)} />
             )}
           </div>
         </div>
@@ -302,7 +303,6 @@ export function OverviewPanel({ customer, customerId, onChanged }: { customer: C
         <div className="panel-title">
           <h2>联系人</h2>
           <div className="toolbar">
-            
             <AddIconButton label="新增联系人" onClick={openCreateContactDialog} />
           </div>
         </div>

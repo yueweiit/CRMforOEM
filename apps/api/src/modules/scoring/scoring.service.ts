@@ -1,5 +1,5 @@
 import { InjectQueue } from "@nestjs/bullmq";
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { AiGenerationType, CustomerStage, OemScoreBreakdown } from "@oem-crm/shared";
 import { Queue } from "bullmq";
 import { RequestUser } from "../../common/auth/current-user.decorator";
@@ -270,9 +270,15 @@ export class ScoringService {
 
   async deleteById(user: RequestUser, customerId: string, scoreId: string) {
     await this.ensureCustomerVisible(user, customerId);
-    const score = await this.prisma.oemFitScore.findFirst({ where: { id: scoreId, customerId } });
+    const score = await this.prisma.oemFitScore.findFirst({
+      where: { id: scoreId, customerId },
+      include: { aiGenerationRun: { select: { status: true } } }
+    });
     if (!score) {
       throw new NotFoundException("OEM score not found");
+    }
+    if (score.aiGenerationRun && (score.aiGenerationRun.status === "QUEUED" || score.aiGenerationRun.status === "RUNNING")) {
+      throw new BadRequestException("Cannot delete score while generation is still running");
     }
     await this.prisma.oemFitScore.delete({ where: { id: scoreId } });
     return { deleted: true };

@@ -2,9 +2,10 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog } from "@alifd/next";
 import "@alifd/next/lib/dialog/style.js";
-import { Award, Boxes, BriefcaseBusiness, Factory, FileText, Plus } from "lucide-react";
+import { Award, Boxes, BriefcaseBusiness, Factory, FileText } from "lucide-react";
 import { NavLink, useParams } from "react-router-dom";
 import { getCompanyProfile, updateCompanyProfile, getBrands, createBrand, updateBrand, deleteBrand, getProducts, createProduct, updateProduct, deleteProduct, getOemCapabilities, createOemCapability, updateOemCapability, deleteOemCapability, getCertificates, createCertificate, updateCertificate, deleteCertificate, getCaseStudies, createCaseStudy, updateCaseStudy, deleteCaseStudy, getEmailMaterials, createEmailMaterial, updateEmailMaterial, deleteEmailMaterial } from "../../api/knowledge";
+import plusIconUrl from "../../components/icons/加号.svg";
 import { DeleteIconButton } from "../../components/DeleteIconButton";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { LoadingState } from "../../components/ui/LoadingState";
@@ -352,16 +353,6 @@ export function KnowledgeBasePage() {
           <p className="eyebrow">Knowledge Base</p>
           <h1>企业资料库</h1>
         </div>
-        {currentSection !== "company" ? (
-          editingId ? (
-            <button className="secondary-button" onClick={cancelEdit}>退出编辑</button>
-          ) : (
-            <button className="primary-button" onClick={submit}>
-              <Plus size={16} />
-              新增资料
-            </button>
-          )
-        ) : null}
       </header>
 
       <nav className="tab-bar">

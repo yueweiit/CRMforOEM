@@ -56,13 +56,22 @@ export class EmailsController {
   }
 
   @Get("email-drafts")
-  drafts(@CurrentUser() user: RequestUser, @Query("customerId") customerId?: string, @Query("status") status?: string) {
-    return this.emailsService.listDrafts(user, { customerId, status });
+  async drafts(@CurrentUser() user: RequestUser, @Query("customerId") customerId?: string, @Query("status") status?: string) {
+    const page = await this.emailsService.listDrafts(user, { customerId, status, limit: 100 });
+    return page.items;
   }
 
   @Get("customers/:customerId/email-drafts")
-  customerDrafts(@CurrentUser() user: RequestUser, @Param("customerId") customerId: string) {
-    return this.emailsService.listDrafts(user, { customerId });
+  customerDrafts(
+    @CurrentUser() user: RequestUser,
+    @Param("customerId") customerId: string,
+    @Query("purpose") purpose?: string,
+    @Query("status") status?: string,
+    @Query("recipient") recipient?: string,
+    @Query("cursor") cursor?: string,
+    @Query("limit") limit?: string
+  ) {
+    return this.emailsService.listDrafts(user, { customerId, purpose, status, recipient, cursor, limit });
   }
 
   @Patch("email-drafts/:id")

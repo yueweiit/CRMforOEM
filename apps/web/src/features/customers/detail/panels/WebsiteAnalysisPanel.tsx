@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog } from "@alifd/next";
 import "@alifd/next/lib/dialog/style.js";
-import { Pencil, Trash2 } from "lucide-react";
 import { AppSelect } from "../../../../components/AppSelect";
+import { DeleteIconButton } from "../../../../components/DeleteIconButton";
+import { EditIconButton } from "../../../../components/EditIconButton";
 import { deleteWebsiteAnalysis, getWebsiteAnalysis, getWebsiteAnalysisHistory, updateWebsiteAnalysis } from "../../../../api/customers";
 import type { CustomerDetail, WebsiteAnalysis, WebsiteAnalysisHistoryItem, WebsiteAiInsights, WebsiteAnalysisPage, WebsiteAnalysisProduct } from "../shared/types";
 import { AnalysisSection, asArray, asRecord, getText, getNumber, getStringArray, stringifyInsight, InsightList, EvidenceLinks, statusText, isPendingStatus, contactTypeLabel, pageTypeLabel, shortUrl, categoryName, readablePriceRange, fallbackProductLineText, getWebsiteAiInsights, getWebsiteAiMeta, formatAnalysisTime } from "../shared/ui";
@@ -11,6 +12,7 @@ import type { WebsiteAiMetaView } from "../shared/ui";
 import { Detail } from "../shared/ui";
 import { getAnalysisDetailLoadState, getAnalysisEmptyState } from "./analysis-history-state";
 import { getDefaultWebsiteAnalysisId, getNextWebsiteAnalysisSelection, hasWebsiteAnalysisCrawlerData, shouldShowWebsiteAnalysisReport, sortWebsiteAnalysesByCreatedAt } from "./website-analysis-panel-state";
+import { WebsiteAnalysisEditDialog, type WebsiteAnalysisUpdatePayload } from "./WebsiteAnalysisEditDialog";
 
 export function WebsiteAnalysisPanel({ customer, customerId, isGenerating = false }: { customer: CustomerDetail; customerId: string; isGenerating?: boolean }) {
   const baseAnalyses = customer.websiteAnalyses ?? [];
@@ -76,7 +78,7 @@ export function WebsiteAnalysisPanel({ customer, customerId, isGenerating = fals
   });
 
   const updateMutation = useMutation({
-    mutationFn: (payload: { opportunities?: string[]; risks?: string[] }) =>
+    mutationFn: (payload: WebsiteAnalysisUpdatePayload) =>
       updateWebsiteAnalysis(analysis?.id ?? "", payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["customer", customerId] });
@@ -105,12 +107,8 @@ export function WebsiteAnalysisPanel({ customer, customerId, isGenerating = fals
                   title="历史官网分析"
                 />
               </div>
-              <button className="icon-button" title="编辑分析" onClick={() => setEditOpen(true)}>
-                <Pencil size={14} />
-              </button>
-              <button className="icon-button" title="删除分析" onClick={() => setDeleteOpen(true)}>
-                <Trash2 size={14} />
-              </button>
+              <EditIconButton label="编辑分析" onClick={() => setEditOpen(true)} />
+              <DeleteIconButton label="删除分析" onClick={() => setDeleteOpen(true)} />
             </>
           ) : null}
           <span>{analysis ? statusText(analysis.status) : "未分析"}</span>
@@ -150,6 +148,7 @@ export function WebsiteAnalysisPanel({ customer, customerId, isGenerating = fals
         </div>
       ) : null}
       <WebsiteAnalysisEditDialog
+        key={analysis?.id}
         open={editOpen}
         analysis={analysis}
         busy={updateMutation.isPending}
@@ -472,40 +471,6 @@ function SourceEvidenceSection({ data }: { data?: SourceEvidenceData }) {
         </div>
       ) : null}
     </div>
-  );
-}
-
-function WebsiteAnalysisEditDialog({ open, analysis, busy, onClose, onSave }: { open: boolean; analysis?: WebsiteAnalysis | null; busy: boolean; onClose: () => void; onSave: (payload: { opportunities?: string[]; risks?: string[] }) => void }) {
-  const opportunities = asArray(analysis?.opportunities).filter((item) => typeof item === "string") as string[];
-  const risks = asArray(analysis?.risks).filter((item) => typeof item === "string") as string[];
-  const [oppText, setOppText] = useState(opportunities.join("\n"));
-  const [riskText, setRiskText] = useState(risks.join("\n"));
-
-  useEffect(() => {
-    setOppText(opportunities.join("\n"));
-    setRiskText(risks.join("\n"));
-  }, [analysis?.id]);
-
-  return (
-    <Dialog v2 className="crm-action-dialog" title="编辑官网分析" visible={open} onClose={onClose}
-      footer={
-        <div className="toolbar crm-dialog-footer">
-          <button className="secondary-button" onClick={onClose} type="button">取消</button>
-          <button className="primary-button" disabled={busy} onClick={() => onSave({
-            opportunities: oppText.split("\n").map((s) => s.trim()).filter(Boolean),
-            risks: riskText.split("\n").map((s) => s.trim()).filter(Boolean)
-          })} type="button">{busy ? "保存中..." : "保存"}</button>
-        </div>
-      }>
-      <div className="form-field">
-        <label>合作机会（每行一条）</label>
-        <textarea value={oppText} onChange={(e) => setOppText(e.target.value)} rows={5} style={{ width: "100%", resize: "vertical" }} />
-      </div>
-      <div className="form-field" style={{ marginTop: 12 }}>
-        <label>风险提示（每行一条）</label>
-        <textarea value={riskText} onChange={(e) => setRiskText(e.target.value)} rows={5} style={{ width: "100%", resize: "vertical" }} />
-      </div>
-    </Dialog>
   );
 }
 

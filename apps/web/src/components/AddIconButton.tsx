@@ -1,4 +1,5 @@
 import plusIconUrl from "./icons/加号.svg";
+import type { CSSProperties } from "react";
 
 export function AddIconButton(props: {
   disabled?: boolean;
@@ -15,7 +16,11 @@ export function AddIconButton(props: {
       title={label}
       type="button"
     >
-      <img alt="" aria-hidden="true" src={plusIconUrl} />
+      <span
+        aria-hidden="true"
+        className="add-icon-glyph"
+        style={{ "--add-icon-url": `url("${plusIconUrl}")` } as CSSProperties}
+      />
     </button>
   );
 }

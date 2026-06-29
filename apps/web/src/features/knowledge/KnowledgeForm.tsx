@@ -1,3 +1,4 @@
+import { AddIconButton } from "../../components/AddIconButton";
 import { DeleteIconButton } from "../../components/DeleteIconButton";
 import { FileUpload } from "../../components/FileUpload";
 import { splitList } from "../../shared/utils/string";
@@ -113,7 +114,7 @@ function SpecificationEditor(props: {
           value={props.draft.value}
           onChange={(event) => props.onDraftChange({ ...props.draft, value: event.target.value })}
         />
-        <button className="secondary-button" onClick={props.onAdd} type="button">添加参数</button>
+        <AddIconButton label="添加参数" onClick={props.onAdd} />
       </div>
 
       {props.pairs.length ? (

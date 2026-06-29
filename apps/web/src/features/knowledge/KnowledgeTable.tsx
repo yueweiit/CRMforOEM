@@ -1,5 +1,6 @@
 import { EmptyState } from "../../components/ui/EmptyState";
 import { DeleteIconButton } from "../../components/DeleteIconButton";
+import { EditIconButton } from "../../components/EditIconButton";
 import type { Field } from "./KnowledgeForm";
 
 export type KnowledgeRecord = Record<string, unknown> & {
@@ -34,7 +35,7 @@ export function KnowledgeTable(props: {
             <td>{row.updatedAt ? new Date(row.updatedAt).toLocaleDateString() : "-"}</td>
             <td>
               <div className="toolbar">
-                <button className="secondary-button" onClick={() => props.onEdit(row)}>编辑</button>
+                <EditIconButton onClick={() => props.onEdit(row)} />
                 <DeleteIconButton onClick={() => props.onDelete(row.id)} />
               </div>
             </td>

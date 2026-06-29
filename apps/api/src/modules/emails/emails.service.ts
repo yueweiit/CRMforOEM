@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { RequestUser } from "../../common/auth/current-user.decorator";
 import { EmailAccountService } from "./accounts/email-account.service";
-import { EmailDraftService } from "./drafts/email-draft.service";
+import { EmailDraftListFilters, EmailDraftService } from "./drafts/email-draft.service";
 import { EmailDraftGenerationService } from "./generation/email-draft-generation.service";
 import { EmailThreadService } from "./inbound/email-thread.service";
 import { ImapManualSyncService } from "./inbound/imap-manual-sync.service";
@@ -45,7 +45,7 @@ export class EmailsService {
   // ── Thread queries ──
 
   listCustomerThreads(user: RequestUser, customerId: string) { return this.threads.listCustomerThreads(user, customerId); }
-  listDrafts(user: RequestUser, filters: { customerId?: string; status?: string }) { return this.threads.listDrafts(user, filters); }
+  listDrafts(user: RequestUser, filters: EmailDraftListFilters) { return this.draftService.listDrafts(user, filters); }
   listThreads(user: RequestUser) { return this.threads.listThreads(user); }
   listThreadMessages(user: RequestUser, threadId: string) { return this.threads.listThreadMessages(user, threadId); }
 

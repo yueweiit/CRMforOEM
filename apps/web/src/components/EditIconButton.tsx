@@ -1,17 +1,17 @@
-import minusIconUrl from "./icons/减号.svg";
+import editIconUrl from "./icons/编辑.svg";
 import type { CSSProperties } from "react";
 
-export function DeleteIconButton(props: {
+export function EditIconButton(props: {
   className?: string;
   disabled?: boolean;
   label?: string;
   onClick: () => void;
 }) {
-  const label = props.label ?? "删除";
+  const label = props.label ?? "编辑";
   return (
     <button
       aria-label={label}
-      className={`${props.className ?? "secondary-button"} icon-button delete-icon-button`}
+      className={`${props.className ?? "secondary-button"} icon-button edit-icon-button`}
       disabled={props.disabled}
       onClick={props.onClick}
       title={label}
@@ -19,8 +19,8 @@ export function DeleteIconButton(props: {
     >
       <span
         aria-hidden="true"
-        className="delete-icon-glyph"
-        style={{ "--delete-icon-url": `url("${minusIconUrl}")` } as CSSProperties}
+        className="edit-icon-glyph"
+        style={{ "--edit-icon-url": `url("${editIconUrl}")` } as CSSProperties}
       />
     </button>
   );

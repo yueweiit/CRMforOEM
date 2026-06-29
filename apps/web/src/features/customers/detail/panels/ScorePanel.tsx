@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog } from "@alifd/next";
 import "@alifd/next/lib/dialog/style.js";
-import { Pencil, Trash2 } from "lucide-react";
 import { AppSelect } from "../../../../components/AppSelect";
+import { DeleteIconButton } from "../../../../components/DeleteIconButton";
+import { EditIconButton } from "../../../../components/EditIconButton";
 import { deleteOemFitScore, getOemFitScore, getOemFitScoreHistory, updateOemFitScore } from "../../../../api/customers";
 import { MarkdownReport } from "../shared/Markdown";
 import type { CustomerDetail, OemScore } from "../shared/types";
@@ -100,12 +101,8 @@ export function ScorePanel({ customer, customerId, isGenerating = false }: { cus
                   title="历史OEM评分"
                 />
               </div>
-              <button className="icon-button" title="手动覆盖评分" onClick={() => setEditOpen(true)}>
-                <Pencil size={14} />
-              </button>
-              <button className="icon-button" title="删除评分" onClick={() => setDeleteOpen(true)}>
-                <Trash2 size={14} />
-              </button>
+              <EditIconButton label="手动覆盖评分" onClick={() => setEditOpen(true)} />
+              <DeleteIconButton label="删除评分" onClick={() => setDeleteOpen(true)} />
             </>
           ) : null}
           <span>{displayState.titleStatus}</span>
@@ -298,7 +295,7 @@ function OemScoreEditDialog({ open, score, busy, onClose, onSave }: { open: bool
         </div>
       }>
       <p style={{ marginBottom: 12, color: "#6b7280", fontSize: 13 }}>手动覆盖后将以人工评分为准。留空的字段沿用AI评分。</p>
-      <div className="detail-grid">
+      <div className="analysis-edit-form" >
         <div><label>AI评分</label><span>{aiScore}分 · {aiGrade}级</span></div>
         <div className="form-field">
           <label>人工评分 (0-100)</label>

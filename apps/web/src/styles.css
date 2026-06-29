@@ -191,6 +191,12 @@ a {
   color: white;
 }
 
+.button-svg-icon {
+  display: block;
+  height: 16px;
+  width: 16px;
+}
+
 .secondary-button.active-task,
 .secondary-button.active-task:disabled {
   background: #f6fffb;
@@ -800,6 +806,43 @@ td small {
   background: #0f766e;
 }
 
+.score-manual-input,
+.analysis-edit-form textarea,
+.analysis-edit-form input,
+.analysis-edit-form select {
+  min-height: 38px;
+  border: 1px solid #dce3dd;
+  border-radius: 8px;
+  background: #fbfcfa;
+  color: #1f2933;
+  line-height: 1.55;
+  outline: 0;
+  padding: 9px 11px;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+}
+
+.score-manual-input:hover,
+.analysis-edit-form textarea:hover,
+.analysis-edit-form input:hover,
+.analysis-edit-form select:hover {
+  border-color: #c8d4cc;
+  background: white;
+}
+
+.score-manual-input:focus,
+.analysis-edit-form textarea:focus,
+.analysis-edit-form input:focus,
+.analysis-edit-form select:focus {
+  border-color: #0f766e;
+  background: white;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+}
+
+.analysis-edit-form textarea {
+  min-height: 76px;
+  resize: none;
+}
+
 .toolbar {
   display: flex;
   gap: 10px;
@@ -814,35 +857,93 @@ td small {
 }
 
 .delete-icon-button {
+  --icon-button-glyph-color: #a9443d;
   background: white;
-  border-color: #fecdd3;
-  color: #BA564C;
+  border-color: #f3c7c2;
+  color: #a9443d;
 }
 
 .delete-icon-button:hover {
-  background: #fff1f2;
-  border-color: #f2b5b0;
-  color: #BA564C;
+  --icon-button-glyph-color: #96352f;
+  background: #fff3f2;
+  border-color: #e9aaa3;
+  color: #96352f;
 }
 
-.delete-icon-glyph {
-  background: currentColor;
+.add-icon-glyph,
+.delete-icon-glyph,
+.edit-icon-glyph {
+  background-color: var(--icon-button-glyph-color, currentColor);
+  color: inherit;
   display: block;
   height: 17px;
-  mask: var(--delete-icon-url) center / contain no-repeat;
-  -webkit-mask: var(--delete-icon-url) center / contain no-repeat;
   width: 17px;
 }
 
+.icon-button.add-icon-button .add-icon-glyph,
+.icon-button.delete-icon-button .delete-icon-glyph,
+.icon-button.edit-icon-button .edit-icon-glyph {
+  color: inherit;
+}
+
+.add-icon-glyph {
+  mask: var(--add-icon-url) center / contain no-repeat;
+  -webkit-mask: var(--add-icon-url) center / contain no-repeat;
+}
+
+.delete-icon-glyph {
+  mask: var(--delete-icon-url) center / contain no-repeat;
+  -webkit-mask: var(--delete-icon-url) center / contain no-repeat;
+}
+
+.edit-icon-glyph {
+  mask: var(--edit-icon-url) center / contain no-repeat;
+  -webkit-mask: var(--edit-icon-url) center / contain no-repeat;
+}
+
 .add-icon-button {
+  --icon-button-glyph-color: #0d6f63;
   background: white;
-  border-color: #c9e5d8;
-  color: #0f766e;
+  border-color: #b9decf;
+  color: #0d6f63;
 }
 
 .add-icon-button:hover {
-  background: #e8f5ef;
-  border-color: #a9d7c5;
+  --icon-button-glyph-color: #075f55;
+  background: #edf8f2;
+  border-color: #95ccb8;
+  color: #075f55;
+}
+
+.edit-icon-button {
+  --icon-button-glyph-color: #253b44;
+  background: white;
+  border-color: #cfd8dc;
+  color: #253b44;
+}
+
+.edit-icon-button:hover {
+  --icon-button-glyph-color: #123f3b;
+  background: #eef8f6;
+  border-color: #a7cbc5;
+  color: #123f3b;
+}
+
+.tag-icon-button.icon-button {
+  min-height: 18px;
+  min-width: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.tag-icon-button .delete-icon-glyph {
+  height: 14px;
+  width: 14px;
+}
+
+.tag-icon-button.icon-button:hover {
+  background: rgba(255, 255, 255, 0.54);
 }
 
 .search-box,
@@ -943,6 +1044,122 @@ td small {
   border-radius: 8px;
   padding: 14px;
   margin-bottom: 14px;
+}
+
+.email-draft-history-toggle,
+.email-draft-summary {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+
+.email-draft-history-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.email-draft-history-toggle h2 {
+  margin: 0;
+}
+
+.email-draft-filter-bar {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.email-draft-history.is-expanded {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.email-draft-history-window {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: clamp(420px, 58vh, 680px);
+  min-height: 0;
+}
+
+.email-draft-filter-bar label {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  color: #52616b;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.email-draft-filter-bar input {
+  width: 100%;
+  min-height: 38px;
+  min-width: 0;
+  border: 1px solid #d7dcd2;
+  border-radius: 7px;
+  background: white;
+  color: #1f2933;
+  padding: 10px;
+  outline: 0;
+}
+
+.email-draft-list {
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.email-draft-card {
+  align-content: start;
+}
+
+.email-draft-summary {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+}
+
+.email-draft-summary strong,
+.email-draft-summary span:not(.status-pill) {
+  display: block;
+}
+
+.email-draft-summary strong {
+  margin-bottom: 4px;
+}
+
+.email-draft-summary span:not(.status-pill) {
+  color: #718096;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.email-draft-detail-window {
+  display: grid;
+  gap: 10px;
+  height: clamp(320px, 44vh, 520px);
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.draft-editor textarea.email-draft-body-editor {
+  height: clamp(180px, 30vh, 320px);
+  min-height: 180px;
+  overflow: auto;
+  resize: vertical;
+}
+
+.email-draft-load-sentinel {
+  color: #718096;
+  font-size: 13px;
+  padding: 10px 0 2px;
+  text-align: center;
 }
 
 .ai-versions {
@@ -1439,6 +1656,10 @@ td small {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .email-draft-filter-bar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .page-header {
     align-items: flex-start;
     flex-direction: column;
@@ -1468,6 +1689,10 @@ td small {
 
   .filter-panel,
   .filter-panel.reports-filter {
+    grid-template-columns: 1fr;
+  }
+
+  .email-draft-filter-bar {
     grid-template-columns: 1fr;
   }
 

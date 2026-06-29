@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { EMAIL_DRAFT_PURPOSE_LABELS, EMAIL_DRAFT_PURPOSES } from "@oem-crm/shared";
 import { getEmailPromptConfigs, previewEmailPromptConfig, resetEmailPromptConfig, updateEmailPromptConfig } from "../../../api/settings";
 import { getCurrentUser, hasPermission } from "../../../auth/permissions";
+import { AddIconButton } from "../../../components/AddIconButton";
+import { DeleteIconButton } from "../../../components/DeleteIconButton";
 import { Switch } from "../../../components/Switch";
 import { notifyMutationStep } from "../../../components/Toast";
 import type { EmailPromptConfigData, EmailPromptPreviewResult } from "../shared/types";
@@ -159,7 +161,7 @@ export function EmailPrompts() {
                 {form.mustInclude.map((item, i) => (
                   <span key={i} style={{ background: "#dbeafe", color: "#1e40af", padding: "2px 8px", borderRadius: 12, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}>
                     {item}
-                    {canEdit ? <button style={{ background: "transparent", border: "none", cursor: "pointer", padding: 0, fontSize: 14, lineHeight: 1 }} onClick={() => removeTag("mustInclude", i)}>×</button> : null}
+                    {canEdit ? <DeleteIconButton className="tag-icon-button" label="移除" onClick={() => removeTag("mustInclude", i)} /> : null}
                   </span>
                 ))}
               </div>
@@ -172,7 +174,7 @@ export function EmailPrompts() {
                     placeholder="输入后按回车添加"
                     style={{ flex: 1 }}
                   />
-                  <button className="secondary-button" onClick={() => addTag("mustInclude")}>添加</button>
+                  <AddIconButton label="添加" onClick={() => addTag("mustInclude")} />
                 </div>
               ) : null}
             </label>
@@ -184,7 +186,7 @@ export function EmailPrompts() {
                 {form.mustAvoid.map((item, i) => (
                   <span key={i} style={{ background: "#fee2e2", color: "#991b1b", padding: "2px 8px", borderRadius: 12, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}>
                     {item}
-                    {canEdit ? <button style={{ background: "transparent", border: "none", cursor: "pointer", padding: 0, fontSize: 14, lineHeight: 1 }} onClick={() => removeTag("mustAvoid", i)}>×</button> : null}
+                    {canEdit ? <DeleteIconButton className="tag-icon-button" label="移除" onClick={() => removeTag("mustAvoid", i)} /> : null}
                   </span>
                 ))}
               </div>
@@ -197,7 +199,7 @@ export function EmailPrompts() {
                     placeholder="输入后按回车添加"
                     style={{ flex: 1 }}
                   />
-                  <button className="secondary-button" onClick={() => addTag("mustAvoid")}>添加</button>
+                  <AddIconButton label="添加" onClick={() => addTag("mustAvoid")} />
                 </div>
               ) : null}
             </label>

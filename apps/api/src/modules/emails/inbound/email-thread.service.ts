@@ -15,22 +15,6 @@ export class EmailThreadService {
     });
   }
 
-  async listDrafts(user: RequestUser, filters: { customerId?: string; status?: string }) {
-    return this.prisma.emailDraft.findMany({
-      where: {
-        ...(filters.customerId ? { customerId: filters.customerId } : {}),
-        ...(filters.status ? { status: filters.status as never } : {}),
-        customer: buildCustomerDataScopeWhere(user)
-      },
-      include: {
-        customer: { select: { id: true, name: true, stage: true } },
-        emailAccount: { select: { id: true, name: true, email: true, scope: true } },
-        aiGenerationRun: { select: { id: true } }
-      },
-      orderBy: { updatedAt: "desc" }, take: 100
-    });
-  }
-
   async listThreads(user: RequestUser) {
     return this.prisma.emailThread.findMany({
       where: { customer: buildCustomerDataScopeWhere(user) },

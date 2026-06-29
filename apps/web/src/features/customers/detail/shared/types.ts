@@ -95,12 +95,26 @@ export type ResearchReport = {
   title: string;
   status: string;
   finalMarkdown?: string;
-  reportJson?: unknown;
+  reportJson?: ResearchReportJson;
   sourceEvidence?: unknown;
   searchEnabled?: boolean;
   errorMessage?: string;
   aiGenerationRun?: AiRun;
   createdAt: string;
+};
+export type ResearchReportSection = Record<string, string | string[] | undefined> & {
+  confirmed_facts?: string[];
+  analysis?: string;
+  missing_info?: string[];
+};
+export type ResearchReportJson = Record<string, unknown> & {
+  title?: string;
+  sections?: Record<string, ResearchReportSection>;
+  source_basis?: unknown;
+  sourceEvidence?: unknown;
+  aiMeta?: unknown;
+  summaryPipeline?: unknown;
+  markdown_report?: string;
 };
 export type ResearchReportHistoryItem = Pick<
   ResearchReport,
@@ -133,13 +147,15 @@ export type OemScore = {
   createdAt: string;
 };
 export type OemScoreHistoryItem = Pick<OemScore, "id" | "score" | "grade" | "createdAt"> & Partial<OemScore>;
-export type AiRun = { versions?: Array<{ id: string; versionType: string; content: string; createdAt: string; editReason?: string }> };
+export type AiRun = { id?: string; status?: string; versions?: Array<{ id: string; versionType: string; content: string; createdAt: string; editReason?: string }> };
 export type FollowUpTask = { id: string; title: string; status: string; dueAt: string; type: string };
-export type EmailDraft = { id: string; purpose?: string; subject: string; body: string; toEmail: string; toNameSnapshot?: string; fromEmailSnapshot?: string; fromNameSnapshot?: string; status: string; emailAccountId?: string; emailAccount?: EmailAccount; customer?: { name: string }; aiGenerationRun?: AiRun; updatedAt: string };
+export type EmailDraft = { id: string; purpose?: string; subject: string; body: string; toEmail: string; toNameSnapshot?: string; fromEmailSnapshot?: string; fromNameSnapshot?: string; status: string; emailAccountId?: string; emailAccount?: EmailAccount; customer?: { id?: string; name: string }; aiGenerationRun?: AiRun; updatedAt: string };
+export type EmailDraftListItem = Omit<EmailDraft, "body"> & { body?: never };
+export type EmailDraftPage = { items: EmailDraftListItem[]; nextCursor?: string | null };
 export type EmailThread = { id: string; subject: string; lastMessageAt?: string; messages?: Array<{ subject: string; direction: string; status: string; createdAt: string }> };
 export type EmailAccount = { id: string; name: string; email: string; scope?: string };
-export type Quote = { id: string; quoteNo: string; amount: string; currency: string; status: string; createdAt: string };
-export type Sample = { id: string; productSummary: string; status: string; trackingNo?: string; createdAt: string };
+export type Quote = { id: string; quoteNo: string; amount: string; currency: string; status: string; notes?: string; validUntil?: string; createdAt: string };
+export type Sample = { id: string; productSummary: string; status: string; trackingNo?: string; carrier?: string; shippedAt?: string; feedback?: string; createdAt: string };
 export type CustomerBackgroundTaskView = {
   id: string;
   type: "WEBSITE_ANALYSIS" | "RESEARCH_REPORT" | "OEM_FIT_SCORE" | "EMAIL_DRAFT";

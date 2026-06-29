@@ -32,6 +32,10 @@ export function getEmailDrafts<T = unknown>() {
   return apiGet<T>("/email-drafts");
 }
 
+export function getEmailDraft<T = unknown>(draftId: string) {
+  return apiGet<T>(`/email-drafts/${draftId}`);
+}
+
 export function updateEmailDraft<T = unknown>(draftId: string, payload: unknown, options?: { toast?: boolean }) {
   return apiPatch<T>(`/email-drafts/${draftId}`, payload, options);
 }

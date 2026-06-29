@@ -2,17 +2,19 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog } from "@alifd/next";
 import "@alifd/next/lib/dialog/style.js";
-import { Pencil, Trash2 } from "lucide-react";
 import { AppSelect } from "../../../../components/AppSelect";
+import { DeleteIconButton } from "../../../../components/DeleteIconButton";
+import { EditIconButton } from "../../../../components/EditIconButton";
 import { deleteResearchReport, getResearchReport, getResearchReportHistory, updateResearchReport } from "../../../../api/customers";
 import type { CustomerDetail, ResearchReport, ResearchReportHistoryItem } from "../shared/types";
-import { AnalysisSection, asArray, asRecord, getText, getStringArray, InsightList, AiVersions, statusText, isPendingStatus, researchSearchStatus, shortUrl, pageTypeLabel, formatAnalysisTime } from "../shared/ui";
+import { AnalysisSection, asArray, asRecord, getText, AiVersions, statusText, isPendingStatus, researchSearchStatus, shortUrl, pageTypeLabel, formatAnalysisTime } from "../shared/ui";
 import { MarkdownReport } from "../shared/Markdown";
 import { Detail } from "../shared/ui";
 import { EvidenceLinks } from "../shared/ui";
 import { getAnalysisDetailLoadState, getAnalysisEmptyState, getDefaultAnalysisHistoryId, getNextAnalysisHistorySelection, sortAnalysisHistoryByCreatedAt } from "./analysis-history-state";
 import { buildResearchSourceEvidenceView, formatSourceBasisItem, hasResearchSourceEvidence, getResearchAiMeta } from "./research-source-evidence";
 import type { ResearchAiMetaView } from "./research-source-evidence";
+import { ResearchReportEditDialog, type ResearchReportUpdatePayload } from "./ResearchReportEditDialog";
 
 export function ResearchPanel({ customer, customerId, isGenerating = false }: { customer: CustomerDetail; customerId: string; isGenerating?: boolean }) {
   const baseReports = customer.researchReports ?? [];
@@ -61,11 +63,6 @@ export function ResearchPanel({ customer, customerId, isGenerating = false }: { 
 
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [editTitle, setEditTitle] = useState(report?.title ?? "");
-
-  useEffect(() => {
-    setEditTitle(report?.title ?? "");
-  }, [report?.id]);
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteResearchReport(customerId, report?.id ?? ""),
@@ -77,7 +74,7 @@ export function ResearchPanel({ customer, customerId, isGenerating = false }: { 
   });
 
   const updateMutation = useMutation({
-    mutationFn: (payload: { title?: string }) => updateResearchReport(customerId, report?.id ?? "", payload),
+    mutationFn: (payload: ResearchReportUpdatePayload) => updateResearchReport(customerId, report?.id ?? "", payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["customer", customerId] });
       queryClient.invalidateQueries({ queryKey: ["customer", customerId, "research-report-history"] });
@@ -104,12 +101,8 @@ export function ResearchPanel({ customer, customerId, isGenerating = false }: { 
                   title="历史背调报告"
                 />
               </div>
-              <button className="icon-button" title="编辑标题" onClick={() => setEditOpen(true)}>
-                <Pencil size={14} />
-              </button>
-              <button className="icon-button" title="删除报告" onClick={() => setDeleteOpen(true)}>
-                <Trash2 size={14} />
-              </button>
+              <EditIconButton label="编辑标题" onClick={() => setEditOpen(true)} />
+              <DeleteIconButton label="删除报告" onClick={() => setDeleteOpen(true)} />
             </>
           ) : null}
           <span>{report ? statusText(report.status) : "未生成"}</span>
@@ -140,18 +133,14 @@ export function ResearchPanel({ customer, customerId, isGenerating = false }: { 
           <AiVersions run={report.aiGenerationRun} />
         </div>
       ) : null}
-      <Dialog v2 className="crm-action-dialog" title="编辑报告标题" visible={editOpen} onClose={() => setEditOpen(false)}
-        footer={
-          <div className="toolbar crm-dialog-footer">
-            <button className="secondary-button" onClick={() => setEditOpen(false)} type="button">取消</button>
-            <button className="primary-button" disabled={updateMutation.isPending} onClick={() => updateMutation.mutate({ title: editTitle })} type="button">{updateMutation.isPending ? "保存中..." : "保存"}</button>
-          </div>
-        }>
-        <div className="form-field">
-          <label>报告标题</label>
-          <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={{ width: "100%" }} />
-        </div>
-      </Dialog>
+      <ResearchReportEditDialog
+        key={report?.id}
+        open={editOpen}
+        report={report}
+        busy={updateMutation.isPending}
+        onClose={() => setEditOpen(false)}
+        onSave={(payload) => updateMutation.mutate(payload)}
+      />
       <Dialog v2 className="crm-action-dialog" title="确认删除" visible={deleteOpen} onClose={() => setDeleteOpen(false)}
         footer={
           <div className="toolbar crm-dialog-footer">
@@ -252,7 +241,7 @@ function SourceEvidence({ evidence, reportJson }: { evidence?: unknown; reportJs
         </div>
       ) : null}
       {followups.length ? (
-        <div className="analysis-row">
+        <div className="analysis-row" >
           <strong>历史跟进</strong>
           {followups.map((item, index) => {
             const t = asRecord(item);

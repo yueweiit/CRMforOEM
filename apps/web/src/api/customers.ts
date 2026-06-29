@@ -1,5 +1,5 @@
 import { apiDelete, apiGet, apiPatch, apiPost } from "./http";
-import type { OemScore, OemScoreHistoryItem, ResearchReport, ResearchReportHistoryItem, WebsiteAnalysis, WebsiteAnalysisHistoryItem } from "../features/customers/detail/shared/types";
+import type { OemScore, OemScoreHistoryItem, ResearchReport, ResearchReportHistoryItem, ResearchReportJson, WebsiteAiInsights, WebsiteAnalysis, WebsiteAnalysisHistoryItem } from "../features/customers/detail/shared/types";
 
 type MutationOptions = { toast?: boolean };
 
@@ -83,7 +83,7 @@ export function deleteWebsiteAnalysis(analysisId: string) {
   return apiDelete<{ deleted: boolean }>(`/website-analyses/${analysisId}`);
 }
 
-export function updateWebsiteAnalysis(analysisId: string, payload: { opportunities?: string[]; risks?: string[] }) {
+export function updateWebsiteAnalysis(analysisId: string, payload: { opportunities?: string[]; risks?: string[]; aiInsights?: Partial<WebsiteAiInsights> }) {
   return apiPatch<unknown>(`/website-analyses/${analysisId}`, payload);
 }
 
@@ -91,7 +91,7 @@ export function deleteResearchReport(customerId: string, reportId: string) {
   return apiDelete<{ deleted: boolean }>(`/customers/${customerId}/research-reports/${reportId}`);
 }
 
-export function updateResearchReport(customerId: string, reportId: string, payload: { title?: string }) {
+export function updateResearchReport(customerId: string, reportId: string, payload: { title?: string; reportJson?: Partial<ResearchReportJson> }) {
   return apiPatch<unknown>(`/customers/${customerId}/research-reports/${reportId}`, payload);
 }
 
@@ -103,8 +103,8 @@ export function updateOemFitScore(customerId: string, scoreId: string, payload: 
   return apiPatch<unknown>(`/customers/${customerId}/oem-fit-scores/${scoreId}`, payload);
 }
 
-export function getCustomerEmailDrafts<T = unknown>(customerId: string) {
-  return apiGet<T>(`/customers/${customerId}/email-drafts`);
+export function getCustomerEmailDrafts<T = unknown>(customerId: string, queryString = "") {
+  return apiGet<T>(`/customers/${customerId}/email-drafts${queryString ? `?${queryString}` : ""}`);
 }
 
 export function getCustomerEmailThreads<T = unknown>(customerId: string) {
@@ -123,10 +123,26 @@ export function createQuote<T = unknown>(payload: unknown) {
   return apiPost<T>("/quotes", payload);
 }
 
+export function updateQuote<T = unknown>(quoteId: string, payload: unknown) {
+  return apiPatch<T>(`/quotes/${quoteId}`, payload);
+}
+
+export function deleteQuote<T = unknown>(quoteId: string) {
+  return apiDelete<T>(`/quotes/${quoteId}`);
+}
+
 export function getSamples<T = unknown>(customerId: string) {
   return apiGet<T>(`/samples?customerId=${customerId}`);
 }
 
 export function createSample<T = unknown>(payload: unknown) {
   return apiPost<T>("/samples", payload);
+}
+
+export function updateSample<T = unknown>(sampleId: string, payload: unknown) {
+  return apiPatch<T>(`/samples/${sampleId}`, payload);
+}
+
+export function deleteSample<T = unknown>(sampleId: string) {
+  return apiDelete<T>(`/samples/${sampleId}`);
 }

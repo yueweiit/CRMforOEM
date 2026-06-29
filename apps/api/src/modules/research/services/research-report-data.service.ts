@@ -94,7 +94,7 @@ export class ResearchReportDataService {
     return this.prisma.researchReport.delete({ where: { id: reportId } });
   }
 
-  updateReport(reportId: string, data: { title?: string }) {
-    return this.prisma.researchReport.update({ where: { id: reportId }, data });
+  updateReport(reportId: string, data: { title?: string; reportJson?: unknown; finalMarkdown?: string }) {
+    return this.prisma.researchReport.update({ where: { id: reportId }, data: data as never });
   }
 }

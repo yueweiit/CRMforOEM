@@ -1,0 +1,71 @@
+.analysis-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.analysis-edit-grid,
+.analysis-edit-price,
+.analysis-edit-gap {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.analysis-edit-form textarea,
+.analysis-edit-form input,
+.analysis-edit-form select {
+  width: 100%;
+  min-width: 0;
+}
+
+.analysis-edit-form .form-field label {
+  display: block;
+  margin-bottom: 6px;
+  color: #52616b;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.analysis-edit-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-top: 1px solid #edf0f3;
+  padding-top: 16px;
+}
+
+.analysis-edit-section__title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.analysis-edit-gap-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.analysis-edit-gap {
+  border: 1px solid #edf0f3;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.analysis-edit-gap__actions {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+}
+
+@media (max-width: 640px) {
+  .analysis-edit-grid,
+  .analysis-edit-price,
+  .analysis-edit-gap {
+    grid-template-columns: 1fr;
+  }
+}

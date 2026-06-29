@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { createCustomer, getCustomerFilterOptions, getCustomers } from "../../../api/customers";
 import { getCurrentUser, hasPermission } from "../../../auth/permissions";
+import plusIconUrl from "../../../components/icons/加号.svg";
 import { notifyMutationStep } from "../../../components/Toast";
 import type { CustomerOptions } from "../../../shared/types/customer";
 import { splitList } from "../../../shared/utils/string";
@@ -101,7 +101,7 @@ export function CustomersPage({ mode }: { mode?: "create" }) {
           <h1>客户开发池</h1>
         </div>
         <Link to="/customers/new" className="primary-button">
-          <Plus size={16} />
+          <img alt="" aria-hidden="true" className="button-svg-icon" src={plusIconUrl} />
           新增客户
         </Link>
       </header>

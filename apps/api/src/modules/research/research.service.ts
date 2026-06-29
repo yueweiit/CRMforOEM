@@ -1,13 +1,100 @@
 import { InjectQueue } from "@nestjs/bullmq";
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { AiGenerationType } from "@oem-crm/shared";
 import { Queue } from "bullmq";
 import { RequestUser } from "../../common/auth/current-user.decorator";
+import { asRecord, asStringArray, editableText } from "../../common/input-sanitizers";
 import { AiGenerationService, AiProviderService } from "../ai/ai.public";
 import { BackgroundTaskStaleService, TaskSubmissionLockService } from "../background-tasks/background-tasks.public";
 import { GenerateResearchReportDto } from "./dto/generate-research-report.dto";
+import { UpdateResearchReportDto } from "./dto/update-research-report.dto";
+import { buildMarkdownReportV2 } from "./parsers/research-output-parser";
 import { RESEARCH_REPORT_QUEUE } from "./research.constants";
+import {
+  RESEARCH_RECOMMENDATION_FIELDS,
+  RESEARCH_SECTION_ORDER,
+  RESEARCH_STRUCTURED_SECTION_SCHEMA,
+  type ResearchSectionKey
+} from "./research-report-schema";
 import { ResearchReportDataService } from "./services/research-report-data.service";
+
+const EDITABLE_RESEARCH_SYSTEM_FIELDS = [
+  "source_basis",
+  "sourceEvidence",
+  "aiMeta",
+  "summaryPipeline"
+] as const;
+
+function buildEditableResearchSections(existingSections: Record<string, unknown>, incomingSections: Record<string, unknown>) {
+  const merged: Record<string, unknown> = { ...existingSections };
+
+  for (const sectionKey of RESEARCH_SECTION_ORDER) {
+    const incomingSection = asRecord(incomingSections[sectionKey]);
+    if (!Object.keys(incomingSection).length) continue;
+
+    if (sectionKey === "summary_development_recommendations") {
+      const existingSection = asRecord(existingSections[sectionKey]);
+      const nextSection: Record<string, unknown> = { ...existingSection };
+      for (const field of RESEARCH_RECOMMENDATION_FIELDS) {
+        if (!(field.key in incomingSection)) continue;
+        nextSection[field.key] = field.kind === "list"
+          ? asStringArray(incomingSection[field.key])
+          : editableText(incomingSection[field.key]);
+      }
+      merged[sectionKey] = nextSection;
+      continue;
+    }
+
+    const typedKey = sectionKey as Exclude<ResearchSectionKey, "summary_development_recommendations">;
+    const existingSection = asRecord(existingSections[sectionKey]);
+    const nextSection: Record<string, unknown> = { ...existingSection };
+    for (const field of RESEARCH_STRUCTURED_SECTION_SCHEMA[typedKey]) {
+      if (!(field.key in incomingSection)) continue;
+      nextSection[field.key] = field.kind === "list"
+        ? asStringArray(incomingSection[field.key])
+        : editableText(incomingSection[field.key]);
+    }
+    if ("confirmed_facts" in incomingSection) {
+      nextSection.confirmed_facts = asStringArray(incomingSection.confirmed_facts);
+    }
+    if ("analysis" in incomingSection) {
+      nextSection.analysis = editableText(incomingSection.analysis);
+    }
+    if ("missing_info" in incomingSection) {
+      nextSection.missing_info = asStringArray(incomingSection.missing_info);
+    }
+    merged[sectionKey] = nextSection;
+  }
+
+  return merged;
+}
+
+function buildEditableResearchReportJson(
+  existingReportJson: unknown,
+  incomingReportJson: Record<string, unknown>,
+  title: string,
+  customerName: string
+) {
+  const existing = asRecord(existingReportJson);
+  const sections = buildEditableResearchSections(asRecord(existing.sections), asRecord(incomingReportJson.sections));
+  const markdown = buildMarkdownReportV2(customerName, sections);
+  const next: Record<string, unknown> = {
+    ...existing,
+    title,
+    sections,
+    markdown_report: markdown
+  };
+
+  for (const key of EDITABLE_RESEARCH_SYSTEM_FIELDS) {
+    if (existing[key] !== undefined) {
+      next[key] = existing[key];
+    } else {
+      delete next[key];
+    }
+  }
+
+  return { reportJson: next, finalMarkdown: markdown };
+}
 
 @Injectable()
 export class ResearchService {
@@ -72,17 +159,30 @@ export class ResearchService {
     if (!report) {
       throw new NotFoundException("Research report not found");
     }
+    if (report.status === "QUEUED" || report.status === "RUNNING") {
+      throw new BadRequestException("Cannot delete report while it is still running");
+    }
     await this.reportData.deleteReport(reportId);
     return { deleted: true };
   }
 
-  async updateById(user: RequestUser, customerId: string, reportId: string, dto: { title?: string }) {
-    await this.reportData.ensureCustomerVisible(user, customerId);
+  async updateById(user: RequestUser, customerId: string, reportId: string, dto: UpdateResearchReportDto) {
+    const customer = await this.reportData.ensureCustomerVisible(user, customerId);
     const report = await this.reportData.getReportById(customerId, reportId);
     if (!report) {
       throw new NotFoundException("Research report not found");
     }
-    return this.reportData.updateReport(reportId, dto);
+    const title = dto.title?.trim() || report.title;
+    const data: { title?: string; reportJson?: unknown; finalMarkdown?: string } = {};
+    if (dto.title !== undefined || dto.reportJson !== undefined) {
+      data.title = title;
+    }
+    if (dto.reportJson !== undefined) {
+      const editable = buildEditableResearchReportJson(report.reportJson, dto.reportJson, title, customer.name);
+      data.reportJson = editable.reportJson;
+      data.finalMarkdown = editable.finalMarkdown;
+    }
+    return this.reportData.updateReport(reportId, data);
   }
 
   private async createReportAndEnqueue(

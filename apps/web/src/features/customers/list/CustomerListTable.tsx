@@ -1,5 +1,7 @@
+import type { CSSProperties } from "react";
 import { Link } from "react-router-dom";
 import { stageLabel } from "@oem-crm/shared";
+import editIconUrl from "../../../components/icons/编辑.svg";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { ErrorState } from "../../../components/ui/ErrorState";
 import { LoadingState } from "../../../components/ui/LoadingState";
@@ -60,7 +62,15 @@ export function CustomerListTable({
                 <td>{customer.contacts?.[0]?.email ?? customer.contacts?.[0]?.name ?? "-"}</td>
                 <td>{customer.owner?.name ?? "-"}</td>
                 <td>{new Date(customer.updatedAt).toLocaleDateString()}</td>
-                <td><Link to={`/customers/${customer.id}/overview`} className="secondary-button">编辑</Link></td>
+                <td>
+                  <Link to={`/customers/${customer.id}/overview`} className="secondary-button icon-button edit-icon-button" aria-label="编辑" title="编辑">
+                    <span
+                      aria-hidden="true"
+                      className="edit-icon-glyph"
+                      style={{ "--edit-icon-url": `url("${editIconUrl}")` } as CSSProperties}
+                    />
+                  </Link>
+                </td>
               </tr>
             ))}
           </tbody>

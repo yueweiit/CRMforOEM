@@ -1,7 +1,6 @@
 import { useLayoutEffect, useRef } from "react";
 import type { ReactNode, TextareaHTMLAttributes } from "react";
 import { NotebookTabs } from "lucide-react";
-import { Field } from "../../../../components/ui/Field";
 import type { WebsiteAnalysis, WebsiteAiInsights, WebsiteAnalysisPage, OemScore, AiRun, ResearchReport } from "./types";
 export { formatAnalysisTime } from "./format";
 
@@ -236,7 +235,7 @@ export function EvidenceLinks({ urls }: { urls?: unknown[] }) {
   if (!values.length) return null;
   return (
     <div className="evidence-links">
-      {values.map((url) => <a href={url} target="_blank" rel="noreferrer" key={url}>{shortUrl(url)}</a>)}
+      {values.map((url) => <a href={url} target="_blank" rel="noopener noreferrer" key={url}>{shortUrl(url)}</a>)}
     </div>
   );
 }
@@ -253,9 +252,6 @@ export function AiVersions({ run }: { run?: AiRun }) {
   return <details className="ai-versions"><summary>AI与人工版本记录 ({versions.length})</summary>{versions.map((version) => <pre key={version.id}>{version.versionType} · {new Date(version.createdAt).toLocaleString()}\n{version.content}</pre>)}</details>;
 }
 
-export function CommercialPanel(props: { title: string; rows: Array<{ id: string; title: string; meta: string }>; form: Record<string, string>; setForm: (v: Record<string, string>) => void; onSubmit: () => void; fields: string[][] }) {
-  return <section className="panel"><div className="panel-title"><h2>{props.title}</h2><span>{props.rows.length} 条</span></div><SimpleRows rows={props.rows} empty={`暂无${props.title}。`} /><div className="form-grid compact-form">{props.fields.map(([key, label]) => <Field key={key} label={label} value={props.form[key]} onChange={(value) => props.setForm({ ...props.form, [key]: value })} />)}<div><button className="secondary-button" onClick={props.onSubmit}>新增</button></div></div></section>;
-}
 
 export function AutoResizeTextarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   const ref = useRef<HTMLTextAreaElement | null>(null);
