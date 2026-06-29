@@ -1,41 +1,113 @@
-import type { CustomerDetail } from "../shared/types";
-import { AnalysisSection, asArray, asRecord, getText, getStringArray, InsightList, AiVersions, statusText, isPendingStatus, researchSearchStatus, shortUrl, pageTypeLabel } from "../shared/ui";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { AppSelect } from "../../../../components/AppSelect";
+import { getResearchReport, getResearchReportHistory } from "../../../../api/customers";
+import type { CustomerDetail, ResearchReport, ResearchReportHistoryItem } from "../shared/types";
+import { AnalysisSection, asArray, asRecord, getText, getStringArray, InsightList, AiVersions, statusText, isPendingStatus, researchSearchStatus, shortUrl, pageTypeLabel, formatAnalysisTime } from "../shared/ui";
 import { MarkdownReport } from "../shared/Markdown";
 import { Detail } from "../shared/ui";
 import { EvidenceLinks } from "../shared/ui";
+import { getAnalysisDetailLoadState, getAnalysisEmptyState, getDefaultAnalysisHistoryId, getNextAnalysisHistorySelection, sortAnalysisHistoryByCreatedAt } from "./analysis-history-state";
 import { buildResearchSourceEvidenceView, formatSourceBasisItem, hasResearchSourceEvidence, getResearchAiMeta } from "./research-source-evidence";
 import type { ResearchAiMetaView } from "./research-source-evidence";
 
-export function ResearchPanel({ customer }: { customer: CustomerDetail }) {
-  const report = customer.researchReports[0];
+export function ResearchPanel({ customer, customerId, isGenerating = false }: { customer: CustomerDetail; customerId: string; isGenerating?: boolean }) {
+  const baseReports = customer.researchReports ?? [];
+  const [historyRequested, setHistoryRequested] = useState(false);
+  const historyQuery = useQuery({
+    queryKey: ["customer", customerId, "research-report-history"],
+    queryFn: () => getResearchReportHistory(customerId),
+    enabled: Boolean(historyRequested && customerId && localStorage.getItem("accessToken"))
+  });
+  const historyReports: Array<ResearchReport | ResearchReportHistoryItem> = historyQuery.data?.length ? historyQuery.data : baseReports;
+  const reports = useMemo(() => sortAnalysisHistoryByCreatedAt(historyReports), [historyReports]);
+  const defaultReportId = useMemo(() => getDefaultAnalysisHistoryId(reports, canShowResearchReport), [reports]);
+  const [selectedReportId, setSelectedReportId] = useState(defaultReportId);
+  const [hasManualSelection, setHasManualSelection] = useState(false);
+
+  useEffect(() => {
+    const nextSelection = getNextAnalysisHistorySelection(reports, selectedReportId, hasManualSelection, canShowResearchReport);
+    if (nextSelection !== selectedReportId) {
+      setSelectedReportId(nextSelection);
+      if (!reports.some((item) => item.id === selectedReportId)) {
+        setHasManualSelection(false);
+      }
+    }
+  }, [reports, hasManualSelection, selectedReportId]);
+
+  const selectedBaseReport = baseReports.find((item) => item.id === selectedReportId) ?? baseReports.find((item) => item.id === defaultReportId) ?? baseReports[0];
+  const shouldLoadReportDetail = Boolean(selectedReportId && selectedBaseReport?.id !== selectedReportId);
+  const selectedReportQuery = useQuery({
+    queryKey: ["customer", customerId, "research-report", selectedReportId],
+    queryFn: () => getResearchReport(customerId, selectedReportId),
+    enabled: shouldLoadReportDetail
+  });
+  const report = selectedReportQuery.data ?? selectedBaseReport ?? reports.find((item) => item.id === selectedReportId) ?? reports.find((item) => item.id === defaultReportId) ?? reports[0];
+  const selectedDetailLoadState = getAnalysisDetailLoadState(shouldLoadReportDetail, selectedReportQuery);
+  const isSelectedDetailLoading = selectedDetailLoadState === "loading";
   const evidence = asRecord(report?.sourceEvidence);
   const searchWarning = getText(evidence, "searchWarning") || getText(evidence, "warning");
   const aiMeta = getResearchAiMeta(report?.reportJson);
+  const emptyState = getAnalysisEmptyState(Boolean(report), isGenerating);
+  const selectorOptions = reports.map((item) => ({
+    label: `${formatAnalysisTime(item.createdAt)} · ${statusText(item.status)}`,
+    value: item.id
+  }));
+  const requestHistory = () => setHistoryRequested(true);
   return (
     <section className="panel">
-      <div className="panel-title"><h2>客户背调报告</h2><span>{report ? statusText(report.status) : "未生成"}</span></div>
-      {!report ? <div className="empty-state">尚未生成背调报告。可以先完成官网分析，再点击右上角"生成背调"。</div> : (
+      <div className="panel-title analysis-history-title">
+        <h2>客户背调报告</h2>
+        <div className="analysis-history-title__actions">
+          {report ? (
+            <div onFocus={requestHistory} onMouseDown={requestHistory}>
+              <AppSelect
+                className="analysis-history-select"
+                value={report?.id ?? ""}
+                onChange={(value) => {
+                  setSelectedReportId(value);
+                  setHasManualSelection(true);
+                }}
+                options={selectorOptions}
+                variant="toolbar"
+                title="历史背调报告"
+              />
+            </div>
+          ) : null}
+          <span>{report ? statusText(report.status) : "未生成"}</span>
+        </div>
+      </div>
+      {emptyState === "generating" ? <div className="loading-state">背调报告正在后台生成，完成后会自动显示。当前还没有可展示的历史报告。</div> : null}
+      {emptyState === "empty" ? <div className="empty-state">尚未生成背调报告。可以先完成官网分析，再点击右上角"生成背调"。</div> : null}
+      {historyQuery.isError ? <div className="error-state">历史背调报告列表加载失败，当前显示已有的概要数据。</div> : null}
+      {isSelectedDetailLoading ? <div className="loading-state">正在加载历史背调报告详情...</div> : null}
+      {selectedDetailLoadState === "error" ? <div className="error-state">历史背调报告详情加载失败，当前显示可用的概要信息。</div> : null}
+      {report ? (
         <div className="page-stack">
           <div className="detail-grid">
             <Detail label="报告状态" value={statusText(report.status)} />
             <Detail label="公开网络搜索" value={researchSearchStatus(report)} />
-            <Detail label="生成时间" value={new Date(report.createdAt).toLocaleString()} />
+            <Detail label="生成时间" value={formatAnalysisTime(report.createdAt)} />
             <Detail label="报告标题" value={report.title} />
           </div>
-          {isPendingStatus(report.status) ? <div className="loading-state">系统正在整理客户背景、官网分析、我方资料和来源依据，完成后会自动刷新。</div> : null}
+          {isPendingStatus(report.status) && !canShowResearchReport(report) ? <div className="empty-state">暂无可展示的背调报告。</div> : null}
           {report.status === "FAILED" ? <div className="error-state">{report.errorMessage ?? "背调报告生成失败，请稍后重试。"}</div> : null}
           {report.status === "SUCCEEDED" && aiMeta ? <AiStatusWarning meta={aiMeta} /> : null}
           {searchWarning ? <div className="loading-state">{searchWarning}</div> : null}
-          {report.finalMarkdown ? <MarkdownReport content={report.finalMarkdown} /> : null}
-          {!report.finalMarkdown && report.status === "SUCCEEDED" ? <div className="empty-state">背调任务已完成，但未返回可展示的 Markdown 报告，请查看 AI 版本记录或重新生成。</div> : null}
+          {!isSelectedDetailLoading && report.finalMarkdown ? <MarkdownReport content={report.finalMarkdown} /> : null}
+          {!isSelectedDetailLoading && !report.finalMarkdown && report.status === "SUCCEEDED" ? <div className="empty-state">背调任务已完成，但未返回可展示的 Markdown 报告，请查看 AI 版本记录或重新生成。</div> : null}
           <AnalysisSection title="来源依据">
             <SourceEvidence evidence={report.sourceEvidence} reportJson={report.reportJson} />
           </AnalysisSection>
           <AiVersions run={report.aiGenerationRun} />
         </div>
-      )}
+      ) : null}
     </section>
   );
+}
+
+function canShowResearchReport(report: { status?: string; finalMarkdown?: string }) {
+  return report.status === "SUCCEEDED" || Boolean(report.finalMarkdown);
 }
 
 function AiStatusWarning({ meta }: { meta: ResearchAiMetaView }) {

@@ -16,9 +16,23 @@ export class ResearchController {
     return this.researchService.generate(user, customerId, dto);
   }
 
+  @Get()
+  list(@CurrentUser() user: RequestUser, @Param("customerId") customerId: string) {
+    return this.researchService.listHistory(user, customerId);
+  }
+
   @Get("latest")
   latest(@CurrentUser() user: RequestUser, @Param("customerId") customerId: string) {
     return this.researchService.getLatest(user, customerId);
+  }
+
+  @Get(":reportId")
+  getById(
+    @CurrentUser() user: RequestUser,
+    @Param("customerId") customerId: string,
+    @Param("reportId") reportId: string
+  ) {
+    return this.researchService.getById(user, customerId, reportId);
   }
 }
 

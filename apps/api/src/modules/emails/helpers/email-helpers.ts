@@ -3,6 +3,7 @@ import { normalizeEmailDraftPurpose } from "@oem-crm/shared";
 import { RequestUser } from "../../../common/auth/current-user.decorator";
 import { PrismaService } from "../../../infrastructure/prisma/prisma.service";
 import type { EmailAccountService } from "../accounts/email-account.service";
+import { sharedAccountWhere } from "../accounts/email-account.service";
 
 export function sameEmailAddress(left?: string | null, right?: string | null) {
   return (left ?? "").trim().toLowerCase() === (right ?? "").trim().toLowerCase();
@@ -36,7 +37,7 @@ export async function resolveSenderAccount(
     return account;
   }
   const accounts = await prisma.emailAccount.findMany({
-    where: { isActive: true, OR: [{ userId: user.id }, { scope: "SHARED" } as never] },
+    where: { isActive: true, OR: [{ userId: user.id }, sharedAccountWhere(user)] },
     orderBy: [{ scope: "asc" as never }, { createdAt: "asc" }]
   });
   const account = accounts.find((item) => !sameEmailAddress(item.email, toEmail));

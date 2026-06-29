@@ -4,6 +4,7 @@ import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcrypt";
 import { randomUUID } from "crypto";
 import { RequestUser } from "../../common/auth/current-user.decorator";
+import { parseDurationSeconds } from "../../common/duration";
 import { PrismaService } from "../../infrastructure/prisma/prisma.service";
 import { PermissionService } from "../settings/settings.public";
 import { AuthSessionService } from "./auth-session.service";
@@ -31,7 +32,7 @@ export class AuthService {
     const effective = await this.permissionService.getEffectivePermissions(user.id);
     const sessionId = randomUUID();
 
-    const refreshTtlSeconds = this.parseSeconds(this.config.get<string>("JWT_REFRESH_EXPIRES_IN", "7d"));
+    const refreshTtlSeconds = parseDurationSeconds(this.config.get<string>("JWT_REFRESH_EXPIRES_IN", "7d"));
 
     const permissionVersion = await this.authSessionService.getOrInitializePermissionVersion(
       user.id,
@@ -138,7 +139,7 @@ export class AuthService {
       throw new UnauthorizedException("Invalid session");
     }
 
-    const refreshTtlSeconds = this.parseSeconds(this.config.get<string>("JWT_REFRESH_EXPIRES_IN", "7d"));
+    const refreshTtlSeconds = parseDurationSeconds(this.config.get<string>("JWT_REFRESH_EXPIRES_IN", "7d"));
 
     // Recompute effective permissions from DB — get latest
     const effective = await this.permissionService.getEffectivePermissions(user.id);
@@ -179,18 +180,5 @@ export class AuthService {
 
   async getMePermissions(userId: string) {
     return this.permissionService.getEffectivePermissions(userId);
-  }
-
-  private parseSeconds(value: string): number {
-    const match = value.match(/^(\d+)\s*(s|m|h|d)$/);
-    if (!match) return 7 * 24 * 60 * 60; // default 7 days
-    const num = Number(match[1]);
-    switch (match[2]) {
-      case "s": return num;
-      case "m": return num * 60;
-      case "h": return num * 60 * 60;
-      case "d": return num * 24 * 60 * 60;
-      default: return num;
-    }
   }
 }

@@ -8,7 +8,7 @@ export class TaskSubmissionLockService {
 
   buildKey(input: {
     organizationId: string;
-    type: "website-analysis" | "research-report" | "email-draft";
+    type: "website-analysis" | "research-report" | "oem-fit-score" | "email-draft";
     scope: string;
   }) {
     return `bg-task-lock:${input.organizationId}:${input.type}:${input.scope}`;

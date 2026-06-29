@@ -52,5 +52,5 @@ export class EmailsService {
   // ── Sync ──
 
   syncStatus(user: RequestUser) { return this.manualSync.getConnectionStatusesForUser(user); }
-  runSync(user: RequestUser) { return this.manualSync.manualSyncForUser(user.id); }
+  runSync(user: RequestUser) { return this.manualSync.manualSyncForUser(user); }
 }

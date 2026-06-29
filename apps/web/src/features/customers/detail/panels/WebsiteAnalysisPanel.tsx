@@ -1,11 +1,48 @@
-import type { CustomerDetail, WebsiteAnalysis, WebsiteAiInsights, WebsiteAnalysisPage, WebsiteAnalysisProduct } from "../shared/types";
-import { AnalysisSection, asArray, asRecord, getText, getNumber, getStringArray, stringifyInsight, InsightList, EvidenceLinks, statusText, isPendingStatus, contactTypeLabel, pageTypeLabel, shortUrl, categoryName, readablePriceRange, fallbackProductLineText, getWebsiteAiInsights, getWebsiteAiMeta } from "../shared/ui";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { AppSelect } from "../../../../components/AppSelect";
+import { getWebsiteAnalysis, getWebsiteAnalysisHistory } from "../../../../api/customers";
+import type { CustomerDetail, WebsiteAnalysis, WebsiteAnalysisHistoryItem, WebsiteAiInsights, WebsiteAnalysisPage, WebsiteAnalysisProduct } from "../shared/types";
+import { AnalysisSection, asArray, asRecord, getText, getNumber, getStringArray, stringifyInsight, InsightList, EvidenceLinks, statusText, isPendingStatus, contactTypeLabel, pageTypeLabel, shortUrl, categoryName, readablePriceRange, fallbackProductLineText, getWebsiteAiInsights, getWebsiteAiMeta, formatAnalysisTime } from "../shared/ui";
 import type { WebsiteAiMetaView } from "../shared/ui";
 import { Detail } from "../shared/ui";
-import { shouldShowWebsiteAnalysisReport } from "./website-analysis-panel-state";
+import { getAnalysisDetailLoadState, getAnalysisEmptyState } from "./analysis-history-state";
+import { getDefaultWebsiteAnalysisId, getNextWebsiteAnalysisSelection, hasWebsiteAnalysisCrawlerData, shouldShowWebsiteAnalysisReport, sortWebsiteAnalysesByCreatedAt } from "./website-analysis-panel-state";
 
-export function WebsiteAnalysisPanel({ customer }: { customer: CustomerDetail }) {
-  const analysis = customer.websiteAnalyses[0];
+export function WebsiteAnalysisPanel({ customer, customerId, isGenerating = false }: { customer: CustomerDetail; customerId: string; isGenerating?: boolean }) {
+  const baseAnalyses = customer.websiteAnalyses ?? [];
+  const [historyRequested, setHistoryRequested] = useState(false);
+  const historyQuery = useQuery({
+    queryKey: ["customer", customerId, "website-analysis-history"],
+    queryFn: () => getWebsiteAnalysisHistory(customerId),
+    enabled: Boolean(historyRequested && customerId && localStorage.getItem("accessToken"))
+  });
+  const historyAnalyses: Array<WebsiteAnalysis | WebsiteAnalysisHistoryItem> = historyQuery.data?.length ? historyQuery.data : baseAnalyses;
+  const analyses = useMemo(() => sortWebsiteAnalysesByCreatedAt(historyAnalyses), [historyAnalyses]);
+  const defaultAnalysisId = useMemo(() => getDefaultWebsiteAnalysisId(analyses), [analyses]);
+  const [selectedAnalysisId, setSelectedAnalysisId] = useState(defaultAnalysisId);
+  const [hasManualSelection, setHasManualSelection] = useState(false);
+
+  useEffect(() => {
+    const nextSelection = getNextWebsiteAnalysisSelection(analyses, selectedAnalysisId, hasManualSelection);
+    if (nextSelection !== selectedAnalysisId) {
+      setSelectedAnalysisId(nextSelection);
+      if (!analyses.some((item) => item.id === selectedAnalysisId)) {
+        setHasManualSelection(false);
+      }
+    }
+  }, [analyses, hasManualSelection, selectedAnalysisId]);
+
+  const selectedBaseAnalysis = baseAnalyses.find((item) => item.id === selectedAnalysisId) ?? baseAnalyses.find((item) => item.id === defaultAnalysisId) ?? baseAnalyses[0];
+  const shouldLoadAnalysisDetail = Boolean(selectedAnalysisId && selectedBaseAnalysis?.id !== selectedAnalysisId);
+  const selectedAnalysisQuery = useQuery({
+    queryKey: ["website-analysis", selectedAnalysisId],
+    queryFn: () => getWebsiteAnalysis(selectedAnalysisId),
+    enabled: shouldLoadAnalysisDetail
+  });
+  const analysis = selectedAnalysisQuery.data ?? selectedBaseAnalysis ?? analyses.find((item) => item.id === selectedAnalysisId) ?? analyses.find((item) => item.id === defaultAnalysisId) ?? analyses[0];
+  const selectedDetailLoadState = getAnalysisDetailLoadState(shouldLoadAnalysisDetail, selectedAnalysisQuery);
+  const isSelectedDetailLoading = selectedDetailLoadState === "loading";
   const validPages = (analysis?.pages ?? []).filter((page) => !page.errorMessage);
   const failedPages = (analysis?.pages ?? []).filter((page) => page.errorMessage);
   const aiInsights = getWebsiteAiInsights(analysis);
@@ -13,26 +50,45 @@ export function WebsiteAnalysisPanel({ customer }: { customer: CustomerDetail })
   const rawResult = asRecord(analysis?.rawResult);
   const sourceEvidence = asRecord(rawResult.sourceEvidence);
   const aiInsightError = getText(rawResult, "aiInsightError");
-  const hasCrawlerData = Boolean(analysis?.rawResult) || validPages.length > 0 || asArray(analysis?.productCategories).length > 0;
-  const canShowReport = shouldShowWebsiteAnalysisReport(analysis?.status, hasCrawlerData);
-
-  if (analysis && isPendingStatus(analysis.status)) {
-    return (
-      <section className="panel">
-        <div className="panel-title"><h2>客户官网分析</h2><span>{statusText(analysis.status)}</span></div>
-        {!customer.websiteUrl ? <div className="empty-state">请先在概览里补充并保存客户官网 URL，然后再发起官网分析。</div> : null}
-        <div className="page-stack">
-          <div className="loading-state">官网分析正在后台处理中，完成后会自动刷新。</div>
-        </div>
-      </section>
-    );
-  }
+  const hasCrawlerData = hasWebsiteAnalysisCrawlerData(analysis);
+  const canShowReport = !isSelectedDetailLoading && shouldShowWebsiteAnalysisReport(analysis?.status, hasCrawlerData);
+  const emptyState = getAnalysisEmptyState(Boolean(analysis), isGenerating);
+  const selectorOptions = analyses.map((item) => ({
+    label: `${formatAnalysisTime(item.createdAt)} · ${statusText(item.status)}`,
+    value: item.id
+  }));
+  const requestHistory = () => setHistoryRequested(true);
 
   return (
     <section className="panel">
-      <div className="panel-title"><h2>客户官网分析</h2><span>{analysis ? statusText(analysis.status) : "未分析"}</span></div>
+      <div className="panel-title website-analysis-title">
+        <h2>客户官网分析</h2>
+        <div className="website-analysis-title__actions">
+          {analysis ? (
+            <div onFocus={requestHistory} onMouseDown={requestHistory}>
+              <AppSelect
+                className="website-analysis-select"
+                value={analysis?.id ?? ""}
+                onChange={(value) => {
+                  setSelectedAnalysisId(value);
+                  setHasManualSelection(true);
+                }}
+                options={selectorOptions}
+                variant="toolbar"
+                title="历史官网分析"
+              />
+            </div>
+          ) : null}
+          <span>{analysis ? statusText(analysis.status) : "未分析"}</span>
+        </div>
+      </div>
       {!customer.websiteUrl ? <div className="empty-state">请先在"概览"里编辑并保存客户官网 URL，然后再点击右上角"官网分析"。</div> : null}
-      {!analysis ? <div className="empty-state">尚未发起官网分析。</div> : (
+      {emptyState === "generating" ? <div className="loading-state">官网分析正在后台生成，完成后会自动显示。当前还没有可展示的历史报告。</div> : null}
+      {emptyState === "empty" ? <div className="empty-state">尚未发起官网分析。</div> : null}
+      {historyQuery.isError ? <div className="error-state">历史官网分析列表加载失败，当前显示已有的概要数据。</div> : null}
+      {isSelectedDetailLoading ? <div className="loading-state">正在加载历史官网分析详情...</div> : null}
+      {selectedDetailLoadState === "error" ? <div className="error-state">历史官网分析详情加载失败，当前显示可用的概要信息。</div> : null}
+      {analysis ? (
         <div className="page-stack">
           <div className="detail-grid">
             <Detail label="分析状态" value={statusText(analysis.status)} />
@@ -42,10 +98,8 @@ export function WebsiteAnalysisPanel({ customer }: { customer: CustomerDetail })
             <Detail label="官网语言" value={analysis.detectedLanguage || "-"} />
           </div>
 
-          {analysis.status === "QUEUED" || analysis.status === "RUNNING" ? (
-            <div className="loading-state">系统正在抓取官网并生成客户分析，完成后会自动刷新。</div>
-          ) : null}
           {analysis.status === "FAILED" ? <div className="error-state">{analysis.errorMessage ?? "官网分析失败，请检查官网是否可访问。"}</div> : null}
+          {isPendingStatus(analysis.status) && !canShowReport ? <div className="empty-state">暂无可展示的官网分析报告。</div> : null}
 
           {analysis.status !== "FAILED" && aiInsightError ? (
             <div className="warning-state">官网抓取已完成，AI总结生成失败，当前展示的是抓取结果与基础分析。失败原因：{aiInsightError}</div>
@@ -60,7 +114,7 @@ export function WebsiteAnalysisPanel({ customer }: { customer: CustomerDetail })
             <pre>{JSON.stringify(analysis.rawResult ?? analysis, null, 2)}</pre>
           </details>
         </div>
-      )}
+      ) : null}
     </section>
   );
 }
@@ -77,6 +131,7 @@ function WebsiteBusinessReportV2({ analysis, insights, aiMeta, hasAiInsightError
         {aiMeta?.status === "PARTIAL" ? <p style={{ marginTop: 8, color: "#a16207", fontSize: 13 }}>AI分析部分完成，部分分组使用规则兜底。已成功信息已纳入以下报告。</p> : null}
         {aiMeta?.status === "SKIPPED" ? <p style={{ marginTop: 8, color: "#a16207", fontSize: 13 }}>AI总结因输入过大或信息量不足跳过。以下内容基于官网抓取结果和系统基础分析。</p> : null}
         {insights?.our_data_quality_note ? <p style={{ marginTop: 8, color: "#b45309", fontSize: 13 }}>数据质量提示：{insights.our_data_quality_note}</p> : null}
+        <div className="analysis-report__generated-at">生成时间：{formatAnalysisTime(analysis.createdAt)}</div>
       </div>
       <div className="analysis-grid">
         <div className="page-stack" style={{ gap: 12 }}>

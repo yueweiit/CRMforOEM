@@ -1,4 +1,5 @@
 import { apiDelete, apiGet, apiPatch, apiPost } from "./http";
+import type { OemScore, OemScoreHistoryItem, ResearchReport, ResearchReportHistoryItem, WebsiteAnalysis, WebsiteAnalysisHistoryItem } from "../features/customers/detail/shared/types";
 
 type MutationOptions = { toast?: boolean };
 
@@ -46,12 +47,36 @@ export function createWebsiteAnalysis<T = unknown>(customerId: string) {
   return apiPost<T>(`/customers/${customerId}/website-analyses`);
 }
 
+export function getWebsiteAnalysisHistory(customerId: string) {
+  return apiGet<WebsiteAnalysisHistoryItem[]>(`/customers/${customerId}/website-analyses`);
+}
+
+export function getWebsiteAnalysis(analysisId: string) {
+  return apiGet<WebsiteAnalysis>(`/website-analyses/${analysisId}`);
+}
+
 export function createResearchReport<T = unknown>(customerId: string) {
   return apiPost<T>(`/customers/${customerId}/research-reports`, {});
 }
 
+export function getResearchReportHistory(customerId: string) {
+  return apiGet<ResearchReportHistoryItem[]>(`/customers/${customerId}/research-reports`);
+}
+
+export function getResearchReport(customerId: string, reportId: string) {
+  return apiGet<ResearchReport>(`/customers/${customerId}/research-reports/${reportId}`);
+}
+
 export function createOemFitScore<T = unknown>(customerId: string) {
   return apiPost<T>(`/customers/${customerId}/oem-fit-scores`);
+}
+
+export function getOemFitScoreHistory(customerId: string) {
+  return apiGet<OemScoreHistoryItem[]>(`/customers/${customerId}/oem-fit-scores`);
+}
+
+export function getOemFitScore(customerId: string, scoreId: string) {
+  return apiGet<OemScore>(`/customers/${customerId}/oem-fit-scores/${scoreId}`);
 }
 
 export function getCustomerEmailDrafts<T = unknown>(customerId: string) {

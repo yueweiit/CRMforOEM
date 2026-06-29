@@ -14,8 +14,14 @@ ADD COLUMN     "cooperationDate" TIMESTAMP(3),
 ADD COLUMN     "fileAssetIds" TEXT[] DEFAULT ARRAY[]::TEXT[];
 
 -- AlterTable
-ALTER TABLE "certificates" ADD COLUMN     "certType" TEXT NOT NULL,
+ALTER TABLE "certificates" ADD COLUMN     "certType" TEXT,
 ADD COLUMN     "fileAssetIds" TEXT[] DEFAULT ARRAY[]::TEXT[];
+
+UPDATE "certificates"
+SET "certType" = 'Unspecified'
+WHERE "certType" IS NULL OR BTRIM("certType") = '';
+
+ALTER TABLE "certificates" ALTER COLUMN "certType" SET NOT NULL;
 
 -- AlterTable
 ALTER TABLE "company_profiles" ADD COLUMN     "factoryAddress" TEXT,

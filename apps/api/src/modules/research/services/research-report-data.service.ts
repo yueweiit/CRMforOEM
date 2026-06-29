@@ -66,4 +66,27 @@ export class ResearchReportDataService {
       include: { aiGenerationRun: { include: { versions: { orderBy: { createdAt: "asc" } } } } }
     });
   }
+
+  listReports(customerId: string) {
+    return this.prisma.researchReport.findMany({
+      where: { customerId },
+      orderBy: { createdAt: "desc" },
+      take: 30,
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        searchEnabled: true,
+        errorMessage: true,
+        createdAt: true
+      }
+    });
+  }
+
+  getReportById(customerId: string, reportId: string) {
+    return this.prisma.researchReport.findFirst({
+      where: { id: reportId, customerId },
+      include: { aiGenerationRun: { include: { versions: { orderBy: { createdAt: "asc" } } } } }
+    });
+  }
 }

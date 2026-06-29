@@ -11,9 +11,23 @@ export class ScoringController {
     return this.scoringService.generate(user, customerId);
   }
 
+  @Get()
+  list(@CurrentUser() user: RequestUser, @Param("customerId") customerId: string) {
+    return this.scoringService.listHistory(user, customerId);
+  }
+
   @Get("latest")
   latest(@CurrentUser() user: RequestUser, @Param("customerId") customerId: string) {
     return this.scoringService.getLatest(user, customerId);
+  }
+
+  @Get(":scoreId")
+  getById(
+    @CurrentUser() user: RequestUser,
+    @Param("customerId") customerId: string,
+    @Param("scoreId") scoreId: string
+  ) {
+    return this.scoringService.getById(user, customerId, scoreId);
   }
 }
 

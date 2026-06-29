@@ -7,12 +7,12 @@ export function getOemScorePanelDisplayState(input: { isGenerating: boolean; sco
   const hasScore = Boolean(input.score);
 
   return {
-    titleStatus: input.isGenerating
+    titleStatus: input.isGenerating && !hasScore
       ? "生成中"
       : input.score
         ? `${input.score.score} / ${input.score.grade}`
         : "未评分",
-    showGeneratingNotice: input.isGenerating,
+    showGeneratingNotice: input.isGenerating && !hasScore,
     showEmptyState: !input.isGenerating && !hasScore,
     showExistingScore: hasScore
   };

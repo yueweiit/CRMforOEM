@@ -55,6 +55,10 @@ export type WebsiteAnalysis = Record<string, unknown> & {
   errorMessage?: string;
   createdAt: string;
 };
+export type WebsiteAnalysisHistoryItem = Pick<
+  WebsiteAnalysis,
+  "id" | "status" | "createdAt" | "homePageTitle" | "websiteCompleteness" | "productCount" | "pricePositioning" | "errorMessage"
+> & Partial<WebsiteAnalysis>;
 export type WebsiteAiInsights = {
   business_summary?: string;
   customer_profile?: string;
@@ -98,6 +102,10 @@ export type ResearchReport = {
   aiGenerationRun?: AiRun;
   createdAt: string;
 };
+export type ResearchReportHistoryItem = Pick<
+  ResearchReport,
+  "id" | "title" | "status" | "searchEnabled" | "errorMessage" | "createdAt"
+> & Partial<ResearchReport>;
 export type OemScore = {
   id: string;
   score: number;
@@ -115,6 +123,7 @@ export type OemScore = {
   aiGenerationRun?: AiRun;
   createdAt: string;
 };
+export type OemScoreHistoryItem = Pick<OemScore, "id" | "score" | "grade" | "createdAt"> & Partial<OemScore>;
 export type AiRun = { versions?: Array<{ id: string; versionType: string; content: string; createdAt: string; editReason?: string }> };
 export type FollowUpTask = { id: string; title: string; status: string; dueAt: string; type: string };
 export type EmailDraft = { id: string; purpose?: string; subject: string; body: string; toEmail: string; toNameSnapshot?: string; fromEmailSnapshot?: string; fromNameSnapshot?: string; status: string; emailAccountId?: string; emailAccount?: EmailAccount; customer?: { name: string }; aiGenerationRun?: AiRun; updatedAt: string };
@@ -124,7 +133,7 @@ export type Quote = { id: string; quoteNo: string; amount: string; currency: str
 export type Sample = { id: string; productSummary: string; status: string; trackingNo?: string; createdAt: string };
 export type CustomerBackgroundTaskView = {
   id: string;
-  type: "WEBSITE_ANALYSIS" | "RESEARCH_REPORT" | "EMAIL_DRAFT";
+  type: "WEBSITE_ANALYSIS" | "RESEARCH_REPORT" | "OEM_FIT_SCORE" | "EMAIL_DRAFT";
   status: "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLED";
   title: string;
   customerId: string;

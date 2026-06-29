@@ -151,6 +151,25 @@ export class WebsiteAnalysisService {
     });
   }
 
+  async listHistory(user: RequestUser, customerId: string) {
+    await this.ensureCustomerVisible(user, customerId);
+    return this.prisma.websiteAnalysis.findMany({
+      where: { customerId },
+      orderBy: { createdAt: "desc" },
+      take: 30,
+      select: {
+        id: true,
+        status: true,
+        createdAt: true,
+        homePageTitle: true,
+        websiteCompleteness: true,
+        productCount: true,
+        pricePositioning: true,
+        errorMessage: true
+      }
+    });
+  }
+
   async getById(user: RequestUser, id: string) {
     const analysis = await this.prisma.websiteAnalysis.findFirst({
       where: {

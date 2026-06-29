@@ -147,7 +147,7 @@ export function OverviewPanel({ customer, customerId, onChanged }: { customer: C
     <div className="content-grid">
       <Dialog
         v2
-        className="crm-delete-dialog contact-dialog"
+        className="crm-action-dialog contact-dialog"
         title={contactDialogMode === "edit" ? "编辑联系人" : "新增联系人"}
         visible={Boolean(contactDialogMode)}
         footer={(

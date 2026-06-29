@@ -140,6 +140,7 @@ export class CustomersService {
         type: true,
         contacts: true,
         websiteAnalyses: {
+          where: { status: "SUCCEEDED" },
           take: 1,
           orderBy: { createdAt: "desc" },
           include: {
@@ -147,7 +148,7 @@ export class CustomersService {
             products: { orderBy: { confidence: "desc" } }
           }
         },
-        researchReports: { take: 1, orderBy: { createdAt: "desc" } },
+        researchReports: { where: { status: "SUCCEEDED" }, take: 1, orderBy: { createdAt: "desc" } },
         oemFitScores: { take: 1, orderBy: { createdAt: "desc" } },
         followUpTasks: { orderBy: { dueAt: "asc" } }
       }

@@ -3,6 +3,7 @@ import type { ReactNode, TextareaHTMLAttributes } from "react";
 import { NotebookTabs } from "lucide-react";
 import { Field } from "../../../../components/ui/Field";
 import type { WebsiteAnalysis, WebsiteAiInsights, WebsiteAnalysisPage, OemScore, AiRun, ResearchReport } from "./types";
+export { formatAnalysisTime } from "./format";
 
 // ── Shared utility functions ──
 

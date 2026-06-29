@@ -1,20 +1,85 @@
+import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { AppSelect } from "../../../../components/AppSelect";
+import { getOemFitScore, getOemFitScoreHistory } from "../../../../api/customers";
 import { MarkdownReport } from "../shared/Markdown";
 import type { CustomerDetail, OemScore } from "../shared/types";
-import { AnalysisSection, asArray, asRecord, getText, getNumber, stringifyInsight, InsightList, AiVersions, scoreLabel, gradeText } from "../shared/ui";
+import { AnalysisSection, asArray, asRecord, getText, getNumber, stringifyInsight, InsightList, AiVersions, scoreLabel, gradeText, formatAnalysisTime } from "../shared/ui";
+import { getAnalysisDetailLoadState, getDefaultAnalysisHistoryId, getNextAnalysisHistorySelection, sortAnalysisHistoryByCreatedAt } from "./analysis-history-state";
 import { getOemScorePanelDisplayState } from "./oem-score-panel-state";
 
-export function ScorePanel({ customer, isGenerating = false }: { customer: CustomerDetail; isGenerating?: boolean }) {
-  const score = customer.oemFitScores[0];
+export function ScorePanel({ customer, customerId, isGenerating = false }: { customer: CustomerDetail; customerId: string; isGenerating?: boolean }) {
+  const baseScores = customer.oemFitScores ?? [];
+  const [historyRequested, setHistoryRequested] = useState(false);
+  const historyQuery = useQuery({
+    queryKey: ["customer", customerId, "oem-score-history"],
+    queryFn: () => getOemFitScoreHistory(customerId),
+    enabled: Boolean(historyRequested && customerId && localStorage.getItem("accessToken"))
+  });
+  const historyScores = historyQuery.data?.length ? historyQuery.data : baseScores;
+  const scores = useMemo(() => sortAnalysisHistoryByCreatedAt(historyScores), [historyScores]);
+  const defaultScoreId = useMemo(() => getDefaultAnalysisHistoryId(scores, canShowOemScore), [scores]);
+  const [selectedScoreId, setSelectedScoreId] = useState(defaultScoreId);
+  const [hasManualSelection, setHasManualSelection] = useState(false);
+
+  useEffect(() => {
+    const nextSelection = getNextAnalysisHistorySelection(scores, selectedScoreId, hasManualSelection, canShowOemScore);
+    if (nextSelection !== selectedScoreId) {
+      setSelectedScoreId(nextSelection);
+      if (!scores.some((item) => item.id === selectedScoreId)) {
+        setHasManualSelection(false);
+      }
+    }
+  }, [scores, hasManualSelection, selectedScoreId]);
+
+  const selectedBaseScore = baseScores.find((item) => item.id === selectedScoreId) ?? baseScores.find((item) => item.id === defaultScoreId) ?? baseScores[0];
+  const shouldLoadScoreDetail = Boolean(selectedScoreId && selectedBaseScore?.id !== selectedScoreId);
+  const selectedScoreQuery = useQuery({
+    queryKey: ["customer", customerId, "oem-score", selectedScoreId],
+    queryFn: () => getOemFitScore(customerId, selectedScoreId),
+    enabled: shouldLoadScoreDetail
+  });
+  const score = selectedScoreQuery.data ?? selectedBaseScore ?? scores.find((item) => item.id === selectedScoreId) ?? scores.find((item) => item.id === defaultScoreId) ?? scores[0];
+  const selectedDetailLoadState = getAnalysisDetailLoadState(shouldLoadScoreDetail, selectedScoreQuery);
+  const isSelectedDetailLoading = selectedDetailLoadState === "loading";
   const strategy = asRecord(score?.developmentStrategy);
   const displayState = getOemScorePanelDisplayState({
-    isGenerating,
+    isGenerating: isGenerating && !score,
     score: score ? { score: score.score, grade: score.grade } : undefined
   });
+  const selectorOptions = scores.map((item) => ({
+    label: `${formatAnalysisTime(item.createdAt)} · ${item.score}分 ${item.grade}级`,
+    value: item.id
+  }));
+  const requestHistory = () => setHistoryRequested(true);
   return (
     <section className="panel">
-      <div className="panel-title"><h2>OEM适配评分</h2><span>{displayState.titleStatus}</span></div>
+      <div className="panel-title analysis-history-title">
+        <h2>OEM适配评分</h2>
+        <div className="analysis-history-title__actions">
+          {score ? (
+            <div onFocus={requestHistory} onMouseDown={requestHistory}>
+              <AppSelect
+                className="analysis-history-select"
+                value={score?.id ?? ""}
+                onChange={(value) => {
+                  setSelectedScoreId(value);
+                  setHasManualSelection(true);
+                }}
+                options={selectorOptions}
+                variant="toolbar"
+                title="历史OEM评分"
+              />
+            </div>
+          ) : null}
+          <span>{displayState.titleStatus}</span>
+        </div>
+      </div>
       {displayState.showGeneratingNotice ? <div className="loading-state">OEM评分正在生成，完成后会自动刷新。</div> : null}
       {displayState.showEmptyState ? <div className="empty-state">尚未生成OEM评分。建议先完成官网分析和背调，再点击右上角"OEM评分"。</div> : null}
+      {historyQuery.isError ? <div className="error-state">历史OEM评分列表加载失败，当前显示已有的概要数据。</div> : null}
+      {isSelectedDetailLoading ? <div className="loading-state">正在加载历史OEM评分详情...</div> : null}
+      {selectedDetailLoadState === "error" ? <div className="error-state">历史OEM评分详情加载失败，当前显示可用的概要信息。</div> : null}
       {displayState.showExistingScore && score ? (
         <div className="page-stack">
           <div className="score-summary">
@@ -24,7 +89,7 @@ export function ScorePanel({ customer, isGenerating = false }: { customer: Custo
             </div>
             <div>
               <h3>{getText(strategy, "summary") || "系统已生成OEM适配评分，请结合维度理由和推荐动作判断开发优先级。"}</h3>
-              <p>生成时间：{new Date(score.createdAt).toLocaleString()}</p>
+              <p>生成时间：{formatAnalysisTime(score.createdAt)}</p>
               {getText(strategy, "priority") ? <span className="status-pill">优先级：{getText(strategy, "priority")}</span> : null}
             </div>
           </div>
@@ -63,6 +128,11 @@ export function ScorePanel({ customer, isGenerating = false }: { customer: Custo
       ): null}
     </section>
   );
+}
+
+function canShowOemScore(score: { id?: string }) {
+  // OEM scores are persisted only after calculation finishes, so any returned score is displayable.
+  return Boolean(score.id);
 }
 
 function ScoreDimensionList({ score }: { score: OemScore }) {

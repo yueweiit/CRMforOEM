@@ -29,9 +29,10 @@ export class SseService {
     }
   }
 
-  private pushToOrg(orgId: string, event: string, data: unknown) {
+  private pushToOrg(orgId: string, event: string, data: unknown, targetUserIds?: string[]) {
+    const targetSet = targetUserIds ? new Set(targetUserIds) : null;
     for (const [, conn] of this.connections) {
-      if (conn.orgId === orgId) {
+      if (conn.orgId === orgId && (!targetSet || targetSet.has(conn.userId))) {
         conn.subject.next({ data: JSON.stringify(data), type: event } as MessageEvent);
       }
     }
@@ -39,21 +40,21 @@ export class SseService {
 
   @OnEvent(SSE_EVENTS.INBOUND_MAIL_RECEIVED)
   onInboundMailReceived(payload: InboundMailReceivedPayload) {
-    this.pushToOrg(payload.orgId, SSE_EVENTS.INBOUND_MAIL_RECEIVED, payload);
+    this.pushToOrg(payload.orgId, SSE_EVENTS.INBOUND_MAIL_RECEIVED, payload, payload.targetUserIds);
   }
 
   @OnEvent(SSE_EVENTS.FOLLOW_UP_TASK_CREATED)
   onFollowUpTaskCreated(payload: FollowUpTaskChangedPayload) {
-    this.pushToOrg(payload.orgId, SSE_EVENTS.FOLLOW_UP_TASK_CREATED, payload);
+    this.pushToOrg(payload.orgId, SSE_EVENTS.FOLLOW_UP_TASK_CREATED, payload, payload.targetUserIds);
   }
 
   @OnEvent(SSE_EVENTS.FOLLOW_UP_TASK_COMPLETED)
   onFollowUpTaskCompleted(payload: FollowUpTaskChangedPayload) {
-    this.pushToOrg(payload.orgId, SSE_EVENTS.FOLLOW_UP_TASK_COMPLETED, payload);
+    this.pushToOrg(payload.orgId, SSE_EVENTS.FOLLOW_UP_TASK_COMPLETED, payload, payload.targetUserIds);
   }
 
   @OnEvent(SSE_EVENTS.FOLLOW_UP_TASK_CANCELLED)
   onFollowUpTaskCancelled(payload: FollowUpTaskChangedPayload) {
-    this.pushToOrg(payload.orgId, SSE_EVENTS.FOLLOW_UP_TASK_CANCELLED, payload);
+    this.pushToOrg(payload.orgId, SSE_EVENTS.FOLLOW_UP_TASK_CANCELLED, payload, payload.targetUserIds);
   }
 }

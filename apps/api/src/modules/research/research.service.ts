@@ -1,5 +1,5 @@
 import { InjectQueue } from "@nestjs/bullmq";
-import { Injectable } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { AiGenerationType } from "@oem-crm/shared";
 import { Queue } from "bullmq";
 import { RequestUser } from "../../common/auth/current-user.decorator";
@@ -48,6 +48,20 @@ export class ResearchService {
   async getLatest(user: RequestUser, customerId: string) {
     await this.reportData.ensureCustomerVisible(user, customerId);
     return this.reportData.getLatestReport(customerId);
+  }
+
+  async listHistory(user: RequestUser, customerId: string) {
+    await this.reportData.ensureCustomerVisible(user, customerId);
+    return this.reportData.listReports(customerId);
+  }
+
+  async getById(user: RequestUser, customerId: string, reportId: string) {
+    await this.reportData.ensureCustomerVisible(user, customerId);
+    const report = await this.reportData.getReportById(customerId, reportId);
+    if (!report) {
+      throw new NotFoundException("Research report not found");
+    }
+    return report;
   }
 
   private async createReportAndEnqueue(

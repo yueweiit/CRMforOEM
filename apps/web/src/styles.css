@@ -529,6 +529,25 @@ a {
   font-size: 16px;
 }
 
+.website-analysis-title,
+.analysis-history-title {
+  align-items: center;
+}
+
+.website-analysis-title__actions,
+.analysis-history-title__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.website-analysis-select.app-select--toolbar.next-select,
+.analysis-history-select.app-select--toolbar.next-select {
+  width: 240px;
+  min-width: 200px;
+}
+
 .panel-title span,
 .empty-state span,
 .task-row span,
@@ -1203,6 +1222,13 @@ td small {
   padding: 16px;
 }
 
+.analysis-report__generated-at {
+  margin-top: 12px;
+  color: #718096;
+  font-size: 12px;
+  text-align: right;
+}
+
 .analysis-report__summary span {
   display: block;
   color: #0f766e;
@@ -1853,6 +1879,7 @@ td small {
   justify-content: flex-end;
 }
 
+.crm-action-dialog .next-dialog-body,
 .crm-delete-dialog .next-dialog-body {
   color: #2f3b45;
   line-height: 1.7;

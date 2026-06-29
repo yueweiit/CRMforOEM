@@ -2,6 +2,7 @@ import { Inject, Injectable, UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { OnEvent } from "@nestjs/event-emitter";
 import Redis from "ioredis";
+import { parseDurationSeconds } from "../../common/duration";
 import { REDIS_CLIENT } from "../../infrastructure/redis/redis.module";
 
 type AuthSessionPayload = {
@@ -22,7 +23,7 @@ export class AuthSessionService {
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     private readonly config: ConfigService
   ) {
-    this.refreshTtlSeconds = this.parseSeconds(this.config.get<string>("JWT_REFRESH_EXPIRES_IN", "7d"));
+    this.refreshTtlSeconds = parseDurationSeconds(this.config.get<string>("JWT_REFRESH_EXPIRES_IN", "7d"));
   }
 
   async createSession(input: {
@@ -184,6 +185,7 @@ export class AuthSessionService {
     const key = this.permissionVersionKey(userId);
     const newVersion = await this.redis.incr(key);
     await this.redis.expire(key, ttlSeconds ?? this.refreshTtlSeconds);
+    await this.clearCachedPermissions(userId);
     return newVersion;
   }
 
@@ -216,19 +218,6 @@ export class AuthSessionService {
 
   // ── Helpers ──
 
-  private parseSeconds(value: string): number {
-    const match = value.match(/^(\d+)\s*(s|m|h|d)$/);
-    if (!match) return 7 * 24 * 60 * 60;
-    const num = Number(match[1]);
-    switch (match[2]) {
-      case "s": return num;
-      case "m": return num * 60;
-      case "h": return num * 60 * 60;
-      case "d": return num * 24 * 60 * 60;
-      default: return num;
-    }
-  }
-
   async cachePermissions(userId: string, permissions: string[], ttlSeconds?: number): Promise<void> {
     await this.redis.set(
       this.permissionsCacheKey(userId),
@@ -250,6 +239,10 @@ export class AuthSessionService {
   }
 
   // ── Key helpers ──
+
+  async clearCachedPermissions(userId: string): Promise<void> {
+    await this.redis.del(this.permissionsCacheKey(userId));
+  }
 
   private sessionKey(sessionId: string) {
     return `auth:session:${sessionId}`;

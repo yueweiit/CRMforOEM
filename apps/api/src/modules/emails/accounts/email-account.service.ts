@@ -1,4 +1,5 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { EmailAccountScope } from "@prisma/client";
 import { RequestUser } from "../../../common/auth/current-user.decorator";
 import { hasPermission } from "../../../common/auth/permission.utils";
 import { PrismaService } from "../../../infrastructure/prisma/prisma.service";
@@ -19,7 +20,7 @@ export class EmailAccountService {
 
   list(user: RequestUser) {
     return this.prisma.emailAccount.findMany({
-      where: { OR: [{ userId: user.id }, { scope: "SHARED", isActive: true } as never] },
+      where: { OR: [{ userId: user.id }, sharedAccountWhere(user)] },
       select: {
         id: true, scope: true, name: true, email: true,
         smtpHost: true, smtpPort: true, smtpSecure: true, smtpUsername: true,
@@ -38,7 +39,7 @@ export class EmailAccountService {
     const account = await this.prisma.emailAccount.create({
       data: {
         userId: user.id,
-        scope: (dto.scope ?? "PERSONAL") as never,
+        scope: (dto.scope ?? EmailAccountScope.PERSONAL) as EmailAccountScope,
         name: dto.name, email: dto.email,
         smtpHost: dto.smtpHost, smtpPort: dto.smtpPort, smtpSecure: dto.smtpSecure ?? true,
         smtpUsername: dto.smtpUsername, smtpPasswordEncrypted: encryptedSmtpPassword.value,
@@ -60,7 +61,7 @@ export class EmailAccountService {
     this.assertScopeChangeAllowed(user, dto);
 
     const data = pickDefinedFields({
-      scope: dto.scope as never, name: dto.name, email: dto.email,
+      scope: dto.scope as EmailAccountScope | undefined, name: dto.name, email: dto.email,
       smtpHost: dto.smtpHost, smtpPort: dto.smtpPort, smtpSecure: dto.smtpSecure,
       smtpUsername: dto.smtpUsername,
       smtpPasswordEncrypted: this.encryptPasswordIfProvided(dto.smtpPassword),
@@ -87,7 +88,7 @@ export class EmailAccountService {
 
   async findAccount(user: RequestUser, id: string) {
     const account = await this.prisma.emailAccount.findFirst({
-      where: { id, OR: [{ userId: user.id }, { scope: "SHARED", isActive: true } as never] }
+      where: { id, OR: [{ userId: user.id }, sharedAccountWhere(user)] }
     });
     if (!account) throw new NotFoundException("Email account not found");
     return account;
@@ -109,6 +110,14 @@ export class EmailAccountService {
     if (!password) return undefined;
     return this.secrets.encrypt(password).value;
   }
+}
+
+export function sharedAccountWhere(user: Pick<RequestUser, "organizationId">) {
+  return {
+    scope: EmailAccountScope.SHARED,
+    isActive: true,
+    user: { organizationId: user.organizationId }
+  };
 }
 
 function pickDefinedFields<T extends Record<string, unknown>>(input: T) {

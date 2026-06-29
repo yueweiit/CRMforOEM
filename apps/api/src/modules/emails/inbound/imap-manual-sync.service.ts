@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { RequestUser } from "../../../common/auth/current-user.decorator";
 import { PrismaService } from "../../../infrastructure/prisma/prisma.service";
+import { sharedAccountWhere } from "../accounts/email-account.service";
 import { ImapIdleService } from "./imap-idle.service";
 import type { AccountSyncResult, ImapAccount, ManagedConnection } from "./types";
 
@@ -11,9 +12,9 @@ export class ImapManualSyncService {
     private readonly imapIdle: ImapIdleService
   ) {}
 
-  async manualSyncForUser(userId: string) {
+  async manualSyncForUser(user: RequestUser) {
     const accounts = await this.prisma.emailAccount.findMany({
-      where: { isActive: true, OR: [{ userId }, { scope: "SHARED" } as never] },
+      where: { isActive: true, OR: [{ userId: user.id }, sharedAccountWhere(user)] },
       include: { user: { select: { organizationId: true } } }
     });
 
@@ -41,7 +42,7 @@ export class ImapManualSyncService {
 
   async getConnectionStatusesForUser(user: RequestUser) {
     const accounts = await this.prisma.emailAccount.findMany({
-      where: { OR: [{ userId: user.id }, { scope: "SHARED", isActive: true } as never] },
+      where: { OR: [{ userId: user.id }, sharedAccountWhere(user)] },
       select: { id: true, name: true, email: true, isActive: true, lastSyncAt: true }
     });
 

@@ -11,6 +11,11 @@ export class WebsiteAnalysisController {
     return this.websiteAnalysisService.enqueueForCustomer(user, customerId);
   }
 
+  @Get("customers/:customerId/website-analyses")
+  list(@CurrentUser() user: RequestUser, @Param("customerId") customerId: string) {
+    return this.websiteAnalysisService.listHistory(user, customerId);
+  }
+
   @Get("customers/:customerId/website-analyses/latest")
   latest(@CurrentUser() user: RequestUser, @Param("customerId") customerId: string) {
     return this.websiteAnalysisService.getLatest(user, customerId);

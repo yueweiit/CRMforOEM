@@ -1,10 +1,14 @@
+import { InjectQueue } from "@nestjs/bullmq";
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { AiGenerationType, CustomerStage, OemScoreBreakdown } from "@oem-crm/shared";
+import { Queue } from "bullmq";
 import { RequestUser } from "../../common/auth/current-user.decorator";
 import { buildCustomerDataScopeWhere } from "../../common/query/data-scope";
 import { PrismaService } from "../../infrastructure/prisma/prisma.service";
 import { AiGenerationService, AiProviderService } from "../ai/ai.public";
+import { TaskSubmissionLockService } from "../background-tasks/background-tasks.public";
 import { DEFAULT_OEM_SCORING_WEIGHTS, mergeWithDefaults, type OemScoringWeights } from "../settings/settings.public";
+import { OEM_FIT_SCORE_QUEUE } from "./scoring.constants";
 
 type ScoreDimension = {
   key: keyof OemScoreBreakdown;
@@ -42,10 +46,103 @@ export class ScoringService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly aiGeneration: AiGenerationService,
-    private readonly aiProvider: AiProviderService
+    private readonly aiProvider: AiProviderService,
+    private readonly taskLocks: TaskSubmissionLockService,
+    @InjectQueue(OEM_FIT_SCORE_QUEUE) private readonly queue: Queue
   ) {}
 
   async generate(user: RequestUser, customerId: string) {
+    const customer = await this.ensureCustomerVisible(user, customerId);
+    const existing = await this.findActiveOemScoreRun(customerId, user.organizationId);
+    if (existing) {
+      return { accepted: false, reason: "ACTIVE_OEM_FIT_SCORE_EXISTS", existing };
+    }
+
+    const lockKey = this.taskLocks.buildKey({
+      organizationId: user.organizationId,
+      type: "oem-fit-score",
+      scope: customerId
+    });
+    const locked = await this.taskLocks.acquire(lockKey, 600, {
+      userId: user.id,
+      customerId,
+      createdAt: new Date().toISOString()
+    });
+    if (!locked) {
+      const lockedExisting = await this.findActiveOemScoreRun(customerId, user.organizationId);
+      return { accepted: false, reason: "OEM_FIT_SCORE_SUBMISSION_LOCKED", existing: lockedExisting };
+    }
+
+    try {
+      const run = await this.aiGeneration.createRun({
+        organizationId: user.organizationId,
+        customerId,
+        type: AiGenerationType.OemFitScore,
+        model: this.aiProvider.model,
+        promptVersion: "oem-fit-score-v2",
+        rawInput: {
+          customer: {
+            id: customer.id,
+            name: customer.name,
+            websiteUrl: customer.websiteUrl,
+            country: customer.country,
+            language: customer.language,
+            typeId: customer.typeId,
+            sourceId: customer.sourceId
+          },
+          mode: "queued"
+        },
+        createdById: user.id
+      });
+
+      await this.queue.add("generate-oem-fit-score", {
+        runId: run.id,
+        organizationId: user.organizationId,
+        customerId,
+        createdById: user.id
+      });
+
+      return { accepted: true, run };
+    } finally {
+      await this.taskLocks.release(lockKey);
+    }
+  }
+
+  async processQueuedRun(input: {
+    runId: string;
+    organizationId: string;
+    customerId: string;
+    createdById?: string;
+  }) {
+    await this.prisma.aiGenerationRun.update({
+      where: { id: input.runId },
+      data: { status: "RUNNING" }
+    });
+    try {
+      return await this.generateScoreForRun(input);
+    } catch (error) {
+      await this.aiGeneration.markFailed(
+        input.runId,
+        error instanceof Error ? error.message : "OEM score generation failed"
+      );
+      throw error;
+    }
+  }
+
+  private async generateScoreForRun(input: {
+    runId: string;
+    organizationId: string;
+    customerId: string;
+    createdById?: string;
+  }) {
+    const user: RequestUser = {
+      id: input.createdById ?? "",
+      organizationId: input.organizationId,
+      roleCodes: [],
+      permissions: [],
+      dataScope: "ALL"
+    };
+    const customerId = input.customerId;
     const context = await this.buildContext(user, customerId);
     const weights = await this.readOrgWeights(user.organizationId);
     const dimensions = calculateDimensions(context);
@@ -55,28 +152,25 @@ export class ScoringService {
     const recommendedProducts = recommendProducts(context);
     const fallbackPlan = buildFallbackPlan(context, dimensions, recommendedProducts, weightedScore, grade);
 
-    const run = await this.aiGeneration.createRun({
-      organizationId: user.organizationId,
-      customerId,
-      type: AiGenerationType.OemFitScore,
-      model: this.aiProvider.model,
-      promptVersion: "oem-fit-score-v2",
-      rawInput: {
-        customer: context.customer,
-        latestWebsiteAnalysis: compactWebsiteAnalysis(context.websiteAnalysis),
-        latestResearchReport: compactResearchReport(context.researchReport),
-        companyKnowledge: {
-          products: context.products.slice(0, 80),
-          capabilities: context.capabilities,
-          caseStudies: context.caseStudies.slice(0, 30)
-        },
-        dimensions,
-        weightedScore,
-        grade,
-        recommendedProducts,
-        weights
-      },
-      createdById: user.id
+    await this.prisma.aiGenerationRun.update({
+      where: { id: input.runId },
+      data: {
+        rawInput: {
+          customer: context.customer,
+          latestWebsiteAnalysis: compactWebsiteAnalysis(context.websiteAnalysis),
+          latestResearchReport: compactResearchReport(context.researchReport),
+          companyKnowledge: {
+            products: context.products.slice(0, 80),
+            capabilities: context.capabilities,
+            caseStudies: context.caseStudies.slice(0, 30)
+          },
+          dimensions,
+          weightedScore,
+          grade,
+          recommendedProducts,
+          weights
+        } as never
+      }
     });
 
     const startedAt = Date.now();
@@ -95,16 +189,16 @@ export class ScoringService {
         jsonMode: true
       });
       aiPlan = parseAiPlan(completion.content, fallbackPlan);
-      await this.aiGeneration.markSucceeded(run.id, completion.raw, completion.tokenUsage, Date.now() - startedAt);
-      await this.aiGeneration.addRawAiVersion(run.id, completion.content, aiPlan);
+      await this.aiGeneration.markSucceeded(input.runId, completion.raw, completion.tokenUsage, Date.now() - startedAt);
+      await this.aiGeneration.addRawAiVersion(input.runId, completion.content, aiPlan);
     } catch (error) {
-      await this.aiGeneration.markFailed(run.id, error instanceof Error ? error.message : "AI score narrative failed");
+      await this.aiGeneration.markFailed(input.runId, error instanceof Error ? error.message : "AI score narrative failed");
     }
 
     const score = await this.prisma.oemFitScore.create({
       data: {
         customerId,
-        aiGenerationRunId: run.id,
+        aiGenerationRunId: input.runId,
         score: weightedScore,
         grade,
         breakdown: breakdown as never,
@@ -120,7 +214,7 @@ export class ScoringService {
         aiGrade: grade,
         aiBreakdown: breakdown as never,
         explanation: aiPlan.markdown_report,
-        createdById: user.id
+        createdById: input.createdById
       },
       include: { aiGenerationRun: { include: { versions: { orderBy: { createdAt: "asc" } } } } }
     });
@@ -142,6 +236,33 @@ export class ScoringService {
       orderBy: { createdAt: "desc" },
       include: { aiGenerationRun: { include: { versions: { orderBy: { createdAt: "asc" } } } } }
     });
+  }
+
+  async listHistory(user: RequestUser, customerId: string) {
+    await this.ensureCustomerVisible(user, customerId);
+    return this.prisma.oemFitScore.findMany({
+      where: { customerId },
+      orderBy: { createdAt: "desc" },
+      take: 30,
+      select: {
+        id: true,
+        score: true,
+        grade: true,
+        createdAt: true
+      }
+    });
+  }
+
+  async getById(user: RequestUser, customerId: string, scoreId: string) {
+    await this.ensureCustomerVisible(user, customerId);
+    const score = await this.prisma.oemFitScore.findFirst({
+      where: { id: scoreId, customerId },
+      include: { aiGenerationRun: { include: { versions: { orderBy: { createdAt: "asc" } } } } }
+    });
+    if (!score) {
+      throw new NotFoundException("OEM score not found");
+    }
+    return score;
   }
 
   async buildContext(user: RequestUser, customerId: string) {
@@ -189,6 +310,18 @@ export class ScoringService {
       throw new NotFoundException("Customer not found");
     }
     return customer;
+  }
+
+  private findActiveOemScoreRun(customerId: string, organizationId: string) {
+    return this.prisma.aiGenerationRun.findFirst({
+      where: {
+        customerId,
+        organizationId,
+        type: AiGenerationType.OemFitScore,
+        status: { in: ["QUEUED", "RUNNING"] }
+      },
+      orderBy: { createdAt: "desc" }
+    });
   }
 }
 
