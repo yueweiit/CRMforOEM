@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Navigate, NavLink, Outlet } from "react-router-dom";
+import { Navigate, NavLink, Outlet, useLocation } from "react-router-dom";
+import { Suspense } from "react";
 import {
   BarChart3,
   BookOpen,
@@ -12,6 +13,8 @@ import {
 import { apiGet } from "../api/http";
 import { canViewReports, defaultReportPath, defaultSettingsPath, getCurrentUser, type CurrentUser } from "../auth/permissions";
 import { showServerToast, ToastContainer } from "../components/Toast";
+import { ChunkErrorBoundary } from "../components/ChunkErrorBoundary";
+import { PageLoadingSkeleton } from "../components/PageLoadingSkeleton";
 import { EMAIL_EVENT_TOAST_CONFIG } from "../config/email-event-toasts";
 import { TASK_TOAST_CONFIG } from "../config/follow-up-task-toasts";
 import { useSse } from "../hooks/useSse";
@@ -45,6 +48,7 @@ export function AppShell() {
   }
 
   const queryClient = useQueryClient();
+  const location = useLocation();
   const currentUser = getCurrentUser();
   const userId = currentUser?.id ?? "";
   const visibleNavItems = navItems
@@ -124,7 +128,11 @@ export function AppShell() {
         </nav>
       </aside>
       <main className="workspace">
-        <Outlet />
+        <ChunkErrorBoundary resetKey={location.pathname}>
+          <Suspense fallback={<PageLoadingSkeleton />}>
+            <Outlet />
+          </Suspense>
+        </ChunkErrorBoundary>
       </main>
       <ToastContainer />
     </div>

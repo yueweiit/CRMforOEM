@@ -79,6 +79,30 @@ export function getOemFitScore(customerId: string, scoreId: string) {
   return apiGet<OemScore>(`/customers/${customerId}/oem-fit-scores/${scoreId}`);
 }
 
+export function deleteWebsiteAnalysis(analysisId: string) {
+  return apiDelete<{ deleted: boolean }>(`/website-analyses/${analysisId}`);
+}
+
+export function updateWebsiteAnalysis(analysisId: string, payload: { opportunities?: string[]; risks?: string[] }) {
+  return apiPatch<unknown>(`/website-analyses/${analysisId}`, payload);
+}
+
+export function deleteResearchReport(customerId: string, reportId: string) {
+  return apiDelete<{ deleted: boolean }>(`/customers/${customerId}/research-reports/${reportId}`);
+}
+
+export function updateResearchReport(customerId: string, reportId: string, payload: { title?: string }) {
+  return apiPatch<unknown>(`/customers/${customerId}/research-reports/${reportId}`, payload);
+}
+
+export function deleteOemFitScore(customerId: string, scoreId: string) {
+  return apiDelete<{ deleted: boolean }>(`/customers/${customerId}/oem-fit-scores/${scoreId}`);
+}
+
+export function updateOemFitScore(customerId: string, scoreId: string, payload: { manualScore?: number; manualGrade?: string; manualBreakdown?: Record<string, number>; manualNotes?: string }) {
+  return apiPatch<unknown>(`/customers/${customerId}/oem-fit-scores/${scoreId}`, payload);
+}
+
 export function getCustomerEmailDrafts<T = unknown>(customerId: string) {
   return apiGet<T>(`/customers/${customerId}/email-drafts`);
 }

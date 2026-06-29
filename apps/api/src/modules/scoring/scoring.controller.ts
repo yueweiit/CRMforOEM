@@ -1,5 +1,6 @@
-import { Controller, Get, Param, Post } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post } from "@nestjs/common";
 import { CurrentUser, RequestUser } from "../../common/auth/current-user.decorator";
+import { UpdateOemScoreDto } from "./dto/update-oem-score.dto";
 import { ScoringService } from "./scoring.service";
 
 @Controller("customers/:customerId/oem-fit-scores")
@@ -28,6 +29,25 @@ export class ScoringController {
     @Param("scoreId") scoreId: string
   ) {
     return this.scoringService.getById(user, customerId, scoreId);
+  }
+
+  @Delete(":scoreId")
+  delete(
+    @CurrentUser() user: RequestUser,
+    @Param("customerId") customerId: string,
+    @Param("scoreId") scoreId: string
+  ) {
+    return this.scoringService.deleteById(user, customerId, scoreId);
+  }
+
+  @Patch(":scoreId")
+  update(
+    @CurrentUser() user: RequestUser,
+    @Param("customerId") customerId: string,
+    @Param("scoreId") scoreId: string,
+    @Body() dto: UpdateOemScoreDto
+  ) {
+    return this.scoringService.updateById(user, customerId, scoreId, dto);
   }
 }
 

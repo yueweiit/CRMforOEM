@@ -70,6 +70,7 @@ export class ResearchProcessor extends WorkerHost {
   async process(job: Job<{ reportId: string; organizationId: string; customerId: string; salesNotes?: string }>) {
     const { reportId, organizationId, customerId, salesNotes } = job.data;
     const report = await this.reportRun.markRunning(reportId);
+    if (!report) return undefined;
 
     try {
       const context = await this.contextBuilder.build(organizationId, customerId, salesNotes);

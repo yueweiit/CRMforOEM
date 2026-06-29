@@ -15,7 +15,8 @@ import { EmailPanel } from "./panels/EmailPanel";
 import { FollowUpPanel } from "./panels/FollowUpPanel";
 import { QuotePanel } from "./panels/QuotePanel";
 import { SamplePanel } from "./panels/SamplePanel";
-import { getActiveTaskSignature, getCompletedActiveTaskTypes } from "./customer-task-state";
+import { getActiveTaskSignature, getCompletedActiveTaskTypes, getGenerationDialogBusy } from "./customer-task-state";
+import type { GenerationAction } from "./customer-task-state";
 
 const tabs = [
   { to: "overview", label: "概览", icon: NotebookTabs },
@@ -117,6 +118,11 @@ export function CustomerDetailPage() {
     onError: () => setMessage("OEM评分生成失败，请稍后重试。")
   });
   const isOemScoreGenerating = scoreMutation.isPending || hasActiveTask("OEM_FIT_SCORE");
+  const generationDialogBusy = getGenerationDialogBusy(pendingAction, {
+    websitePending: analyzeMutation.isPending,
+    researchPending: researchMutation.isPending,
+    oemPending: scoreMutation.isPending
+  });
 
   function openGenerationConfirm(action: GenerationAction) {
     setPendingAction(action);
@@ -168,7 +174,7 @@ export function CustomerDetailPage() {
 
       <GenerationConfirmDialog
         action={pendingAction}
-        busy={analyzeMutation.isPending || researchMutation.isPending || isOemScoreGenerating}
+        busy={generationDialogBusy}
         onCancel={closeGenerationConfirm}
         onConfirm={confirmGenerationAction}
       />
@@ -205,8 +211,6 @@ export function CustomerDetailPage() {
   );
 }
 
-type GenerationAction = "website" | "research" | "oem";
-
 function GenerationConfirmDialog(props: {
   action: GenerationAction | null;
   busy: boolean;
@@ -222,7 +226,7 @@ function GenerationConfirmDialog(props: {
       visible={Boolean(props.action)}
       footer={(
         <div className="toolbar crm-dialog-footer">
-          <button className="secondary-button" disabled={props.busy} onClick={props.onCancel} type="button">
+          <button className="secondary-button" onClick={props.onCancel} type="button">
             取消
           </button>
           <button className="primary-button" disabled={props.busy} onClick={props.onConfirm} type="button">

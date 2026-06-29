@@ -64,10 +64,11 @@ export class WebsiteAnalysisProcessor extends WorkerHost {
       where: { id: analysisId },
       include: { customer: { select: { organizationId: true } } }
     });
-    await this.prisma.websiteAnalysis.update({
-      where: { id: analysisId },
+    const started = await this.prisma.websiteAnalysis.updateMany({
+      where: { id: analysisId, status: { in: ["QUEUED", "RUNNING"] } },
       data: { status: "RUNNING", startedAt: new Date() }
     });
+    if (started.count === 0) return;
     const organizationId = analysis.customer.organizationId;
 
     try {

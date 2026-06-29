@@ -1919,3 +1919,44 @@ td small {
   border-color: #0d6b64 !important;
 }
 
+/* ---- 页面加载占位（纯 CSS，不依赖组件库）---- */
+.page-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+}
+
+.page-loading::after {
+  content: "";
+  width: 32px;
+  height: 32px;
+  border: 3px solid #e5e6eb;
+  border-top-color: #0066ff;
+  border-radius: 50%;
+  animation: page-loading-spin 0.8s linear infinite;
+}
+
+.page-loading-skeleton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 360px;
+}
+
+.page-loading-skeleton::after {
+  content: "";
+  width: 32px;
+  height: 32px;
+  border: 3px solid #e5e6eb;
+  border-top-color: #0066ff;
+  border-radius: 50%;
+  animation: page-loading-spin 0.8s linear infinite;
+}
+
+@keyframes page-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+

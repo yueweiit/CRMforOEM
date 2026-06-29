@@ -6,7 +6,7 @@ import { RequestUser } from "../../common/auth/current-user.decorator";
 import { buildCustomerDataScopeWhere } from "../../common/query/data-scope";
 import { PrismaService } from "../../infrastructure/prisma/prisma.service";
 import { AiGenerationService, AiProviderService } from "../ai/ai.public";
-import { TaskSubmissionLockService } from "../background-tasks/background-tasks.public";
+import { BackgroundTaskStaleService, TaskSubmissionLockService } from "../background-tasks/background-tasks.public";
 import { WEBSITE_ANALYSIS_QUEUE } from "./website-analysis.constants";
 
 @Injectable()
@@ -16,6 +16,7 @@ export class WebsiteAnalysisService {
     private readonly aiGeneration: AiGenerationService,
     private readonly aiProvider: AiProviderService,
     private readonly taskLocks: TaskSubmissionLockService,
+    private readonly staleTasks: BackgroundTaskStaleService,
     @InjectQueue(WEBSITE_ANALYSIS_QUEUE) private readonly queue: Queue
   ) {}
 
@@ -27,6 +28,7 @@ export class WebsiteAnalysisService {
       throw new NotFoundException("Customer or website URL not found");
     }
 
+    await this.staleTasks.markStaleCustomerTasks(user.organizationId, customerId);
     const existing = await this.findActiveWebsiteAnalysis(customerId, user.organizationId);
     if (existing) {
       return {
@@ -185,6 +187,30 @@ export class WebsiteAnalysisService {
       throw new NotFoundException("Website analysis not found");
     }
     return analysis;
+  }
+
+  async deleteById(user: RequestUser, id: string) {
+    const analysis = await this.prisma.websiteAnalysis.findFirst({
+      where: { id, customer: buildCustomerDataScopeWhere(user) }
+    });
+    if (!analysis) {
+      throw new NotFoundException("Website analysis not found");
+    }
+    await this.prisma.websiteAnalysis.delete({ where: { id } });
+    return { deleted: true };
+  }
+
+  async updateById(user: RequestUser, id: string, dto: { opportunities?: string[]; risks?: string[] }) {
+    const analysis = await this.prisma.websiteAnalysis.findFirst({
+      where: { id, customer: buildCustomerDataScopeWhere(user) }
+    });
+    if (!analysis) {
+      throw new NotFoundException("Website analysis not found");
+    }
+    const data: Record<string, unknown> = {};
+    if (dto.opportunities !== undefined) data.opportunities = dto.opportunities;
+    if (dto.risks !== undefined) data.risks = dto.risks;
+    return this.prisma.websiteAnalysis.update({ where: { id }, data });
   }
 
   private async ensureCustomerVisible(user: RequestUser, customerId: string) {

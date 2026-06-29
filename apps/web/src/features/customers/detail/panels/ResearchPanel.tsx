@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Dialog } from "@alifd/next";
+import "@alifd/next/lib/dialog/style.js";
+import { Pencil, Trash2 } from "lucide-react";
 import { AppSelect } from "../../../../components/AppSelect";
-import { getResearchReport, getResearchReportHistory } from "../../../../api/customers";
+import { deleteResearchReport, getResearchReport, getResearchReportHistory, updateResearchReport } from "../../../../api/customers";
 import type { CustomerDetail, ResearchReport, ResearchReportHistoryItem } from "../shared/types";
 import { AnalysisSection, asArray, asRecord, getText, getStringArray, InsightList, AiVersions, statusText, isPendingStatus, researchSearchStatus, shortUrl, pageTypeLabel, formatAnalysisTime } from "../shared/ui";
 import { MarkdownReport } from "../shared/Markdown";
@@ -54,25 +57,60 @@ export function ResearchPanel({ customer, customerId, isGenerating = false }: { 
     value: item.id
   }));
   const requestHistory = () => setHistoryRequested(true);
+  const queryClient = useQueryClient();
+
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [editTitle, setEditTitle] = useState(report?.title ?? "");
+
+  useEffect(() => {
+    setEditTitle(report?.title ?? "");
+  }, [report?.id]);
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteResearchReport(customerId, report?.id ?? ""),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["customer", customerId] });
+      queryClient.invalidateQueries({ queryKey: ["customer", customerId, "research-report-history"] });
+      setDeleteOpen(false);
+    }
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (payload: { title?: string }) => updateResearchReport(customerId, report?.id ?? "", payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["customer", customerId] });
+      queryClient.invalidateQueries({ queryKey: ["customer", customerId, "research-report-history"] });
+      setEditOpen(false);
+    }
+  });
   return (
     <section className="panel">
       <div className="panel-title analysis-history-title">
         <h2>客户背调报告</h2>
         <div className="analysis-history-title__actions">
           {report ? (
-            <div onFocus={requestHistory} onMouseDown={requestHistory}>
-              <AppSelect
-                className="analysis-history-select"
-                value={report?.id ?? ""}
-                onChange={(value) => {
-                  setSelectedReportId(value);
-                  setHasManualSelection(true);
-                }}
-                options={selectorOptions}
-                variant="toolbar"
-                title="历史背调报告"
-              />
-            </div>
+            <>
+              <div onFocus={requestHistory} onMouseDown={requestHistory}>
+                <AppSelect
+                  className="analysis-history-select"
+                  value={report?.id ?? ""}
+                  onChange={(value) => {
+                    setSelectedReportId(value);
+                    setHasManualSelection(true);
+                  }}
+                  options={selectorOptions}
+                  variant="toolbar"
+                  title="历史背调报告"
+                />
+              </div>
+              <button className="icon-button" title="编辑标题" onClick={() => setEditOpen(true)}>
+                <Pencil size={14} />
+              </button>
+              <button className="icon-button" title="删除报告" onClick={() => setDeleteOpen(true)}>
+                <Trash2 size={14} />
+              </button>
+            </>
           ) : null}
           <span>{report ? statusText(report.status) : "未生成"}</span>
         </div>
@@ -102,6 +140,27 @@ export function ResearchPanel({ customer, customerId, isGenerating = false }: { 
           <AiVersions run={report.aiGenerationRun} />
         </div>
       ) : null}
+      <Dialog v2 className="crm-action-dialog" title="编辑报告标题" visible={editOpen} onClose={() => setEditOpen(false)}
+        footer={
+          <div className="toolbar crm-dialog-footer">
+            <button className="secondary-button" onClick={() => setEditOpen(false)} type="button">取消</button>
+            <button className="primary-button" disabled={updateMutation.isPending} onClick={() => updateMutation.mutate({ title: editTitle })} type="button">{updateMutation.isPending ? "保存中..." : "保存"}</button>
+          </div>
+        }>
+        <div className="form-field">
+          <label>报告标题</label>
+          <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={{ width: "100%" }} />
+        </div>
+      </Dialog>
+      <Dialog v2 className="crm-action-dialog" title="确认删除" visible={deleteOpen} onClose={() => setDeleteOpen(false)}
+        footer={
+          <div className="toolbar crm-dialog-footer">
+            <button className="secondary-button" onClick={() => setDeleteOpen(false)} type="button">取消</button>
+            <button className="primary-button" disabled={deleteMutation.isPending} onClick={() => deleteMutation.mutate()} type="button">{deleteMutation.isPending ? "删除中..." : "确认删除"}</button>
+          </div>
+        }>
+        <p>删除后数据不可恢复。确定要删除本次背调报告吗？</p>
+      </Dialog>
     </section>
   );
 }

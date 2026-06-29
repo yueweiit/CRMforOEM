@@ -89,4 +89,12 @@ export class ResearchReportDataService {
       include: { aiGenerationRun: { include: { versions: { orderBy: { createdAt: "asc" } } } } }
     });
   }
+
+  deleteReport(reportId: string) {
+    return this.prisma.researchReport.delete({ where: { id: reportId } });
+  }
+
+  updateReport(reportId: string, data: { title?: string }) {
+    return this.prisma.researchReport.update({ where: { id: reportId }, data });
+  }
 }

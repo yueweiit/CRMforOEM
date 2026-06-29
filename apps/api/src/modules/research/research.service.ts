@@ -4,7 +4,7 @@ import { AiGenerationType } from "@oem-crm/shared";
 import { Queue } from "bullmq";
 import { RequestUser } from "../../common/auth/current-user.decorator";
 import { AiGenerationService, AiProviderService } from "../ai/ai.public";
-import { TaskSubmissionLockService } from "../background-tasks/background-tasks.public";
+import { BackgroundTaskStaleService, TaskSubmissionLockService } from "../background-tasks/background-tasks.public";
 import { GenerateResearchReportDto } from "./dto/generate-research-report.dto";
 import { RESEARCH_REPORT_QUEUE } from "./research.constants";
 import { ResearchReportDataService } from "./services/research-report-data.service";
@@ -16,12 +16,14 @@ export class ResearchService {
     private readonly aiGeneration: AiGenerationService,
     private readonly aiProvider: AiProviderService,
     private readonly taskLocks: TaskSubmissionLockService,
+    private readonly staleTasks: BackgroundTaskStaleService,
     @InjectQueue(RESEARCH_REPORT_QUEUE) private readonly queue: Queue
   ) {}
 
   async generate(user: RequestUser, customerId: string, dto: GenerateResearchReportDto) {
     const customer = await this.reportData.ensureCustomerVisible(user, customerId);
 
+    await this.staleTasks.markStaleCustomerTasks(user.organizationId, customerId);
     const existing = await this.reportData.findActiveReport(customerId, user.organizationId);
     if (existing) {
       return { accepted: false, reason: "ACTIVE_RESEARCH_REPORT_EXISTS", existing };
@@ -62,6 +64,25 @@ export class ResearchService {
       throw new NotFoundException("Research report not found");
     }
     return report;
+  }
+
+  async deleteById(user: RequestUser, customerId: string, reportId: string) {
+    await this.reportData.ensureCustomerVisible(user, customerId);
+    const report = await this.reportData.getReportById(customerId, reportId);
+    if (!report) {
+      throw new NotFoundException("Research report not found");
+    }
+    await this.reportData.deleteReport(reportId);
+    return { deleted: true };
+  }
+
+  async updateById(user: RequestUser, customerId: string, reportId: string, dto: { title?: string }) {
+    await this.reportData.ensureCustomerVisible(user, customerId);
+    const report = await this.reportData.getReportById(customerId, reportId);
+    if (!report) {
+      throw new NotFoundException("Research report not found");
+    }
+    return this.reportData.updateReport(reportId, dto);
   }
 
   private async createReportAndEnqueue(

@@ -1,5 +1,6 @@
-import { Controller, Get, Param, Post } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post } from "@nestjs/common";
 import { CurrentUser, RequestUser } from "../../common/auth/current-user.decorator";
+import { UpdateWebsiteAnalysisDto } from "./dto/update-website-analysis.dto";
 import { WebsiteAnalysisService } from "./website-analysis.service";
 
 @Controller()
@@ -24,6 +25,16 @@ export class WebsiteAnalysisController {
   @Get("website-analyses/:id")
   get(@CurrentUser() user: RequestUser, @Param("id") id: string) {
     return this.websiteAnalysisService.getById(user, id);
+  }
+
+  @Delete("website-analyses/:id")
+  delete(@CurrentUser() user: RequestUser, @Param("id") id: string) {
+    return this.websiteAnalysisService.deleteById(user, id);
+  }
+
+  @Patch("website-analyses/:id")
+  update(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: UpdateWebsiteAnalysisDto) {
+    return this.websiteAnalysisService.updateById(user, id, dto);
   }
 }
 

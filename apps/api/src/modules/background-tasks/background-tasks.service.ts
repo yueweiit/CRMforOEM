@@ -3,6 +3,7 @@ import type { AiGenerationRun, EmailDraft, ResearchReport, WebsiteAnalysis } fro
 import { RequestUser } from "../../common/auth/current-user.decorator";
 import { buildCustomerDataScopeWhere } from "../../common/query/data-scope";
 import { PrismaService } from "../../infrastructure/prisma/prisma.service";
+import { BackgroundTaskStaleService } from "./background-task-stale.service";
 
 export type CustomerBackgroundTaskType =
   | "WEBSITE_ANALYSIS"
@@ -133,10 +134,14 @@ function mapOemScoreRunTask(item: AiGenerationRun): CustomerBackgroundTaskView {
 
 @Injectable()
 export class BackgroundTasksService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly staleTasks: BackgroundTaskStaleService
+  ) {}
 
   async listForCustomer(user: RequestUser, customerId: string) {
     await this.ensureCustomerVisible(user, customerId);
+    await this.staleTasks.markStaleCustomerTasks(user.organizationId, customerId);
 
     const [analyses, reports, oemScoreRuns, emailDrafts] = await Promise.all([
       this.prisma.websiteAnalysis.findMany({

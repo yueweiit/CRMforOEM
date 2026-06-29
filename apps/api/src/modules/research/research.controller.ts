@@ -1,6 +1,7 @@
-import { Body, Controller, Get, Param, Post } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post } from "@nestjs/common";
 import { CurrentUser, RequestUser } from "../../common/auth/current-user.decorator";
 import { GenerateResearchReportDto } from "./dto/generate-research-report.dto";
+import { UpdateResearchReportDto } from "./dto/update-research-report.dto";
 import { ResearchService } from "./research.service";
 
 @Controller("customers/:customerId/research-reports")
@@ -33,6 +34,25 @@ export class ResearchController {
     @Param("reportId") reportId: string
   ) {
     return this.researchService.getById(user, customerId, reportId);
+  }
+
+  @Delete(":reportId")
+  delete(
+    @CurrentUser() user: RequestUser,
+    @Param("customerId") customerId: string,
+    @Param("reportId") reportId: string
+  ) {
+    return this.researchService.deleteById(user, customerId, reportId);
+  }
+
+  @Patch(":reportId")
+  update(
+    @CurrentUser() user: RequestUser,
+    @Param("customerId") customerId: string,
+    @Param("reportId") reportId: string,
+    @Body() dto: UpdateResearchReportDto
+  ) {
+    return this.researchService.updateById(user, customerId, reportId, dto);
   }
 }
 

@@ -41,7 +41,7 @@ export function getAnalysisDetailLoadState(
 ) {
   if (!shouldLoadDetail) return "idle";
   if (query.isError) return "error";
-  if (query.isLoading || query.isFetching) return "loading";
+  if (query.isLoading) return "loading";
   return "ready";
 }
 

@@ -1,16 +1,18 @@
+import { lazy } from "react";
 import { createBrowserRouter, Navigate, useParams } from "react-router-dom";
 import { AppShell } from "../layouts/AppShell";
 import { canViewReports, canViewSettingsSection, defaultReportPath, defaultSettingsPath, getCurrentUser } from "../auth/permissions";
 import { appBasePath } from "../config/runtime";
-import { CustomerDetailPage } from "../features/customers/detail/CustomerDetailPage";
-import { CustomersPage } from "../features/customers/list/CustomersPage";
-import { DashboardPage } from "../features/dashboard/DashboardPage";
-import { EmailCenterPage } from "../features/email-center/EmailCenterPage";
-import { FollowUpsPage } from "../features/follow-ups/FollowUpsPage";
-import { KnowledgeBasePage } from "../features/knowledge/KnowledgeBasePage";
-import { LoginPage } from "../pages/LoginPage";
-import { ReportsPage } from "../features/reports/ReportsPage";
-import { SettingsPage } from "../features/settings/SettingsPage";
+
+const LoginPage = lazy(() => import("../pages/LoginPage").then(m => ({ default: m.LoginPage })));
+const DashboardPage = lazy(() => import("../features/dashboard/DashboardPage").then(m => ({ default: m.DashboardPage })));
+const CustomersPage = lazy(() => import("../features/customers/list/CustomersPage").then(m => ({ default: m.CustomersPage })));
+const CustomerDetailPage = lazy(() => import("../features/customers/detail/CustomerDetailPage").then(m => ({ default: m.CustomerDetailPage })));
+const EmailCenterPage = lazy(() => import("../features/email-center/EmailCenterPage").then(m => ({ default: m.EmailCenterPage })));
+const FollowUpsPage = lazy(() => import("../features/follow-ups/FollowUpsPage").then(m => ({ default: m.FollowUpsPage })));
+const KnowledgeBasePage = lazy(() => import("../features/knowledge/KnowledgeBasePage").then(m => ({ default: m.KnowledgeBasePage })));
+const ReportsPage = lazy(() => import("../features/reports/ReportsPage").then(m => ({ default: m.ReportsPage })));
+const SettingsPage = lazy(() => import("../features/settings/SettingsPage").then(m => ({ default: m.SettingsPage })));
 
 function RequireReportAccess() {
   const user = getCurrentUser();

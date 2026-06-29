@@ -121,6 +121,15 @@ export type OemScore = {
   nextActions?: unknown;
   explanation?: string;
   aiGenerationRun?: AiRun;
+  aiScore?: number;
+  aiGrade?: string;
+  aiBreakdown?: Record<string, number>;
+  manualScore?: number;
+  manualGrade?: string;
+  manualBreakdown?: Record<string, number>;
+  manualNotes?: string;
+  manualUpdatedById?: string;
+  manualUpdatedAt?: string;
   createdAt: string;
 };
 export type OemScoreHistoryItem = Pick<OemScore, "id" | "score" | "grade" | "createdAt"> & Partial<OemScore>;

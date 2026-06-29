@@ -11,10 +11,14 @@ export class ResearchReportRunService {
     private readonly aiGeneration: AiGenerationService
   ) {}
 
-  markRunning(reportId: string) {
-    return this.prisma.researchReport.update({
-      where: { id: reportId },
+  async markRunning(reportId: string) {
+    const started = await this.prisma.researchReport.updateMany({
+      where: { id: reportId, status: { in: ["QUEUED", "RUNNING"] } },
       data: { status: "RUNNING", startedAt: new Date() }
+    });
+    if (started.count === 0) return null;
+    return this.prisma.researchReport.findUniqueOrThrow({
+      where: { id: reportId }
     });
   }
 

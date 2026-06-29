@@ -3,6 +3,14 @@ export type ActiveTaskLike = {
   type: string;
 };
 
+export type GenerationAction = "website" | "research" | "oem";
+
+export type GenerationDialogBusyState = {
+  websitePending: boolean;
+  researchPending: boolean;
+  oemPending: boolean;
+};
+
 export function getActiveTaskSignature(tasks: ActiveTaskLike[]) {
   return [...tasks]
     .map((task) => taskIdentity(task))
@@ -22,6 +30,13 @@ export function getCompletedActiveTaskTypes(previous: ActiveTaskLike[], current:
   }
 
   return completedTypes;
+}
+
+export function getGenerationDialogBusy(action: GenerationAction | null, state: GenerationDialogBusyState) {
+  if (action === "website") return state.websitePending;
+  if (action === "research") return state.researchPending;
+  if (action === "oem") return state.oemPending;
+  return false;
 }
 
 function taskIdentity(task: ActiveTaskLike) {

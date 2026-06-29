@@ -6,7 +6,7 @@ import { RequestUser } from "../../common/auth/current-user.decorator";
 import { buildCustomerDataScopeWhere } from "../../common/query/data-scope";
 import { PrismaService } from "../../infrastructure/prisma/prisma.service";
 import { AiGenerationService, AiProviderService } from "../ai/ai.public";
-import { TaskSubmissionLockService } from "../background-tasks/background-tasks.public";
+import { BackgroundTaskStaleService, TaskSubmissionLockService } from "../background-tasks/background-tasks.public";
 import { DEFAULT_OEM_SCORING_WEIGHTS, mergeWithDefaults, type OemScoringWeights } from "../settings/settings.public";
 import { OEM_FIT_SCORE_QUEUE } from "./scoring.constants";
 
@@ -48,11 +48,13 @@ export class ScoringService {
     private readonly aiGeneration: AiGenerationService,
     private readonly aiProvider: AiProviderService,
     private readonly taskLocks: TaskSubmissionLockService,
+    private readonly staleTasks: BackgroundTaskStaleService,
     @InjectQueue(OEM_FIT_SCORE_QUEUE) private readonly queue: Queue
   ) {}
 
   async generate(user: RequestUser, customerId: string) {
     const customer = await this.ensureCustomerVisible(user, customerId);
+    await this.staleTasks.markStaleCustomerTasks(user.organizationId, customerId);
     const existing = await this.findActiveOemScoreRun(customerId, user.organizationId);
     if (existing) {
       return { accepted: false, reason: "ACTIVE_OEM_FIT_SCORE_EXISTS", existing };
@@ -114,10 +116,11 @@ export class ScoringService {
     customerId: string;
     createdById?: string;
   }) {
-    await this.prisma.aiGenerationRun.update({
-      where: { id: input.runId },
+    const started = await this.prisma.aiGenerationRun.updateMany({
+      where: { id: input.runId, status: { in: ["QUEUED", "RUNNING"] } },
       data: { status: "RUNNING" }
     });
+    if (started.count === 0) return undefined;
     try {
       return await this.generateScoreForRun(input);
     } catch (error) {
@@ -263,6 +266,35 @@ export class ScoringService {
       throw new NotFoundException("OEM score not found");
     }
     return score;
+  }
+
+  async deleteById(user: RequestUser, customerId: string, scoreId: string) {
+    await this.ensureCustomerVisible(user, customerId);
+    const score = await this.prisma.oemFitScore.findFirst({ where: { id: scoreId, customerId } });
+    if (!score) {
+      throw new NotFoundException("OEM score not found");
+    }
+    await this.prisma.oemFitScore.delete({ where: { id: scoreId } });
+    return { deleted: true };
+  }
+
+  async updateById(
+    user: RequestUser,
+    customerId: string,
+    scoreId: string,
+    dto: { manualScore?: number; manualGrade?: string; manualBreakdown?: Record<string, number>; manualNotes?: string }
+  ) {
+    await this.ensureCustomerVisible(user, customerId);
+    const score = await this.prisma.oemFitScore.findFirst({ where: { id: scoreId, customerId } });
+    if (!score) {
+      throw new NotFoundException("OEM score not found");
+    }
+    const data: Record<string, unknown> = { manualUpdatedById: user.id, manualUpdatedAt: new Date() };
+    if (dto.manualScore !== undefined) data.manualScore = dto.manualScore;
+    if (dto.manualGrade !== undefined) data.manualGrade = dto.manualGrade;
+    if (dto.manualBreakdown !== undefined) data.manualBreakdown = dto.manualBreakdown;
+    if (dto.manualNotes !== undefined) data.manualNotes = dto.manualNotes;
+    return this.prisma.oemFitScore.update({ where: { id: scoreId }, data });
   }
 
   async buildContext(user: RequestUser, customerId: string) {

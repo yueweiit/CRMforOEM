@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Dialog } from "@alifd/next";
+import "@alifd/next/lib/dialog/style.js";
+import { Pencil, Trash2 } from "lucide-react";
 import { AppSelect } from "../../../../components/AppSelect";
-import { getWebsiteAnalysis, getWebsiteAnalysisHistory } from "../../../../api/customers";
+import { deleteWebsiteAnalysis, getWebsiteAnalysis, getWebsiteAnalysisHistory, updateWebsiteAnalysis } from "../../../../api/customers";
 import type { CustomerDetail, WebsiteAnalysis, WebsiteAnalysisHistoryItem, WebsiteAiInsights, WebsiteAnalysisPage, WebsiteAnalysisProduct } from "../shared/types";
 import { AnalysisSection, asArray, asRecord, getText, getNumber, getStringArray, stringifyInsight, InsightList, EvidenceLinks, statusText, isPendingStatus, contactTypeLabel, pageTypeLabel, shortUrl, categoryName, readablePriceRange, fallbackProductLineText, getWebsiteAiInsights, getWebsiteAiMeta, formatAnalysisTime } from "../shared/ui";
 import type { WebsiteAiMetaView } from "../shared/ui";
@@ -58,6 +61,29 @@ export function WebsiteAnalysisPanel({ customer, customerId, isGenerating = fals
     value: item.id
   }));
   const requestHistory = () => setHistoryRequested(true);
+  const queryClient = useQueryClient();
+
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteWebsiteAnalysis(analysis?.id ?? ""),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["customer", customerId] });
+      queryClient.invalidateQueries({ queryKey: ["customer", customerId, "website-analysis-history"] });
+      setDeleteOpen(false);
+    }
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (payload: { opportunities?: string[]; risks?: string[] }) =>
+      updateWebsiteAnalysis(analysis?.id ?? "", payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["customer", customerId] });
+      queryClient.invalidateQueries({ queryKey: ["customer", customerId, "website-analysis-history"] });
+      setEditOpen(false);
+    }
+  });
 
   return (
     <section className="panel">
@@ -65,19 +91,27 @@ export function WebsiteAnalysisPanel({ customer, customerId, isGenerating = fals
         <h2>客户官网分析</h2>
         <div className="website-analysis-title__actions">
           {analysis ? (
-            <div onFocus={requestHistory} onMouseDown={requestHistory}>
-              <AppSelect
-                className="website-analysis-select"
-                value={analysis?.id ?? ""}
-                onChange={(value) => {
-                  setSelectedAnalysisId(value);
-                  setHasManualSelection(true);
-                }}
-                options={selectorOptions}
-                variant="toolbar"
-                title="历史官网分析"
-              />
-            </div>
+            <>
+              <div onFocus={requestHistory} onMouseDown={requestHistory}>
+                <AppSelect
+                  className="website-analysis-select"
+                  value={analysis?.id ?? ""}
+                  onChange={(value) => {
+                    setSelectedAnalysisId(value);
+                    setHasManualSelection(true);
+                  }}
+                  options={selectorOptions}
+                  variant="toolbar"
+                  title="历史官网分析"
+                />
+              </div>
+              <button className="icon-button" title="编辑分析" onClick={() => setEditOpen(true)}>
+                <Pencil size={14} />
+              </button>
+              <button className="icon-button" title="删除分析" onClick={() => setDeleteOpen(true)}>
+                <Trash2 size={14} />
+              </button>
+            </>
           ) : null}
           <span>{analysis ? statusText(analysis.status) : "未分析"}</span>
         </div>
@@ -115,6 +149,19 @@ export function WebsiteAnalysisPanel({ customer, customerId, isGenerating = fals
           </details>
         </div>
       ) : null}
+      <WebsiteAnalysisEditDialog
+        open={editOpen}
+        analysis={analysis}
+        busy={updateMutation.isPending}
+        onClose={() => setEditOpen(false)}
+        onSave={(payload) => updateMutation.mutate(payload)}
+      />
+      <WebsiteAnalysisDeleteDialog
+        open={deleteOpen}
+        busy={deleteMutation.isPending}
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={() => deleteMutation.mutate()}
+      />
     </section>
   );
 }
@@ -425,5 +472,53 @@ function SourceEvidenceSection({ data }: { data?: SourceEvidenceData }) {
         </div>
       ) : null}
     </div>
+  );
+}
+
+function WebsiteAnalysisEditDialog({ open, analysis, busy, onClose, onSave }: { open: boolean; analysis?: WebsiteAnalysis | null; busy: boolean; onClose: () => void; onSave: (payload: { opportunities?: string[]; risks?: string[] }) => void }) {
+  const opportunities = asArray(analysis?.opportunities).filter((item) => typeof item === "string") as string[];
+  const risks = asArray(analysis?.risks).filter((item) => typeof item === "string") as string[];
+  const [oppText, setOppText] = useState(opportunities.join("\n"));
+  const [riskText, setRiskText] = useState(risks.join("\n"));
+
+  useEffect(() => {
+    setOppText(opportunities.join("\n"));
+    setRiskText(risks.join("\n"));
+  }, [analysis?.id]);
+
+  return (
+    <Dialog v2 className="crm-action-dialog" title="编辑官网分析" visible={open} onClose={onClose}
+      footer={
+        <div className="toolbar crm-dialog-footer">
+          <button className="secondary-button" onClick={onClose} type="button">取消</button>
+          <button className="primary-button" disabled={busy} onClick={() => onSave({
+            opportunities: oppText.split("\n").map((s) => s.trim()).filter(Boolean),
+            risks: riskText.split("\n").map((s) => s.trim()).filter(Boolean)
+          })} type="button">{busy ? "保存中..." : "保存"}</button>
+        </div>
+      }>
+      <div className="form-field">
+        <label>合作机会（每行一条）</label>
+        <textarea value={oppText} onChange={(e) => setOppText(e.target.value)} rows={5} style={{ width: "100%", resize: "vertical" }} />
+      </div>
+      <div className="form-field" style={{ marginTop: 12 }}>
+        <label>风险提示（每行一条）</label>
+        <textarea value={riskText} onChange={(e) => setRiskText(e.target.value)} rows={5} style={{ width: "100%", resize: "vertical" }} />
+      </div>
+    </Dialog>
+  );
+}
+
+function WebsiteAnalysisDeleteDialog({ open, busy, onClose, onConfirm }: { open: boolean; busy: boolean; onClose: () => void; onConfirm: () => void }) {
+  return (
+    <Dialog v2 className="crm-action-dialog" title="确认删除" visible={open} onClose={onClose}
+      footer={
+        <div className="toolbar crm-dialog-footer">
+          <button className="secondary-button" onClick={onClose} type="button">取消</button>
+          <button className="primary-button" disabled={busy} onClick={onConfirm} type="button">{busy ? "删除中..." : "确认删除"}</button>
+        </div>
+      }>
+      <p>删除后数据不可恢复。确定要删除本次官网分析吗？</p>
+    </Dialog>
   );
 }
