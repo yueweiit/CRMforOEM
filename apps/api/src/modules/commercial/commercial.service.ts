@@ -114,6 +114,21 @@ export class CommercialService {
     };
   }
 
+  async getQuotesExport(user: RequestUser, customerId?: string) {
+    const quotes = await this.prisma.quote.findMany({
+      where: {
+        ...(customerId ? { customerId } : {}),
+        customer: buildCustomerDataScopeWhere(user)
+      },
+      include: { customer: { select: { id: true, name: true, stage: true } } },
+      orderBy: { createdAt: "desc" }
+    });
+    return {
+      csv: this.buildQuotesCsv(quotes),
+      fileName: customerId ? `quotes-${customerId}.csv` : `quotes.csv`
+    };
+  }
+
   listSamples(user: RequestUser, customerId?: string) {
     return this.prisma.sampleRequest.findMany({
       where: {
@@ -569,6 +584,85 @@ export class CommercialService {
         quote.updatedAt.toISOString(),
         quote.notes ?? ""
       ]
+    ];
+    return `\ufeff${rows.map((row) => row.map((value) => this.escapeCsv(value)).join(",")).join("\n")}`;
+  }
+
+  private buildQuotesCsv(
+    quotes: Array<{
+      quoteNo: string;
+      productName: string;
+      specification: string | null;
+      moq: number;
+      quantity: number;
+      unitPrice: { toString(): string };
+      status: string;
+      approvalStatus: string;
+      currency: string;
+      amount: { toString(): string };
+      materialCost: { toString(): string };
+      processingCost: { toString(): string };
+      taxCost: { toString(): string };
+      shippingCost: { toString(): string };
+      discountAmount: { toString(): string };
+      validUntil: Date | null;
+      notes: string | null;
+      approvalComment: string | null;
+      approvalSubmittedAt: Date | null;
+      approvalReviewedAt: Date | null;
+      customer: { name: string };
+      createdAt: Date;
+      updatedAt: Date;
+    }>
+  ) {
+    const headers = [
+      "报价编号",
+      "产品名",
+      "规格",
+      "MOQ",
+      "报价数量",
+      "单价",
+      "客户名称",
+      "报价状态",
+      "审批状态",
+      "币种",
+      "物料价",
+      "加工费",
+      "税费",
+      "运费",
+      "优惠金额",
+      "报价总额",
+      "有效期",
+      "审批备注",
+      "创建时间",
+      "更新时间",
+      "备注"
+    ];
+    const rows = [
+      headers,
+      ...quotes.map((quote) => [
+        quote.quoteNo,
+        quote.productName,
+        quote.specification ?? "",
+        String(quote.moq),
+        String(quote.quantity),
+        quote.unitPrice.toString(),
+        quote.customer.name,
+        quote.status,
+        quote.approvalStatus,
+        quote.currency,
+        quote.materialCost.toString(),
+        quote.processingCost.toString(),
+        quote.taxCost.toString(),
+        quote.shippingCost.toString(),
+        quote.discountAmount.toString(),
+        quote.amount.toString(),
+        quote.validUntil ? quote.validUntil.toISOString().slice(0, 10) : "",
+        quote.approvalComment ?? "",
+        quote.createdAt.toISOString(),
+        quote.updatedAt.toISOString(),
+        quote.notes ?? ""
+      ])
     ];
     return `\ufeff${rows.map((row) => row.map((value) => this.escapeCsv(value)).join(",")).join("\n")}`;
   }

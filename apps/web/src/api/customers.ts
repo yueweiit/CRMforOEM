@@ -151,6 +151,10 @@ export function exportQuote(quoteId: string) {
   return apiGetBlob(`/quotes/${quoteId}/export`);
 }
 
+export function exportQuotes(customerId: string) {
+  return apiGetBlob(`/quotes/export?customerId=${customerId}`);
+}
+
 export function getSamples<T = unknown>(customerId: string) {
   return apiGet<T>(`/samples?customerId=${customerId}`);
 }

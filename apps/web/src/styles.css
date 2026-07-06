@@ -164,6 +164,25 @@ a {
   white-space: nowrap;
 }
 
+.primary-button:disabled,
+.secondary-button:disabled,
+.icon-button:disabled {
+  background: #f1f3ef;
+  border-color: #d6ddd7;
+  color: #94a3ad;
+  cursor: not-allowed;
+  opacity: 1;
+  box-shadow: none;
+}
+
+.primary-button:disabled:hover,
+.secondary-button:disabled:hover,
+.icon-button:disabled:hover {
+  background: #f1f3ef;
+  border-color: #d6ddd7;
+  color: #94a3ad;
+}
+
 .primary-button {
   background: #0f766e;
   color: white;
@@ -525,6 +544,13 @@ a {
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 16px;
+}
+
+.quote-panel-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 .panel-title h2 {
@@ -1011,6 +1037,50 @@ td small {
   min-height: 38px;
 }
 
+.currency-combo {
+  position: relative;
+  min-width: 0;
+}
+
+.currency-combo__menu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  display: grid;
+  gap: 6px;
+  max-height: 228px;
+  overflow: auto;
+  border: 1px solid #d7dcd2;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 12px 30px rgba(31, 41, 51, 0.12);
+  padding: 8px;
+}
+
+.currency-combo__option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  border: 0;
+  border-radius: 8px;
+  background: #f8fbf8;
+  color: #1f2933;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.currency-combo__option:hover,
+.currency-combo__option.is-active {
+  background: #e6f4f1;
+  color: #0f766e;
+}
+
 .form-grid textarea,
 .draft-editor textarea {
   min-height: 116px;
@@ -1227,6 +1297,26 @@ td small {
   grid-template-columns: 26px minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
+}
+
+.quote-summary {
+  min-width: 0;
+}
+
+.quote-summary__line {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 14px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.quote-summary__line span {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  flex: 0 0 auto;
 }
 
 .task-row strong {

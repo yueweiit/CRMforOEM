@@ -1,16 +1,18 @@
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog } from "@alifd/next";
 import "@alifd/next/lib/dialog/style.js";
 import { CheckCircle2, Download, History, NotebookTabs, Send, XCircle } from "lucide-react";
 import { showClientToast } from "../../../../components/Toast";
-import { approveQuote, createQuote, deleteQuote, exportQuote, getQuoteHistory, getQuotes, rejectQuote, submitQuoteReview, updateQuote } from "../../../../api/customers";
+import { approveQuote, createQuote, deleteQuote, exportQuote, exportQuotes, getQuoteHistory, getQuotes, rejectQuote, submitQuoteReview, updateQuote } from "../../../../api/customers";
 import { AddIconButton } from "../../../../components/AddIconButton";
 import { DeleteIconButton } from "../../../../components/DeleteIconButton";
 import { EditIconButton } from "../../../../components/EditIconButton";
 import { Field } from "../../../../components/ui/Field";
 import { formatDateInput } from "../../../../shared/utils/format";
 import type { Quote, QuoteHistoryItem } from "../shared/types";
+
+const CURRENCY_OPTIONS = ["USD", "CNY", "KRW", "JPY", "MXN"] as const;
 
 function statusLabel(status: string) {
   const labels: Record<string, string> = {
@@ -95,6 +97,94 @@ function calculateQuoteSummary(form: {
     moq,
     moqValid: quantity === 0 || moq === 0 ? true : quantity >= moq
   };
+}
+
+function downloadBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function rankCurrencyOption(option: string, query: string, index: number) {
+  const normalizedQuery = query.trim().toUpperCase();
+  if (!normalizedQuery) return index;
+  if (option === normalizedQuery) return index - 100;
+  if (option.startsWith(normalizedQuery)) return index - 50;
+  if (option.includes(normalizedQuery)) return index + 10;
+  return index + 100;
+}
+
+function CurrencyInput({
+  id,
+  value,
+  onChange
+}: {
+  id: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    function handlePointerDown(event: PointerEvent) {
+      if (!wrapperRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, []);
+
+  const options = useMemo(
+    () =>
+      [...CURRENCY_OPTIONS]
+        .map((option, index) => ({ option, index }))
+        .sort((left, right) => rankCurrencyOption(left.option, value, left.index) - rankCurrencyOption(right.option, value, right.index))
+        .map(({ option }) => option),
+    [value]
+  );
+
+  return (
+    <div ref={wrapperRef} className="currency-combo">
+      <input
+        aria-controls={id}
+        aria-expanded={open}
+        autoComplete="off"
+        role="combobox"
+        value={value}
+        onChange={(event) => {
+          onChange(event.target.value.toUpperCase());
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        onClick={() => setOpen(true)}
+      />
+      {open ? (
+        <div className="currency-combo__menu" id={id} role="listbox">
+          {options.map((option) => (
+            <button
+              className={["currency-combo__option", option === value.toUpperCase() ? "is-active" : ""].filter(Boolean).join(" ")}
+              key={option}
+              onMouseDown={(event) => {
+                event.preventDefault();
+                onChange(option);
+                setOpen(false);
+              }}
+              type="button"
+            >
+              <span>{option}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 export function QuotePanel({ customerId }: { customerId: string }) {
@@ -266,14 +356,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
   const exportMutation = useMutation({
     mutationFn: (quoteId: string) => exportQuote(quoteId),
     onSuccess: async ({ blob, fileName }) => {
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = fileName ?? `${historyQuote?.quoteNo ?? "quote"}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, fileName ?? "quote.csv");
       showClientToast({
         type: "success",
         title: "导出成功",
@@ -284,6 +367,25 @@ export function QuotePanel({ customerId }: { customerId: string }) {
       showClientToast({
         type: "error",
         title: "导出失败",
+        message: error instanceof Error ? error.message : "操作失败"
+      });
+    }
+  });
+
+  const exportAllMutation = useMutation({
+    mutationFn: () => exportQuotes(customerId),
+    onSuccess: async ({ blob, fileName }) => {
+      downloadBlob(blob, fileName ?? `quotes-${customerId}.csv`);
+      showClientToast({
+        type: "success",
+        title: "批量导出成功",
+        message: "当前客户的报价表格已下载。"
+      });
+    },
+    onError: (error) => {
+      showClientToast({
+        type: "error",
+        title: "批量导出失败",
         message: error instanceof Error ? error.message : "操作失败"
       });
     }
@@ -327,10 +429,24 @@ export function QuotePanel({ customerId }: { customerId: string }) {
 
   return (
     <section className="panel">
-      <div className="panel-title"><h2>报价记录</h2><span>{data.length} 条</span></div>
+      <div className="panel-title">
+        <div className="quote-panel-title">
+          <h2>报价记录</h2>
+          <span>{data.length} 条</span>
+        </div>
+        <button
+          className="secondary-button"
+          disabled={data.length === 0 || exportAllMutation.isPending}
+          onClick={() => exportAllMutation.mutate()}
+          type="button"
+        >
+          <Download size={14} />
+          {exportAllMutation.isPending ? "导出中..." : "批量导出"}
+        </button>
+      </div>
 
       {data.length === 0 ? (
-        <div className="empty-state">暂无报价记录。</div>
+        <div className="empty-state">当前还没有报价记录。</div>
       ) : (
         <div className="task-list">
           {data.map((item) => (
@@ -338,9 +454,9 @@ export function QuotePanel({ customerId }: { customerId: string }) {
               <NotebookTabs size={16} />
               <div>
                 <strong>{item.quoteNo} · {item.productName || "未命名产品"} · {item.currency} {item.amount}</strong>
-                <span>{statusLabel(item.status)} · {approvalStatusLabel(item.approvalStatus)} · {new Date(item.createdAt).toLocaleDateString()}</span>
-                <span>规格 {item.specification || "未填写"} · MOQ {item.moq} · 数量 {item.quantity} · 单价 {item.unitPrice}</span>
-                <span>物料 {item.materialCost} + 加工 {item.processingCost} + 税费 {item.taxCost} + 运费 {item.shippingCost} - 优惠 {item.discountAmount}</span>
+                <span>{statusLabel(item.status)} · {approvalStatusLabel(item.approvalStatus)} · {new Date(item.createdAt).toLocaleDateString()}   |   </span>
+                <span>规格 {item.specification || "未填写"} · MOQ {item.moq} · 数量 {item.quantity} · 单价 {item.unitPrice}   |   </span>
+                <span>物料 {item.materialCost} + 加工 {item.processingCost} + 税费 {item.taxCost} + 运费 {item.shippingCost} - 优惠 {item.discountAmount}=总价{item.amount}</span>
               </div>
               <div className="contact-row-actions">
                 <EditIconButton disabled={!canEditQuote(item)} onClick={() => openEdit(item)} />
@@ -351,7 +467,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
                   className="secondary-button icon-button"
                   disabled={exportMutation.isPending}
                   onClick={() => exportMutation.mutate(item.id)}
-                  title="导出"
+                  title="导出当前报价"
                   type="button"
                 >
                   <Download size={14} />
@@ -360,7 +476,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
                   className="secondary-button icon-button"
                   disabled={!canSubmitReview(item) || submitReview.isPending}
                   onClick={() => submitReview.mutate(item.id)}
-                  title="提交审批"
+                  title="提交审批流"
                   type="button"
                 >
                   <Send size={14} />
@@ -369,7 +485,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
                   className="secondary-button icon-button"
                   disabled={!canReview(item) || approve.isPending}
                   onClick={() => approve.mutate(item.id)}
-                  title="审批通过"
+                  title="通过审批"
                   type="button"
                 >
                   <CheckCircle2 size={14} />
@@ -378,7 +494,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
                   className="secondary-button icon-button"
                   disabled={!canReview(item) || reject.isPending}
                   onClick={() => reject.mutate(item.id)}
-                  title="审批驳回"
+                  title="驳回审批"
                   type="button"
                 >
                   <XCircle size={14} />
@@ -396,7 +512,16 @@ export function QuotePanel({ customerId }: { customerId: string }) {
         <Field label="规格" value={form.specification} onChange={(value) => setForm({ ...form, specification: value })} />
         <Field label="MOQ" value={form.moq} onChange={(value) => setForm({ ...form, moq: value })} />
         <Field label="报价数量" value={form.quantity} onChange={(value) => setForm({ ...form, quantity: value })} />
-        <Field label="币种" value={form.currency} onChange={(value) => setForm({ ...form, currency: value })} />
+        <div className="form-field">
+          <label>
+            <span>币种</span>
+            <CurrencyInput
+              id="quote-currency-create-options"
+              value={form.currency}
+              onChange={(value) => setForm({ ...form, currency: value })}
+            />
+          </label>
+        </div>
         <Field label="物料价" value={form.materialCost} onChange={(value) => setForm({ ...form, materialCost: value })} />
         <Field label="加工费" value={form.processingCost} onChange={(value) => setForm({ ...form, processingCost: value })} />
         <Field label="税费" value={form.taxCost} onChange={(value) => setForm({ ...form, taxCost: value })} />
@@ -415,7 +540,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
             <input readOnly value={createSummary.total.toFixed(2)} />
           </label>
         </div>
-        {!createSummary.moqValid ? <div className="error-state">报价数量不能小于 MOQ。</div> : null}
+        {!createSummary.moqValid ? <div className="error-state">报价数量不能小于 MOQ，请先调整数量或起订量。</div> : null}
         <div><AddIconButton disabled={create.isPending || !createSummary.moqValid} label={create.isPending ? "提交中..." : "新增报价"} onClick={() => create.mutate()} /></div>
       </div>
 
@@ -462,7 +587,11 @@ export function QuotePanel({ customerId }: { customerId: string }) {
           </div>
           <div className="form-field">
             <label>币种</label>
-            <input value={editForm.currency} onChange={(e) => setEditForm({ ...editForm, currency: e.target.value })} />
+            <CurrencyInput
+              id="quote-currency-edit-options"
+              value={editForm.currency}
+              onChange={(value) => setEditForm({ ...editForm, currency: value })}
+            />
           </div>
           <div className="form-field">
             <label>物料价</label>
@@ -504,7 +633,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
               <input readOnly value={editSummary.total.toFixed(2)} />
             </label>
           </div>
-          {!editSummary.moqValid ? <div className="error-state">报价数量不能小于 MOQ。</div> : null}
+          {!editSummary.moqValid ? <div className="error-state">报价数量不能小于 MOQ，请先调整数量或起订量。</div> : null}
         </div>
       </Dialog>
 
@@ -515,13 +644,13 @@ export function QuotePanel({ customerId }: { customerId: string }) {
             <button className="primary-button" disabled={remove.isPending} onClick={() => remove.mutate()} type="button">{remove.isPending ? "作废中..." : "确认作废"}</button>
           </div>
         }>
-        <p>作废后报价将保留历史记录但不再作为有效报价。确定要作废报价 {editing?.quoteNo} 吗？</p>
+        <p>作废后，这条报价会保留历史记录，但不再作为有效报价。确定要作废报价 {editing?.quoteNo} 吗？</p>
       </Dialog>
 
       <Dialog
         v2
         className="crm-action-dialog"
-        title={`报价历史 · ${historyQuote?.quoteNo ?? ""}`}
+        title={`报价历史记录 · ${historyQuote?.quoteNo ?? ""}`}
         visible={historyOpen}
         onClose={() => setHistoryOpen(false)}
         footer={(

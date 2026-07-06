@@ -39,6 +39,18 @@ export class CommercialController {
     return csv;
   }
 
+  @Get("quotes/export")
+  async exportQuotes(
+    @CurrentUser() user: RequestUser,
+    @Query("customerId") customerId: string | undefined,
+    @Res({ passthrough: true }) res: Response
+  ) {
+    const { csv, fileName } = await this.commercialService.getQuotesExport(user, customerId);
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    return csv;
+  }
+
   @Patch("quotes/:id")
   updateQuote(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: UpdateQuoteDto) {
     return this.commercialService.updateQuote(user, id, dto);
