@@ -1,4 +1,4 @@
-import { IsDateString, IsNumber, IsOptional, IsString } from "class-validator";
+import { IsDateString, IsInt, IsNumber, IsOptional, IsString, Min } from "class-validator";
 
 export class CreateQuoteDto {
   @IsString()
@@ -8,10 +8,43 @@ export class CreateQuoteDto {
   quoteNo!: string;
 
   @IsString()
+  productName!: string;
+
+  @IsOptional()
+  @IsString()
+  specification?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  moq?: number;
+
+  @IsInt()
+  @Min(1)
+  quantity!: number;
+
+  @IsString()
   currency!: string;
 
+  @IsOptional()
   @IsNumber()
-  amount!: number;
+  materialCost?: number;
+
+  @IsOptional()
+  @IsNumber()
+  processingCost?: number;
+
+  @IsOptional()
+  @IsNumber()
+  taxCost?: number;
+
+  @IsOptional()
+  @IsNumber()
+  shippingCost?: number;
+
+  @IsOptional()
+  @IsNumber()
+  discountAmount?: number;
 
   @IsOptional()
   @IsDateString()

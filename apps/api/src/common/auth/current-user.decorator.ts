@@ -3,6 +3,8 @@ import { createParamDecorator, ExecutionContext } from "@nestjs/common";
 export type RequestUser = {
   id: string;
   organizationId: string;
+  name?: string;
+  email?: string;
   teamId?: string;
   roleCodes: string[];
   permissions: string[];
@@ -16,4 +18,3 @@ export const CurrentUser = createParamDecorator((_: unknown, context: ExecutionC
   const request = context.switchToHttp().getRequest();
   return request.user;
 });
-

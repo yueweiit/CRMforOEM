@@ -1,5 +1,5 @@
-import { apiDelete, apiGet, apiPatch, apiPost } from "./http";
-import type { OemScore, OemScoreHistoryItem, ResearchReport, ResearchReportHistoryItem, ResearchReportJson, WebsiteAiInsights, WebsiteAnalysis, WebsiteAnalysisHistoryItem } from "../features/customers/detail/shared/types";
+import { apiDelete, apiGet, apiGetBlob, apiPatch, apiPost } from "./http";
+import type { OemScore, OemScoreHistoryItem, QuoteHistoryItem, ResearchReport, ResearchReportHistoryItem, ResearchReportJson, WebsiteAiInsights, WebsiteAnalysis, WebsiteAnalysisHistoryItem } from "../features/customers/detail/shared/types";
 
 type MutationOptions = { toast?: boolean };
 
@@ -123,12 +123,32 @@ export function createQuote<T = unknown>(payload: unknown) {
   return apiPost<T>("/quotes", payload);
 }
 
+export function submitQuoteReview<T = unknown>(quoteId: string, payload: { comment?: string } = {}) {
+  return apiPost<T>(`/quotes/${quoteId}/submit-review`, payload);
+}
+
+export function approveQuote<T = unknown>(quoteId: string, payload: { comment?: string } = {}) {
+  return apiPost<T>(`/quotes/${quoteId}/approve`, payload);
+}
+
+export function rejectQuote<T = unknown>(quoteId: string, payload: { comment?: string } = {}) {
+  return apiPost<T>(`/quotes/${quoteId}/reject`, payload);
+}
+
 export function updateQuote<T = unknown>(quoteId: string, payload: unknown) {
   return apiPatch<T>(`/quotes/${quoteId}`, payload);
 }
 
-export function deleteQuote<T = unknown>(quoteId: string) {
-  return apiDelete<T>(`/quotes/${quoteId}`);
+export function deleteQuote<T = unknown>(quoteId: string, options?: MutationOptions) {
+  return apiDelete<T>(`/quotes/${quoteId}`, options);
+}
+
+export function getQuoteHistory<T = QuoteHistoryItem[]>(quoteId: string) {
+  return apiGet<T>(`/quotes/${quoteId}/history`);
+}
+
+export function exportQuote(quoteId: string) {
+  return apiGetBlob(`/quotes/${quoteId}/export`);
 }
 
 export function getSamples<T = unknown>(customerId: string) {

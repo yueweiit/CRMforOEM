@@ -157,6 +157,23 @@ enum QuoteStatus {
   ACCEPTED
   REJECTED
   EXPIRED
+  VOIDED
+}
+
+enum QuoteApprovalStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+}
+
+enum QuoteHistoryAction {
+  CREATED
+  UPDATED
+  SUBMITTED
+  APPROVED
+  REJECTED
+  VOIDED
 }
 
 enum SampleStatus {
@@ -953,23 +970,57 @@ model FollowUpTask {
 }
 
 model Quote {
-  id          String      @id @default(cuid())
-  customerId  String
-  quoteNo     String
-  status      QuoteStatus @default(DRAFT)
-  currency    String
-  amount      Decimal
-  validUntil  DateTime?
-  fileAssetId String?
-  notes       String?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id                   String              @id @default(cuid())
+  customerId           String
+  quoteNo              String
+  status               QuoteStatus         @default(DRAFT)
+  approvalStatus       QuoteApprovalStatus @default(DRAFT)
+  productName          String              @default("")
+  specification        String?
+  moq                  Int                 @default(1)
+  quantity             Int                 @default(1)
+  unitPrice            Decimal             @default(0)
+  currency             String
+  amount               Decimal
+  materialCost         Decimal             @default(0)
+  processingCost       Decimal             @default(0)
+  taxCost              Decimal             @default(0)
+  shippingCost         Decimal             @default(0)
+  discountAmount       Decimal             @default(0)
+  validUntil           DateTime?
+  fileAssetId          String?
+  notes                String?
+  approvalComment      String?
+  approvalSubmittedAt  DateTime?
+  approvalSubmittedById String?
+  approvalReviewedAt   DateTime?
+  approvalReviewedById String?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
 
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  histories QuoteHistory[]
 
   @@unique([quoteNo])
   @@index([customerId])
   @@map("quotes")
+}
+
+model QuoteHistory {
+  id         String             @id @default(cuid())
+  quoteId    String
+  action     QuoteHistoryAction
+  before     Json?
+  after      Json?
+  comment    String?
+  actorId    String?
+  actorName  String?
+  createdAt  DateTime           @default(now())
+
+  quote Quote @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@index([quoteId, createdAt])
+  @@map("quote_histories")
 }
 
 model SampleRequest {

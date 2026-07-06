@@ -1,8 +1,10 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Res } from "@nestjs/common";
+import type { Response } from "express";
 import { CurrentUser, RequestUser } from "../../common/auth/current-user.decorator";
 import { CommercialService } from "./commercial.service";
 import { CreateQuoteDto } from "./dto/create-quote.dto";
 import { CreateSampleRequestDto } from "./dto/create-sample-request.dto";
+import { QuoteReviewDto } from "./dto/quote-review.dto";
 import { UpdateQuoteDto } from "./dto/update-quote.dto";
 import { UpdateSampleRequestDto } from "./dto/update-sample-request.dto";
 
@@ -20,9 +22,41 @@ export class CommercialController {
     return this.commercialService.createQuote(user, dto);
   }
 
+  @Get("quotes/:id/history")
+  quoteHistory(@CurrentUser() user: RequestUser, @Param("id") id: string) {
+    return this.commercialService.getQuoteHistory(user, id);
+  }
+
+  @Get("quotes/:id/export")
+  async exportQuote(
+    @CurrentUser() user: RequestUser,
+    @Param("id") id: string,
+    @Res({ passthrough: true }) res: Response
+  ) {
+    const { csv, fileName } = await this.commercialService.getQuoteExport(user, id);
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    return csv;
+  }
+
   @Patch("quotes/:id")
   updateQuote(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: UpdateQuoteDto) {
     return this.commercialService.updateQuote(user, id, dto);
+  }
+
+  @Post("quotes/:id/submit-review")
+  submitQuoteReview(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: QuoteReviewDto) {
+    return this.commercialService.submitQuoteReview(user, id, dto);
+  }
+
+  @Post("quotes/:id/approve")
+  approveQuote(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: QuoteReviewDto) {
+    return this.commercialService.approveQuote(user, id, dto);
+  }
+
+  @Post("quotes/:id/reject")
+  rejectQuote(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: QuoteReviewDto) {
+    return this.commercialService.rejectQuote(user, id, dto);
   }
 
   @Delete("quotes/:id")
@@ -50,4 +84,3 @@ export class CommercialController {
     return this.commercialService.deleteSample(user, id);
   }
 }
-
