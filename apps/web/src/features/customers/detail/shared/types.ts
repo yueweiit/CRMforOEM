@@ -191,7 +191,40 @@ export type QuoteHistoryItem = {
   actorName?: string | null;
   createdAt: string;
 };
-export type Sample = { id: string; productSummary: string; status: string; trackingNo?: string; carrier?: string; shippedAt?: string; feedback?: string; createdAt: string };
+export type SampleLinkedQuote = { id: string; quoteNo: string; productName: string; status: string; approvalStatus: string; amount?: string; currency?: string };
+export type SampleFee = { id: string; feeType: string; amount: string; currency: string; note?: string | null; incurredAt: string; createdAt: string };
+export type SampleReturnRecord = { id: string; returnType: string; receiverName?: string | null; destination?: string | null; note?: string | null; recordedAt: string; createdAt: string };
+export type SampleHistoryItem = {
+  id: string;
+  action: string;
+  before?: Record<string, unknown> | null;
+  after?: Record<string, unknown> | null;
+  comment?: string | null;
+  actorId?: string | null;
+  actorName?: string | null;
+  createdAt: string;
+};
+export type Sample = {
+  id: string;
+  productSummary: string;
+  status: string;
+  quoteId?: string | null;
+  quote?: SampleLinkedQuote | null;
+  trackingNo?: string | null;
+  carrier?: string | null;
+  shippedAt?: string | null;
+  deliveredAt?: string | null;
+  approvedAt?: string | null;
+  returnedAt?: string | null;
+  storedAt?: string | null;
+  voidedAt?: string | null;
+  closedAt?: string | null;
+  feedback?: string | null;
+  sampleFees?: SampleFee[];
+  returnRecords?: SampleReturnRecord[];
+  createdAt: string;
+  updatedAt?: string;
+};
 export type CustomerBackgroundTaskView = {
   id: string;
   type: "WEBSITE_ANALYSIS" | "RESEARCH_REPORT" | "OEM_FIT_SCORE" | "EMAIL_DRAFT";

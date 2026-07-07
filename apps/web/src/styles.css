@@ -2200,6 +2200,19 @@ td small {
   line-height: 1.7;
 }
 
+.crm-action-dialog .task-row > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.crm-action-dialog .task-row span {
+  display: block;
+  white-space: normal;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
 .contact-dialog.next-dialog {
   margin-top: 92px;
 }

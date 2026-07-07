@@ -48,6 +48,18 @@ function historyActionLabel(action: string) {
   return labels[action] ?? action;
 }
 
+function normalizeHistoryComment(comment: string) {
+  const legacyLabels: Record<string, string> = {
+    "Quote created": "已创建报价",
+    "Quote updated": "已更新报价",
+    "Quote voided": "已作废报价",
+    "Submitted for approval": "已提交报价审批",
+    "Quote approved": "已通过报价审批",
+    "Quote rejected": "已驳回报价审批"
+  };
+  return legacyLabels[comment] ?? comment;
+}
+
 function toMoney(value: string) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -669,7 +681,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
                 <div>
                   <strong>{historyActionLabel(item.action)}</strong>
                   <span>{new Date(item.createdAt).toLocaleString()} · {item.actorName ?? item.actorId ?? "系统"}</span>
-                  {item.comment ? <span>{item.comment}</span> : null}
+                  {item.comment ? <span>{normalizeHistoryComment(item.comment)}</span> : null}
                 </div>
               </div>
             )) : <div className="empty-state">暂无历史记录。</div>}

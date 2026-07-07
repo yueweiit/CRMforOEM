@@ -2,9 +2,11 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Res } from "@
 import type { Response } from "express";
 import { CurrentUser, RequestUser } from "../../common/auth/current-user.decorator";
 import { CommercialService } from "./commercial.service";
+import { CreateSampleFeeDto } from "./dto/create-sample-fee.dto";
 import { CreateQuoteDto } from "./dto/create-quote.dto";
 import { CreateSampleRequestDto } from "./dto/create-sample-request.dto";
 import { QuoteReviewDto } from "./dto/quote-review.dto";
+import { RecordSampleReturnDto } from "./dto/record-sample-return.dto";
 import { UpdateQuoteDto } from "./dto/update-quote.dto";
 import { UpdateSampleRequestDto } from "./dto/update-sample-request.dto";
 
@@ -89,6 +91,21 @@ export class CommercialController {
   @Patch("samples/:id")
   updateSample(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: UpdateSampleRequestDto) {
     return this.commercialService.updateSample(user, id, dto);
+  }
+
+  @Get("samples/:id/history")
+  sampleHistory(@CurrentUser() user: RequestUser, @Param("id") id: string) {
+    return this.commercialService.getSampleHistory(user, id);
+  }
+
+  @Post("samples/:id/fees")
+  recordSampleFee(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: CreateSampleFeeDto) {
+    return this.commercialService.recordSampleFee(user, id, dto);
+  }
+
+  @Post("samples/:id/returns")
+  recordSampleReturn(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: RecordSampleReturnDto) {
+    return this.commercialService.recordSampleReturn(user, id, dto);
   }
 
   @Delete("samples/:id")

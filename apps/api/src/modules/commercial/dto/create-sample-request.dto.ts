@@ -9,7 +9,7 @@ export class CreateSampleRequestDto {
 
   @IsOptional()
   @IsString()
-  status?: string;
+  quoteId?: string;
 
   @IsOptional()
   @IsString()

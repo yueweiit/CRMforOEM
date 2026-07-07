@@ -178,11 +178,41 @@ enum QuoteHistoryAction {
 
 enum SampleStatus {
   REQUESTED
+  APPROVING
   PREPARING
   SHIPPED
   DELIVERED
   FEEDBACK_RECEIVED
+  RETURNED
+  STORED
+  VOIDED
   CLOSED
+}
+
+enum SampleHistoryAction {
+  CREATED
+  UPDATED
+  STATUS_CHANGED
+  FEE_ADDED
+  QUOTE_LINKED
+  RETURNED
+  STORED
+  VOIDED
+  CLOSED
+}
+
+enum SampleFeeType {
+  SAMPLE_MAKING
+  MOLD
+  COURIER
+  PACKAGING
+  RETURN
+  OTHER
+}
+
+enum SampleReturnType {
+  RETURNED
+  STORED
 }
 
 model Organization {
@@ -1000,6 +1030,7 @@ model Quote {
 
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
   histories QuoteHistory[]
+  sampleRequests SampleRequest[]
 
   @@unique([quoteNo])
   @@index([customerId])
@@ -1026,20 +1057,82 @@ model QuoteHistory {
 model SampleRequest {
   id             String       @id @default(cuid())
   customerId      String
+  quoteId         String?
   status          SampleStatus @default(REQUESTED)
   productSummary  String
   trackingNo      String?
   carrier         String?
   shippedAt       DateTime?
   deliveredAt     DateTime?
+  approvedAt      DateTime?
+  returnedAt      DateTime?
+  storedAt        DateTime?
+  voidedAt        DateTime?
+  closedAt        DateTime?
   feedback        String?
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
-  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customer       Customer            @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  quote          Quote?              @relation(fields: [quoteId], references: [id], onDelete: SetNull)
+  histories      SampleHistory[]
+  fees           SampleFee[]
+  returnRecords  SampleReturnRecord[]
 
   @@index([customerId])
+  @@index([quoteId])
   @@map("sample_requests")
+}
+
+model SampleHistory {
+  id             String             @id @default(cuid())
+  sampleRequestId String
+  action         SampleHistoryAction
+  before         Json?
+  after          Json?
+  comment        String?
+  actorId        String?
+  actorName      String?
+  createdAt      DateTime           @default(now())
+
+  sampleRequest SampleRequest @relation(fields: [sampleRequestId], references: [id], onDelete: Cascade)
+
+  @@index([sampleRequestId, createdAt])
+  @@map("sample_histories")
+}
+
+model SampleFee {
+  id             String        @id @default(cuid())
+  sampleRequestId String
+  feeType        SampleFeeType
+  amount         Decimal
+  currency       String
+  note           String?
+  incurredAt     DateTime      @default(now())
+  createdById    String?
+  createdAt      DateTime      @default(now())
+
+  sampleRequest SampleRequest @relation(fields: [sampleRequestId], references: [id], onDelete: Cascade)
+
+  @@index([sampleRequestId, incurredAt])
+  @@map("sample_fees")
+}
+
+model SampleReturnRecord {
+  id             String          @id @default(cuid())
+  sampleRequestId String
+  returnType     SampleReturnType
+  receiverName   String?
+  destination    String?
+  note           String?
+  recordedById   String?
+  recordedAt     DateTime        @default(now())
+  createdAt      DateTime        @default(now())
+
+  sampleRequest SampleRequest @relation(fields: [sampleRequestId], references: [id], onDelete: Cascade)
+
+  @@index([sampleRequestId, recordedAt])
+  @@map("sample_return_records")
 }
 
 model BlacklistRule {

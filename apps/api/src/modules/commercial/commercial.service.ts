@@ -5,9 +5,11 @@ import { RequestUser } from "../../common/auth/current-user.decorator";
 import { buildCustomerDataScopeWhere } from "../../common/query/data-scope";
 import { PrismaService } from "../../infrastructure/prisma/prisma.service";
 import { CustomerStageService } from "../customers/customers.public";
+import { CreateSampleFeeDto } from "./dto/create-sample-fee.dto";
 import { CreateQuoteDto } from "./dto/create-quote.dto";
 import { CreateSampleRequestDto } from "./dto/create-sample-request.dto";
 import { QuoteReviewDto } from "./dto/quote-review.dto";
+import { RecordSampleReturnDto } from "./dto/record-sample-return.dto";
 import { UpdateQuoteDto } from "./dto/update-quote.dto";
 import { UpdateSampleRequestDto } from "./dto/update-sample-request.dto";
 
@@ -71,7 +73,7 @@ export class CommercialService {
           after: this.buildQuoteSnapshot(created) as never,
           actorId: user.id,
           actorName: user.name ?? user.email ?? user.id,
-          comment: "Quote created"
+          comment: "已创建报价"
         }
       });
       return created;
@@ -80,7 +82,7 @@ export class CommercialService {
       customerId: dto.customerId,
       toStage: CustomerStage.Quoting,
       changedById: user.id,
-      reason: "Quote created",
+      reason: "已创建报价",
       expectedFromStages: [
         CustomerStage.Replied,
         CustomerStage.RequirementConfirming,
@@ -135,28 +137,61 @@ export class CommercialService {
         ...(customerId ? { customerId } : {}),
         customer: buildCustomerDataScopeWhere(user)
       },
-      include: { customer: { select: { id: true, name: true, stage: true } } },
+      include: {
+        customer: { select: { id: true, name: true, stage: true } },
+        quote: { select: { id: true, quoteNo: true, productName: true, status: true, approvalStatus: true, amount: true, currency: true } },
+        fees: { orderBy: { incurredAt: "desc" } },
+        returnRecords: { orderBy: { recordedAt: "desc" } }
+      },
       orderBy: { createdAt: "desc" }
     });
   }
 
   async createSample(user: RequestUser, dto: CreateSampleRequestDto) {
     await this.ensureCustomerVisible(user, dto.customerId);
-    const sample = await this.prisma.sampleRequest.create({
-      data: {
-        customerId: dto.customerId,
-        productSummary: dto.productSummary,
-        carrier: dto.carrier,
-        trackingNo: dto.trackingNo,
-        shippedAt: dto.shippedAt ? new Date(dto.shippedAt) : undefined,
-        status: (dto.status ?? "REQUESTED") as never
+    const quote = dto.quoteId ? await this.ensureQuoteVisible(user, dto.quoteId, dto.customerId) : null;
+    const actorName = await this.resolveActorName(user);
+    const sample = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.sampleRequest.create({
+        data: {
+          customerId: dto.customerId,
+          quoteId: quote?.id ?? null,
+          productSummary: dto.productSummary,
+          carrier: this.normalizeOptionalText(dto.carrier),
+          trackingNo: this.normalizeOptionalText(dto.trackingNo),
+          shippedAt: dto.shippedAt ? new Date(dto.shippedAt) : undefined,
+          status: "APPROVING" as never
+        }
+      });
+      await tx.sampleHistory.create({
+        data: {
+          sampleRequestId: created.id,
+          action: "CREATED" as never,
+          after: this.buildSampleSnapshot(created, quote) as never,
+          actorId: user.id,
+          actorName,
+          comment: "已创建样品申请"
+        }
+      });
+      if (quote) {
+        await tx.sampleHistory.create({
+          data: {
+            sampleRequestId: created.id,
+            action: "QUOTE_LINKED" as never,
+            after: { quoteId: quote.id, quoteNo: quote.quoteNo, productName: quote.productName } as never,
+            actorId: user.id,
+            actorName,
+            comment: `已关联报价 ${quote.quoteNo}`
+          }
+        });
       }
+      return created;
     });
     await this.customerStageService.advanceCustomerStage({
       customerId: dto.customerId,
       toStage: CustomerStage.Sampling,
       changedById: user.id,
-      reason: "Sample request created",
+      reason: "已创建样品申请",
       expectedFromStages: [
         CustomerStage.Quoting,
         CustomerStage.Sampling
@@ -219,7 +254,7 @@ export class CommercialService {
           after: this.buildQuoteSnapshot(updated) as never,
           actorId: user.id,
           actorName: user.name ?? user.email ?? user.id,
-          comment: "Quote updated"
+          comment: "已更新报价"
         }
       });
       return updated;
@@ -251,7 +286,7 @@ export class CommercialService {
           after: this.buildQuoteSnapshot(updated) as never,
           actorId: user.id,
           actorName: user.name ?? user.email ?? user.id,
-          comment: "Quote voided"
+          comment: "已作废报价"
         }
       });
       return updated;
@@ -289,7 +324,7 @@ export class CommercialService {
           after: this.buildQuoteSnapshot(updated) as never,
           actorId: user.id,
           actorName: user.name ?? user.email ?? user.id,
-          comment: dto.comment ?? "Submitted for approval"
+          comment: dto.comment ?? "已提交报价审批"
         }
       });
       return updated;
@@ -324,7 +359,7 @@ export class CommercialService {
           after: this.buildQuoteSnapshot(updated) as never,
           actorId: user.id,
           actorName: user.name ?? user.email ?? user.id,
-          comment: dto.comment ?? "Quote approved"
+          comment: dto.comment ?? "已通过报价审批"
         }
       });
       return updated;
@@ -359,7 +394,7 @@ export class CommercialService {
           after: this.buildQuoteSnapshot(updated) as never,
           actorId: user.id,
           actorName: user.name ?? user.email ?? user.id,
-          comment: dto.comment ?? "Quote rejected"
+          comment: dto.comment ?? "已驳回报价审批"
         }
       });
       return updated;
@@ -368,21 +403,213 @@ export class CommercialService {
 
   async updateSample(user: RequestUser, sampleId: string, dto: UpdateSampleRequestDto) {
     const sample = await this.prisma.sampleRequest.findFirst({
-      where: { id: sampleId, customer: buildCustomerDataScopeWhere(user) }
+      where: { id: sampleId, customer: buildCustomerDataScopeWhere(user) },
+      include: { quote: true, fees: true, returnRecords: true }
     });
     if (!sample) {
       throw new NotFoundException("Sample request not found");
     }
-    return this.prisma.sampleRequest.update({
-      where: { id: sampleId },
-      data: {
-        ...(dto.productSummary !== undefined ? { productSummary: dto.productSummary } : {}),
-        ...(dto.status !== undefined ? { status: dto.status as never } : {}),
-        ...(dto.carrier !== undefined ? { carrier: dto.carrier } : {}),
-        ...(dto.trackingNo !== undefined ? { trackingNo: dto.trackingNo } : {}),
-        ...(dto.shippedAt !== undefined ? { shippedAt: dto.shippedAt ? new Date(dto.shippedAt) : null } : {}),
-        ...(dto.feedback !== undefined ? { feedback: dto.feedback } : {})
+    this.ensureSampleEditable(sample.status);
+    const actorName = await this.resolveActorName(user);
+    const targetStatus = dto.status ? (dto.status as never) : sample.status;
+    this.assertSampleTransition(sample.status, targetStatus as string);
+    const nextCarrier = dto.carrier !== undefined ? this.normalizeOptionalText(dto.carrier) : sample.carrier;
+    const nextTrackingNo = dto.trackingNo !== undefined ? this.normalizeOptionalText(dto.trackingNo) : sample.trackingNo;
+    this.assertSampleShipmentFields(targetStatus as string, nextCarrier, nextTrackingNo);
+    const targetQuote = dto.quoteId !== undefined
+      ? (dto.quoteId ? await this.ensureQuoteVisible(user, dto.quoteId, sample.customerId) : null)
+      : sample.quote;
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.sampleRequest.update({
+        where: { id: sampleId },
+        data: {
+          ...(dto.productSummary !== undefined ? { productSummary: dto.productSummary } : {}),
+          ...(dto.quoteId !== undefined ? { quoteId: dto.quoteId || null } : {}),
+          ...(dto.carrier !== undefined ? { carrier: nextCarrier } : {}),
+          ...(dto.trackingNo !== undefined ? { trackingNo: nextTrackingNo } : {}),
+          ...(dto.shippedAt !== undefined ? { shippedAt: dto.shippedAt ? new Date(dto.shippedAt) : null } : {}),
+          ...(dto.deliveredAt !== undefined ? { deliveredAt: dto.deliveredAt ? new Date(dto.deliveredAt) : null } : {}),
+          ...(dto.feedback !== undefined ? { feedback: dto.feedback } : {}),
+          ...(dto.status !== undefined ? { status: dto.status as never } : {}),
+          ...(dto.status === "PREPARING" ? { approvedAt: sample.approvedAt ?? new Date() } : {}),
+          ...(dto.status === "SHIPPED" ? { shippedAt: sample.shippedAt ?? new Date() } : {}),
+          ...(dto.status === "DELIVERED" ? { deliveredAt: sample.deliveredAt ?? new Date() } : {}),
+          ...(dto.status === "RETURNED" ? { returnedAt: sample.returnedAt ?? new Date() } : {}),
+          ...(dto.status === "STORED" ? { storedAt: sample.storedAt ?? new Date() } : {}),
+          ...(dto.status === "VOIDED" ? { voidedAt: sample.voidedAt ?? new Date() } : {}),
+          ...(dto.status === "CLOSED" ? { closedAt: sample.closedAt ?? new Date() } : {})
+        }
+      });
+      if (dto.quoteId !== undefined && dto.quoteId !== sample.quoteId) {
+        await tx.sampleHistory.create({
+          data: {
+            sampleRequestId: sampleId,
+            action: "QUOTE_LINKED" as never,
+            ...(sample.quote
+              ? {
+                  before: {
+                    quoteId: sample.quote.id,
+                    quoteNo: sample.quote.quoteNo,
+                    productName: sample.quote.productName
+                  }
+                }
+              : {}),
+            ...(updated.quoteId
+              ? {
+                  after: {
+                    quoteId: updated.quoteId,
+                    quoteNo: targetQuote?.quoteNo,
+                    productName: targetQuote?.productName
+                  }
+                }
+              : {}),
+            actorId: user.id,
+            actorName,
+            comment: dto.quoteId ? `已关联报价 ${targetQuote?.quoteNo ?? dto.quoteId}` : "已取消关联报价"
+          }
+        });
       }
+      if (dto.status !== undefined && dto.status !== sample.status) {
+        await tx.sampleHistory.create({
+          data: {
+            sampleRequestId: sampleId,
+            action: this.mapSampleHistoryAction(dto.status as string) as never,
+            before: this.buildSampleSnapshot(sample) as never,
+            after: this.buildSampleSnapshot(updated, targetQuote ?? sample.quote ?? null) as never,
+            actorId: user.id,
+            actorName,
+          comment: `样品状态变更为 ${this.labelSampleStatus(dto.status as string)}`
+          }
+        });
+      } else {
+        await tx.sampleHistory.create({
+          data: {
+            sampleRequestId: sampleId,
+            action: "UPDATED" as never,
+            before: this.buildSampleSnapshot(sample) as never,
+            after: this.buildSampleSnapshot(updated, targetQuote ?? sample.quote ?? null) as never,
+            actorId: user.id,
+            actorName,
+            comment: "已更新样品信息"
+          }
+        });
+      }
+      return updated;
+    });
+  }
+
+  async recordSampleFee(user: RequestUser, sampleRequestId: string, dto: CreateSampleFeeDto) {
+    const sample = await this.prisma.sampleRequest.findFirst({
+      where: { id: sampleRequestId, customer: buildCustomerDataScopeWhere(user) }
+    });
+    if (!sample) {
+      throw new NotFoundException("Sample request not found");
+    }
+    this.ensureSampleNotVoided(sample.status);
+    const actorName = await this.resolveActorName(user);
+    const fee = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.sampleFee.create({
+        data: {
+          sampleRequestId,
+          feeType: dto.feeType as never,
+          amount: new Prisma.Decimal(this.normalizeMoney(dto.amount).toFixed(2)),
+          currency: dto.currency,
+          note: dto.note ?? null,
+          incurredAt: dto.incurredAt ? new Date(dto.incurredAt) : new Date(),
+          createdById: user.id
+        }
+      });
+      await tx.sampleHistory.create({
+        data: {
+          sampleRequestId,
+          action: "FEE_ADDED" as never,
+          after: {
+            id: created.id,
+            feeType: created.feeType,
+            amount: created.amount.toString(),
+            currency: created.currency,
+            note: created.note,
+            incurredAt: created.incurredAt.toISOString()
+          } as never,
+          actorId: user.id,
+          actorName,
+          comment: `已记录样品费用 ${created.feeType}`
+        }
+      });
+      return created;
+    });
+    return fee;
+  }
+
+  async recordSampleReturn(user: RequestUser, sampleRequestId: string, dto: RecordSampleReturnDto) {
+    const sample = await this.prisma.sampleRequest.findFirst({
+      where: { id: sampleRequestId, customer: buildCustomerDataScopeWhere(user) }
+    });
+    if (!sample) {
+      throw new NotFoundException("Sample request not found");
+    }
+    this.ensureSampleReturnable(sample.status);
+    const actorName = await this.resolveActorName(user);
+    return this.prisma.$transaction(async (tx) => {
+      const now = dto.recordedAt ? new Date(dto.recordedAt) : new Date();
+      const updated = await tx.sampleRequest.update({
+        where: { id: sampleRequestId },
+        data: {
+          status: dto.returnType as never,
+          ...(dto.returnType === "RETURNED" ? { returnedAt: now } : { storedAt: now }),
+          closedAt: sample.closedAt ?? (dto.returnType === "STORED" ? now : sample.closedAt)
+        }
+      });
+      const created = await tx.sampleReturnRecord.create({
+        data: {
+          sampleRequestId,
+          returnType: dto.returnType as never,
+          receiverName: dto.receiverName ?? null,
+          destination: dto.destination ?? null,
+          note: dto.note ?? null,
+          recordedById: user.id,
+          recordedAt: now
+        }
+      });
+      await tx.sampleHistory.create({
+        data: {
+          sampleRequestId,
+          action: dto.returnType as never,
+          before: this.buildSampleSnapshot(sample) as never,
+          after: this.buildSampleSnapshot(updated) as never,
+          actorId: user.id,
+          actorName,
+          comment: dto.note ?? (dto.returnType === "RETURNED" ? "已记录样品归还" : "已记录样品留样")
+        }
+      });
+      await tx.sampleHistory.create({
+        data: {
+          sampleRequestId,
+          action: "STATUS_CHANGED" as never,
+          after: {
+            id: created.id,
+            returnType: created.returnType,
+            recordedAt: created.recordedAt.toISOString(),
+            receiverName: created.receiverName,
+            destination: created.destination,
+            note: created.note
+          } as never,
+          actorId: user.id,
+          actorName,
+          comment: `样品${dto.returnType === "RETURNED" ? "已归还" : "已留样"}`
+        }
+      });
+      return updated;
+    });
+  }
+
+  getSampleHistory(user: RequestUser, sampleId: string) {
+    return this.prisma.sampleHistory.findMany({
+      where: {
+        sampleRequestId: sampleId,
+        sampleRequest: { customer: buildCustomerDataScopeWhere(user) }
+      },
+      orderBy: { createdAt: "desc" }
     });
   }
 
@@ -393,8 +620,29 @@ export class CommercialService {
     if (!sample) {
       throw new NotFoundException("Sample request not found");
     }
-    await this.prisma.sampleRequest.delete({ where: { id: sampleId } });
-    return { deleted: true };
+    this.ensureSampleEditable(sample.status);
+    const actorName = await this.resolveActorName(user);
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.sampleRequest.update({
+        where: { id: sampleId },
+        data: {
+          status: "VOIDED" as never,
+          voidedAt: sample.voidedAt ?? new Date()
+        }
+      });
+      await tx.sampleHistory.create({
+        data: {
+          sampleRequestId: sampleId,
+          action: "VOIDED" as never,
+          before: this.buildSampleSnapshot(sample) as never,
+          after: this.buildSampleSnapshot(updated) as never,
+          actorId: user.id,
+          actorName,
+          comment: "已作废样品"
+        }
+      });
+      return { deleted: true };
+    });
   }
 
   private async ensureCustomerVisible(user: RequestUser, customerId: string) {
@@ -405,6 +653,154 @@ export class CommercialService {
       throw new NotFoundException("Customer not found");
     }
     return customer;
+  }
+
+  private async ensureQuoteVisible(user: RequestUser, quoteId: string, customerId: string) {
+    const quote = await this.prisma.quote.findFirst({
+      where: { id: quoteId, customerId, customer: buildCustomerDataScopeWhere(user) }
+    });
+    if (!quote) {
+      throw new NotFoundException("Quote not found");
+    }
+    return quote;
+  }
+
+  private async resolveActorName(user: RequestUser) {
+    const actor = await this.prisma.user.findUnique({
+      where: { id: user.id },
+      select: { name: true, email: true }
+    });
+    return actor?.name ?? actor?.email ?? user.name ?? user.email ?? user.id;
+  }
+
+  private ensureSampleEditable(status: string) {
+    if (status === "VOIDED" || status === "CLOSED") {
+      throw new BadRequestException("Void or closed sample cannot be edited");
+    }
+  }
+
+  private ensureSampleNotVoided(status: string) {
+    if (status === "VOIDED" || status === "CLOSED") {
+      throw new BadRequestException("Closed or voided sample cannot be changed");
+    }
+  }
+
+  private ensureSampleReturnable(status: string) {
+    if (status === "VOIDED" || status === "CLOSED") {
+      throw new BadRequestException("Voided or closed sample cannot be returned");
+    }
+    if (!["SHIPPED", "DELIVERED", "FEEDBACK_RECEIVED"].includes(status)) {
+      throw new BadRequestException("Only shipped or delivered samples can be returned or stored");
+    }
+  }
+
+  private assertSampleTransition(fromStatus: string, toStatus: string) {
+    if (fromStatus === toStatus) {
+      return;
+    }
+    const allowedTransitions: Record<string, string[]> = {
+      REQUESTED: ["APPROVING", "VOIDED"],
+      APPROVING: ["PREPARING", "VOIDED"],
+      PREPARING: ["SHIPPED", "VOIDED"],
+      SHIPPED: ["DELIVERED", "VOIDED"],
+      DELIVERED: ["FEEDBACK_RECEIVED", "RETURNED", "STORED", "CLOSED", "VOIDED"],
+      FEEDBACK_RECEIVED: ["RETURNED", "STORED", "CLOSED", "VOIDED"],
+      RETURNED: ["STORED", "CLOSED", "VOIDED"],
+      STORED: ["CLOSED", "VOIDED"],
+      CLOSED: [],
+      VOIDED: []
+    };
+    const allowed = allowedTransitions[fromStatus] ?? [];
+    if (!allowed.includes(toStatus)) {
+      throw new BadRequestException(`Sample status cannot transition from ${fromStatus} to ${toStatus}`);
+    }
+  }
+
+  private assertSampleShipmentFields(status: string, carrier: string | null, trackingNo: string | null) {
+    if (status !== "SHIPPED") {
+      return;
+    }
+    if (!carrier || !trackingNo) {
+      throw new BadRequestException("Shipping a sample requires both carrier and tracking number");
+    }
+  }
+
+  private mapSampleHistoryAction(status: string) {
+    const actionMap: Record<string, string> = {
+      APPROVING: "STATUS_CHANGED",
+      PREPARING: "STATUS_CHANGED",
+      SHIPPED: "STATUS_CHANGED",
+      DELIVERED: "STATUS_CHANGED",
+      FEEDBACK_RECEIVED: "STATUS_CHANGED",
+      RETURNED: "RETURNED",
+      STORED: "STORED",
+      VOIDED: "VOIDED",
+      CLOSED: "CLOSED"
+    };
+    return actionMap[status] ?? "STATUS_CHANGED";
+  }
+
+  private labelSampleStatus(status: string) {
+    const labels: Record<string, string> = {
+      REQUESTED: "待申请",
+      APPROVING: "待审核",
+      PREPARING: "打样中",
+      SHIPPED: "已寄出",
+      DELIVERED: "已签收",
+      FEEDBACK_RECEIVED: "已反馈",
+      RETURNED: "已归还",
+      STORED: "已留样",
+      VOIDED: "已作废",
+      CLOSED: "已关闭"
+    };
+    return labels[status] ?? status;
+  }
+
+  private buildSampleSnapshot(sample: {
+    id: string;
+    customerId: string;
+    quoteId: string | null;
+    status: string;
+    productSummary: string;
+    trackingNo: string | null;
+    carrier: string | null;
+    shippedAt: Date | null;
+    deliveredAt: Date | null;
+    approvedAt: Date | null;
+    returnedAt: Date | null;
+    storedAt: Date | null;
+    voidedAt: Date | null;
+    closedAt: Date | null;
+    feedback: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }, quote?: { id: string; quoteNo: string; productName: string } | null) {
+    return {
+      id: sample.id,
+      customerId: sample.customerId,
+      quoteId: sample.quoteId,
+      quote: quote
+        ? {
+            id: quote.id,
+            quoteNo: quote.quoteNo,
+            productName: quote.productName
+          }
+        : null,
+      status: sample.status,
+      productSummary: sample.productSummary,
+      trackingNo: sample.trackingNo,
+      carrier: sample.carrier,
+      shippedAt: sample.shippedAt ? sample.shippedAt.toISOString() : null,
+      deliveredAt: sample.deliveredAt ? sample.deliveredAt.toISOString() : null,
+      approvedAt: sample.approvedAt ? sample.approvedAt.toISOString() : null,
+      returnedAt: sample.returnedAt ? sample.returnedAt.toISOString() : null,
+      storedAt: sample.storedAt ? sample.storedAt.toISOString() : null,
+      voidedAt: sample.voidedAt ? sample.voidedAt.toISOString() : null,
+      closedAt: sample.closedAt ? sample.closedAt.toISOString() : null,
+      feedback: sample.feedback,
+      createdAt: sample.createdAt.toISOString(),
+      updatedAt: sample.updatedAt.toISOString()
+    };
   }
 
   private buildQuoteSnapshot(quote: {
@@ -489,6 +885,11 @@ export class CommercialService {
     const total = this.roundMoney(materialCost + processingCost + taxCost + shippingCost - discountAmount);
     const unitPrice = this.roundMoney(total / quantity);
     return { materialCost, processingCost, taxCost, shippingCost, discountAmount, total, quantity, moq, unitPrice };
+  }
+
+  private normalizeOptionalText(value?: string | null) {
+    const trimmed = value?.trim();
+    return trimmed ? trimmed : null;
   }
 
   private normalizeMoney(value?: number) {

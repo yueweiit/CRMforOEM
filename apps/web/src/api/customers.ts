@@ -167,6 +167,18 @@ export function updateSample<T = unknown>(sampleId: string, payload: unknown) {
   return apiPatch<T>(`/samples/${sampleId}`, payload);
 }
 
+export function getSampleHistory<T = unknown>(sampleId: string) {
+  return apiGet<T>(`/samples/${sampleId}/history`);
+}
+
+export function recordSampleFee<T = unknown>(sampleId: string, payload: unknown) {
+  return apiPost<T>(`/samples/${sampleId}/fees`, payload);
+}
+
+export function recordSampleReturn<T = unknown>(sampleId: string, payload: unknown) {
+  return apiPost<T>(`/samples/${sampleId}/returns`, payload);
+}
+
 export function deleteSample<T = unknown>(sampleId: string) {
   return apiDelete<T>(`/samples/${sampleId}`);
 }
