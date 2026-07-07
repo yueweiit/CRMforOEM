@@ -157,6 +157,7 @@ export class CommercialService {
           customerId: dto.customerId,
           quoteId: quote?.id ?? null,
           productSummary: dto.productSummary,
+          fileAssetIds: dto.fileAssetIds ?? [],
           carrier: this.normalizeOptionalText(dto.carrier),
           trackingNo: this.normalizeOptionalText(dto.trackingNo),
           shippedAt: dto.shippedAt ? new Date(dto.shippedAt) : undefined,
@@ -425,6 +426,7 @@ export class CommercialService {
         data: {
           ...(dto.productSummary !== undefined ? { productSummary: dto.productSummary } : {}),
           ...(dto.quoteId !== undefined ? { quoteId: dto.quoteId || null } : {}),
+          ...(dto.fileAssetIds !== undefined ? { fileAssetIds: dto.fileAssetIds } : {}),
           ...(dto.carrier !== undefined ? { carrier: nextCarrier } : {}),
           ...(dto.trackingNo !== undefined ? { trackingNo: nextTrackingNo } : {}),
           ...(dto.shippedAt !== undefined ? { shippedAt: dto.shippedAt ? new Date(dto.shippedAt) : null } : {}),
@@ -762,6 +764,7 @@ export class CommercialService {
     quoteId: string | null;
     status: string;
     productSummary: string;
+    fileAssetIds: string[];
     trackingNo: string | null;
     carrier: string | null;
     shippedAt: Date | null;
@@ -788,6 +791,7 @@ export class CommercialService {
         : null,
       status: sample.status,
       productSummary: sample.productSummary,
+      fileAssetIds: sample.fileAssetIds ?? [],
       trackingNo: sample.trackingNo,
       carrier: sample.carrier,
       shippedAt: sample.shippedAt ? sample.shippedAt.toISOString() : null,

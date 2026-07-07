@@ -210,6 +210,7 @@ export type Sample = {
   status: string;
   quoteId?: string | null;
   quote?: SampleLinkedQuote | null;
+  fileAssetIds?: string[];
   trackingNo?: string | null;
   carrier?: string | null;
   shippedAt?: string | null;
@@ -220,7 +221,7 @@ export type Sample = {
   voidedAt?: string | null;
   closedAt?: string | null;
   feedback?: string | null;
-  sampleFees?: SampleFee[];
+  fees?: SampleFee[];
   returnRecords?: SampleReturnRecord[];
   createdAt: string;
   updatedAt?: string;

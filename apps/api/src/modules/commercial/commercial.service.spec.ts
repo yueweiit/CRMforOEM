@@ -24,6 +24,7 @@ function buildService() {
     quote: null,
     productSummary: "Test sample",
     status: "PREPARING",
+    fileAssetIds: ["file-a"],
     trackingNo: null,
     carrier: null,
     shippedAt: null,
@@ -50,6 +51,7 @@ function buildService() {
           quoteId: data.quoteId ?? null,
           productSummary: data.productSummary,
           status: data.status,
+          fileAssetIds: data.fileAssetIds ?? [],
           trackingNo: data.trackingNo ?? null,
           carrier: data.carrier ?? null,
           shippedAt: null,
@@ -69,6 +71,7 @@ function buildService() {
         return {
           ...sample,
           ...data,
+          fileAssetIds: data.fileAssetIds ?? sample.fileAssetIds,
           trackingNo: data.trackingNo ?? sample.trackingNo,
           carrier: data.carrier ?? sample.carrier,
           status: data.status ?? sample.status,
@@ -87,6 +90,9 @@ function buildService() {
     },
     quote: {
       findFirst: async () => null
+    },
+    user: {
+      findUnique: async () => ({ name: "Tester", email: "tester@example.com" })
     },
     sampleRequest: {
       findFirst: async () => sample
@@ -110,10 +116,12 @@ async function main() {
 
     await service.createSample(user, {
       customerId: "customer-1",
-      productSummary: "New sample"
+      productSummary: "New sample",
+      fileAssetIds: ["file-1", "file-2"]
     });
 
     assert.equal(calls.sampleCreate?.status, "APPROVING");
+    assert.deepEqual(calls.sampleCreate?.fileAssetIds, ["file-1", "file-2"]);
   }
 
   {

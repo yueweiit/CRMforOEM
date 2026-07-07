@@ -17,6 +17,7 @@ import {
 import { AddIconButton } from "../../../../components/AddIconButton";
 import { DeleteIconButton } from "../../../../components/DeleteIconButton";
 import { EditIconButton } from "../../../../components/EditIconButton";
+import { FileUpload } from "../../../../components/FileUpload";
 import { Field } from "../../../../components/ui/Field";
 import { formatDateInput } from "../../../../shared/utils/format";
 import type { Quote, Sample, SampleHistoryItem } from "../shared/types";
@@ -161,7 +162,11 @@ function formatMoney(amount: number, currency?: string) {
 }
 
 function sampleFeeTotal(sample: Sample) {
-  return (sample.sampleFees ?? []).reduce((total, fee) => total + Number(fee.amount || 0), 0);
+  return (sample.fees ?? []).reduce((total, fee) => total + Number(fee.amount || 0), 0);
+}
+
+function sampleAttachmentCount(sample: Sample) {
+  return sample.fileAssetIds?.length ?? 0;
 }
 
 function latestReturnRecord(sample: Sample) {
@@ -187,17 +192,20 @@ function allowedTransitions(status: string) {
 function buildCreatePayload(customerId: string, form: {
   productSummary: string;
   quoteId: string;
+  fileAssetIds: string[];
 }) {
   return {
     customerId,
     productSummary: form.productSummary,
-    quoteId: form.quoteId || undefined
+    quoteId: form.quoteId || undefined,
+    fileAssetIds: form.fileAssetIds
   };
 }
 
 function buildUpdatePayload(form: {
   productSummary: string;
   quoteId: string;
+  fileAssetIds: string[];
   carrier: string;
   trackingNo: string;
   status: string;
@@ -208,6 +216,7 @@ function buildUpdatePayload(form: {
   return {
     productSummary: form.productSummary,
     quoteId: form.quoteId || undefined,
+    fileAssetIds: form.fileAssetIds,
     carrier: form.carrier || undefined,
     trackingNo: form.trackingNo || undefined,
     status: form.status,
@@ -233,7 +242,7 @@ function shippingValidationMessage(form: {
 
 export function SamplePanel({ customerId }: { customerId: string }) {
   const queryClient = useQueryClient();
-  const [createForm, setCreateForm] = useState({ productSummary: "", quoteId: "" });
+  const [createForm, setCreateForm] = useState({ productSummary: "", quoteId: "", fileAssetIds: [] as string[] });
   const [editOpen, setEditOpen] = useState(false);
   const [feeOpen, setFeeOpen] = useState(false);
   const [returnOpen, setReturnOpen] = useState(false);
@@ -246,6 +255,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   const [editForm, setEditForm] = useState({
     productSummary: "",
     quoteId: "",
+    fileAssetIds: [] as string[],
     carrier: "",
     trackingNo: "",
     status: "",
@@ -287,7 +297,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
     mutationFn: () => createSample(buildCreatePayload(customerId, createForm) as never),
     onSuccess: () => {
       refreshSamples();
-      setCreateForm({ productSummary: "", quoteId: "" });
+      setCreateForm({ productSummary: "", quoteId: "", fileAssetIds: [] });
       showClientToast({ type: "success", title: "新增样品成功", message: "样品申请已创建。" });
     },
     onError: (error) => {
@@ -311,6 +321,17 @@ export function SamplePanel({ customerId }: { customerId: string }) {
       refreshSamples();
       setEditOpen(false);
       setEditing(null);
+      setEditForm({
+        productSummary: "",
+        quoteId: "",
+        fileAssetIds: [],
+        carrier: "",
+        trackingNo: "",
+        status: "",
+        shippedAt: "",
+        deliveredAt: "",
+        feedback: ""
+      });
       showClientToast({ type: "success", title: "样品已更新", message: "样品信息和状态已保存。" });
     },
     onError: (error) => {
@@ -406,6 +427,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
     setEditForm({
       productSummary: item.productSummary,
       quoteId: item.quoteId ?? "",
+      fileAssetIds: item.fileAssetIds ?? [],
       carrier: item.carrier ?? "",
       trackingNo: item.trackingNo ?? "",
       status: item.status,
@@ -467,14 +489,17 @@ export function SamplePanel({ customerId }: { customerId: string }) {
         </div>
       </div>
 
-      {data.length === 0 ? (
+      {samplesQuery.isLoading ? (
+        <div className="empty-state">正在加载样品记录...</div>
+      ) : samplesQuery.isError ? (
+        <div className="error-state">样品记录加载失败，请稍后重试。</div>
+      ) : data.length === 0 ? (
         <div className="empty-state">当前还没有样品记录。</div>
       ) : (
         <div className="task-list">
           {data.map((item) => {
             const feeTotal = sampleFeeTotal(item);
             const lastReturn = latestReturnRecord(item);
-            const lastFee = item.sampleFees?.[0] ?? null;
             return (
               <div className="task-row" key={item.id}>
                 <NotebookTabs size={16} />
@@ -485,10 +510,10 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                     {item.quote?.productName ? ` · ${item.quote.productName}` : ""}
                   </strong>
                   <span>
-                    {statusLabel(item.status)} {item.quote?.status ? `报价 ${item.quote.status}` : "未关联报价"} 费用 {formatMoney(feeTotal, item.quote?.currency ?? item.sampleFees?.[0]?.currency)} {item.trackingNo ? `运单 ${item.trackingNo}` : "未填运单"} {item.carrier ? `物流 ${item.carrier}` : ""}
+                    {statusLabel(item.status)} 费用 {formatMoney(feeTotal, item.quote?.currency ?? item.fees?.[0]?.currency)}   | {item.trackingNo ? `运单 ${item.trackingNo}` : "未填运单"} {item.carrier ? `物流 ${item.carrier}` : ""}   |   
                   </span>
                   <span>
-                    {item.shippedAt ? `发货 ${new Date(item.shippedAt).toLocaleDateString()}` : "未发货"} {item.deliveredAt ? `签收 ${new Date(item.deliveredAt).toLocaleDateString()}` : ""} {lastReturn ? `${returnTypeLabel(lastReturn.returnType)} ${new Date(lastReturn.recordedAt).toLocaleDateString()}` : ""} {lastFee ? `${feeTypeLabel(lastFee.feeType)} ${formatMoney(Number(lastFee.amount), lastFee.currency)}` : ""} {item.feedback ? `反馈 ${item.feedback}` : ""}
+                      {item.shippedAt ? `发货 ${new Date(item.shippedAt).toLocaleDateString()}` : "未发货"} {item.deliveredAt ? `签收 ${new Date(item.deliveredAt).toLocaleDateString()}` : ""} {lastReturn ? `${returnTypeLabel(lastReturn.returnType)} ${new Date(lastReturn.recordedAt).toLocaleDateString()}` : ""} {item.feedback ? `反馈 ${item.feedback}` : ""}
                   </span>
                 </div>
                 <div className="contact-row-actions">
@@ -527,6 +552,15 @@ export function SamplePanel({ customerId }: { customerId: string }) {
               ))}
             </select>
           </label>
+        </div>
+        <div className="form-field wide-field">
+          <label>附件</label>
+          <FileUpload
+            entityType="sample-request"
+            fileIds={createForm.fileAssetIds}
+            multiple
+            onChange={(ids) => setCreateForm({ ...createForm, fileAssetIds: ids })}
+          />
         </div>
         <div>
           <AddIconButton
@@ -574,6 +608,16 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                 </option>
               ))}
             </select>
+          </div>
+          <div className="form-field wide-field">
+            <label>附件</label>
+            <FileUpload
+              entityId={editing?.id}
+              entityType="sample-request"
+              fileIds={editForm.fileAssetIds}
+              multiple
+              onChange={(ids) => setEditForm({ ...editForm, fileAssetIds: ids })}
+            />
           </div>
           <div className="form-field">
             <label>状态</label>

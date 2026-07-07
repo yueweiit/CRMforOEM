@@ -1060,6 +1060,7 @@ model SampleRequest {
   quoteId         String?
   status          SampleStatus @default(REQUESTED)
   productSummary  String
+  fileAssetIds    String[]     @default([])
   trackingNo      String?
   carrier         String?
   shippedAt       DateTime?

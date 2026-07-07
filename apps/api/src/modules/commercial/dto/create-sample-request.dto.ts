@@ -1,4 +1,4 @@
-import { IsDateString, IsOptional, IsString } from "class-validator";
+import { IsArray, IsDateString, IsOptional, IsString } from "class-validator";
 
 export class CreateSampleRequestDto {
   @IsString()
@@ -10,6 +10,11 @@ export class CreateSampleRequestDto {
   @IsOptional()
   @IsString()
   quoteId?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  fileAssetIds?: string[];
 
   @IsOptional()
   @IsString()
