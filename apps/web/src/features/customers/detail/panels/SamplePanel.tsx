@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog } from "@alifd/next";
 import "@alifd/next/lib/dialog/style.js";
-import { CheckCircle2, History, NotebookTabs, Plus, Undo2 } from "lucide-react";
+import { CheckCircle2, History, NotebookTabs, Plus, Undo2, XCircle } from "lucide-react";
 import { showClientToast } from "../../../../components/Toast";
 import {
   createSample,
@@ -100,6 +100,28 @@ function statusCodeLabel(status: string) {
     STORED: "已留样",
     VOIDED: "已作废",
     CLOSED: "已关闭"
+  };
+  return labels[status] ?? status;
+}
+
+function quoteStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    DRAFT: "草稿",
+    SENT: "已发送",
+    ACCEPTED: "已接受",
+    REJECTED: "已拒绝",
+    EXPIRED: "已过期",
+    VOIDED: "已作废"
+  };
+  return labels[status] ?? status;
+}
+
+function quoteApprovalStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    DRAFT: "待提交",
+    PENDING_APPROVAL: "审批中",
+    APPROVED: "已审批",
+    REJECTED: "已驳回"
   };
   return labels[status] ?? status;
 }
@@ -240,9 +262,19 @@ function shippingValidationMessage(form: {
   return "";
 }
 
+function detailValue(value: string | number | null | undefined) {
+  if (value === null || value === undefined || value === "") {
+    return "-";
+  }
+  return String(value);
+}
+
 export function SamplePanel({ customerId }: { customerId: string }) {
   const queryClient = useQueryClient();
   const [createForm, setCreateForm] = useState({ productSummary: "", quoteId: "", fileAssetIds: [] as string[] });
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailMode, setDetailMode] = useState<"sample" | "quote">("sample");
+  const [detailSample, setDetailSample] = useState<Sample | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [feeOpen, setFeeOpen] = useState(false);
   const [returnOpen, setReturnOpen] = useState(false);
@@ -358,6 +390,21 @@ export function SamplePanel({ customerId }: { customerId: string }) {
     }
   });
 
+  const reject = useMutation({
+    mutationFn: (sampleId: string) => updateSample(sampleId, { status: "REQUESTED" }),
+    onSuccess: () => {
+      refreshSamples();
+      showClientToast({ type: "success", title: "驳回成功", message: "样品申请已退回待申请。" });
+    },
+    onError: (error) => {
+      showClientToast({
+        type: "error",
+        title: "驳回失败",
+        message: error instanceof Error ? error.message : "操作失败"
+      });
+    }
+  });
+
   const feeMutation = useMutation({
     mutationFn: () => recordSampleFee(feeSample?.id ?? "", { ...feeForm, amount: toNumber(feeForm.amount), incurredAt: feeForm.incurredAt || undefined }),
     onSuccess: () => {
@@ -438,6 +485,21 @@ export function SamplePanel({ customerId }: { customerId: string }) {
     setEditOpen(true);
   };
 
+  const openSampleDetail = (item: Sample) => {
+    setDetailSample(item);
+    setDetailMode("sample");
+    setDetailOpen(true);
+  };
+
+  const openQuoteDetail = (item: Sample) => {
+    if (!item.quote) {
+      return;
+    }
+    setDetailSample(item);
+    setDetailMode("quote");
+    setDetailOpen(true);
+  };
+
   const openFee = (item: Sample) => {
     setFeeSample(item);
     setFeeForm({
@@ -474,11 +536,13 @@ export function SamplePanel({ customerId }: { customerId: string }) {
 
   const canEdit = (item: Sample) => item.status !== "VOIDED" && item.status !== "CLOSED";
   const canApprove = (item: Sample) => item.status === "APPROVING";
+  const canReject = (item: Sample) => item.status === "APPROVING";
   const canFee = (item: Sample) => item.status !== "VOIDED";
   const canReturn = (item: Sample) => ["SHIPPED", "DELIVERED", "FEEDBACK_RECEIVED"].includes(item.status);
   const canDelete = (item: Sample) => item.status !== "VOIDED" && item.status !== "CLOSED";
   const currentHistory = historyQuery.data ?? [];
   const shippingMessage = shippingValidationMessage(editForm);
+  const detailQuote = detailSample?.quoteId ? quoteOptions.find((quote) => quote.id === detailSample.quoteId) ?? null : null;
 
   return (
     <section className="panel">
@@ -505,8 +569,27 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                 <NotebookTabs size={16} />
                 <div>
                   <strong>
-                    {item.productSummary}
-                    {item.quote ? ` · 关联报价 ${item.quote.quoteNo}` : ""}
+                    <button
+                      className="table-link"
+                      onClick={() => openSampleDetail(item)}
+                      style={{ background: "transparent", border: 0, cursor: "pointer", padding: 0 }}
+                      type="button"
+                    >
+                      {item.productSummary}
+                    </button>
+                    {item.quote ? (
+                      <>
+                        {" · 关联报价 "}
+                        <button
+                          className="table-link"
+                          onClick={() => openQuoteDetail(item)}
+                          style={{ background: "transparent", border: 0, cursor: "pointer", padding: 0 }}
+                          type="button"
+                        >
+                          {item.quote.quoteNo}
+                        </button>
+                      </>
+                    ) : null}
                     {item.quote?.productName ? ` · ${item.quote.productName}` : ""}
                   </strong>
                   <span>
@@ -523,6 +606,9 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                   </button>
                   <button className="secondary-button icon-button" disabled={!canApprove(item) || approve.isPending} onClick={() => approve.mutate(item)} title="审核通过" type="button">
                     <CheckCircle2 size={14} />
+                  </button>
+                  <button className="secondary-button icon-button" disabled={!canReject(item) || reject.isPending} onClick={() => reject.mutate(item.id)} title="审核驳回" type="button">
+                    <XCircle size={14} />
                   </button>
                   <button className="secondary-button icon-button" disabled={!canFee(item)} onClick={() => openFee(item)} title="记录费用" type="button">
                     <Plus size={14} />
@@ -570,6 +656,237 @@ export function SamplePanel({ customerId }: { customerId: string }) {
           />
         </div>
       </div>
+
+      <Dialog
+        v2
+        className="crm-action-dialog"
+        title={detailMode === "sample" ? `样品详情 · ${detailSample?.productSummary ?? ""}` : `报价详情 · ${detailQuote?.quoteNo ?? detailSample?.quote?.quoteNo ?? ""}`}
+        visible={detailOpen}
+        onClose={() => setDetailOpen(false)}
+        footer={
+          <div className="toolbar crm-dialog-footer">
+            <button className="secondary-button" onClick={() => setDetailOpen(false)} type="button">
+              关闭
+            </button>
+          </div>
+        }
+      >
+        {detailMode === "sample" ? (
+          <div className="detail-window">
+            <section className="detail-section">
+              <div className="detail-hero">
+                <div>
+                  <p className="detail-eyebrow">样品申请</p>
+                  <h3>{detailValue(detailSample?.productSummary)}</h3>
+                </div>
+                <span className="status-pill">{detailSample ? statusLabel(detailSample.status) : "-"}</span>
+              </div>
+              <div className="detail-grid">
+                <div className="detail-card">
+                  <span>关联报价</span>
+                  <strong>{detailValue(detailSample?.quote?.quoteNo ?? detailSample?.quoteId ?? "未关联")}</strong>
+                </div>
+                <div className="detail-card">
+                  <span>费用合计</span>
+                  <strong>{detailSample ? formatMoney(sampleFeeTotal(detailSample), detailSample.quote?.currency ?? detailSample.fees?.[0]?.currency) : "-"}</strong>
+                </div>
+                <div className="detail-card">
+                  <span>附件数量</span>
+                  <strong>{detailValue(detailSample?.fileAssetIds?.length ?? 0)}</strong>
+                </div>
+                <div className="detail-card">
+                  <span>物流商</span>
+                  <strong>{detailValue(detailSample?.carrier)}</strong>
+                </div>
+                <div className="detail-card">
+                  <span>运单号</span>
+                  <strong>{detailValue(detailSample?.trackingNo)}</strong>
+                </div>
+                <div className="detail-card">
+                  <span>发货日期</span>
+                  <strong>{detailSample?.shippedAt ? new Date(detailSample.shippedAt).toLocaleDateString() : "-"}</strong>
+                </div>
+                <div className="detail-card">
+                  <span>签收日期</span>
+                  <strong>{detailSample?.deliveredAt ? new Date(detailSample.deliveredAt).toLocaleDateString() : "-"}</strong>
+                </div>
+                <div className="detail-card">
+                  <span>审核通过时间</span>
+                  <strong>{detailSample?.approvedAt ? new Date(detailSample.approvedAt).toLocaleString() : "-"}</strong>
+                </div>
+                <div className="detail-card">
+                  <span>归还时间</span>
+                  <strong>{detailSample?.returnedAt ? new Date(detailSample.returnedAt).toLocaleString() : "-"}</strong>
+                </div>
+                <div className="detail-card">
+                  <span>留样时间</span>
+                  <strong>{detailSample?.storedAt ? new Date(detailSample.storedAt).toLocaleString() : "-"}</strong>
+                </div>
+                <div className="detail-card">
+                  <span>作废时间</span>
+                  <strong>{detailSample?.voidedAt ? new Date(detailSample.voidedAt).toLocaleString() : "-"}</strong>
+                </div>
+                <div className="detail-card">
+                  <span>关闭时间</span>
+                  <strong>{detailSample?.closedAt ? new Date(detailSample.closedAt).toLocaleString() : "-"}</strong>
+                </div>
+                <div className="detail-card">
+                  <span>创建时间</span>
+                  <strong>{detailSample?.createdAt ? new Date(detailSample.createdAt).toLocaleString() : "-"}</strong>
+                </div>
+                <div className="detail-card">
+                  <span>更新时间</span>
+                  <strong>{detailSample?.updatedAt ? new Date(detailSample.updatedAt).toLocaleString() : "-"}</strong>
+                </div>
+              </div>
+            </section>
+
+            <section className="detail-section">
+              <h4>反馈说明</h4>
+              <div className="detail-note">{detailValue(detailSample?.feedback)}</div>
+            </section>
+
+            <section className="detail-section">
+              <h4>费用明细</h4>
+              {detailSample?.fees?.length ? (
+                <div className="detail-list">
+                  {detailSample.fees.map((fee) => (
+                    <div className="detail-list-item" key={fee.id}>
+                      <strong>{feeTypeLabel(fee.feeType)} · {formatMoney(Number(fee.amount), fee.currency)}</strong>
+                      <span>{new Date(fee.incurredAt).toLocaleDateString()} {fee.note ? `· ${fee.note}` : ""}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="empty-state">暂无费用记录。</div>
+              )}
+            </section>
+
+            <section className="detail-section">
+              <h4>归还 / 留样记录</h4>
+              {detailSample?.returnRecords?.length ? (
+                <div className="detail-list">
+                  {detailSample.returnRecords.map((record) => (
+                    <div className="detail-list-item" key={record.id}>
+                      <strong>{returnTypeLabel(record.returnType)} · {new Date(record.recordedAt).toLocaleDateString()}</strong>
+                      <span>{record.receiverName ? `接收人 ${record.receiverName}` : ""}{record.destination ? ` · 去向 ${record.destination}` : ""}{record.note ? ` · ${record.note}` : ""}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="empty-state">暂无归还或留样记录。</div>
+              )}
+            </section>
+
+            <section className="detail-section">
+              <h4>附件</h4>
+              <FileUpload
+                entityId={detailSample?.id}
+                entityType="sample-request"
+                fileIds={detailSample?.fileAssetIds ?? []}
+                multiple
+                onChange={() => {}}
+                readOnly
+              />
+            </section>
+          </div>
+        ) : (
+          <div className="detail-window">
+            <section className="detail-section">
+              <div className="detail-hero">
+                <div>
+                  <p className="detail-eyebrow">关联报价</p>
+                  <h3>{detailValue(detailQuote?.quoteNo ?? detailSample?.quote?.quoteNo)}</h3>
+                </div>
+                <span className="status-pill">{quoteStatusLabel(detailQuote?.status ?? detailSample?.quote?.status ?? "")}</span>
+              </div>
+              <div className="detail-grid">
+                <div className="detail-card">
+                  <span>产品名称</span>
+                  <strong>{detailValue(detailQuote?.productName ?? detailSample?.quote?.productName)}</strong>
+                </div>
+                <div className="detail-card">
+                  <span>规格</span>
+                  <strong>{detailValue(detailQuote?.specification)}</strong>
+                </div>
+                <div className="detail-card">
+                  <span>报价状态</span>
+                  <strong>{quoteStatusLabel(detailQuote?.status ?? detailSample?.quote?.status ?? "")}</strong>
+                </div>
+                <div className="detail-card">
+                  <span>审批状态</span>
+                  <strong>{quoteApprovalStatusLabel(detailQuote?.approvalStatus ?? detailSample?.quote?.approvalStatus ?? "")}</strong>
+                </div>
+                <div className="detail-card">
+                  <span>报价金额</span>
+                  <strong>{detailQuote ? `${detailQuote.currency} ${detailQuote.amount}` : detailSample?.quote?.amount ? `${detailSample.quote.currency ?? ""} ${detailSample.quote.amount}`.trim() : "-"}</strong>
+                </div>
+                <div className="detail-card">
+                  <span>单价</span>
+                  <strong>{detailQuote ? `${detailQuote.currency} ${detailQuote.unitPrice}` : "-"}</strong>
+                </div>
+                <div className="detail-card">
+                  <span>MOQ</span>
+                  <strong>{detailValue(detailQuote?.moq)}</strong>
+                </div>
+                <div className="detail-card">
+                  <span>数量</span>
+                  <strong>{detailValue(detailQuote?.quantity)}</strong>
+                </div>
+                <div className="detail-card">
+                  <span>物料价</span>
+                  <strong>{detailValue(detailQuote ? `${detailQuote.currency} ${detailQuote.materialCost}` : "-")}</strong>
+                </div>
+                <div className="detail-card">
+                  <span>加工费</span>
+                  <strong>{detailValue(detailQuote ? `${detailQuote.currency} ${detailQuote.processingCost}` : "-")}</strong>
+                </div>
+                <div className="detail-card">
+                  <span>税费</span>
+                  <strong>{detailValue(detailQuote ? `${detailQuote.currency} ${detailQuote.taxCost}` : "-")}</strong>
+                </div>
+                <div className="detail-card">
+                  <span>运费</span>
+                  <strong>{detailValue(detailQuote ? `${detailQuote.currency} ${detailQuote.shippingCost}` : "-")}</strong>
+                </div>
+                <div className="detail-card">
+                  <span>优惠金额</span>
+                  <strong>{detailValue(detailQuote ? `${detailQuote.currency} ${detailQuote.discountAmount}` : "-")}</strong>
+                </div>
+                <div className="detail-card">
+                  <span>有效期</span>
+                  <strong>{detailQuote?.validUntil ? new Date(detailQuote.validUntil).toLocaleDateString() : "-"}</strong>
+                </div>
+                <div className="detail-card">
+                  <span>提交审批时间</span>
+                  <strong>{detailQuote?.approvalSubmittedAt ? new Date(detailQuote.approvalSubmittedAt).toLocaleString() : "-"}</strong>
+                </div>
+                <div className="detail-card">
+                  <span>审批完成时间</span>
+                  <strong>{detailQuote?.approvalReviewedAt ? new Date(detailQuote.approvalReviewedAt).toLocaleString() : "-"}</strong>
+                </div>
+                <div className="detail-card">
+                  <span>创建时间</span>
+                  <strong>{detailQuote?.createdAt ? new Date(detailQuote.createdAt).toLocaleString() : "-"}</strong>
+                </div>
+                <div className="detail-card">
+                  <span>更新时间</span>
+                  <strong>{detailQuote?.updatedAt ? new Date(detailQuote.updatedAt).toLocaleString() : "-"}</strong>
+                </div>
+              </div>
+            </section>
+
+            <section className="detail-section">
+              <h4>备注</h4>
+              <div className="detail-note">
+                <strong>审批备注：</strong>{detailValue(detailQuote?.approvalComment)}
+                <br />
+                <strong>备注：</strong>{detailValue(detailQuote?.notes)}
+              </div>
+            </section>
+          </div>
+        )}
+      </Dialog>
 
       <Dialog
         v2

@@ -122,6 +122,13 @@ function downloadBlob(blob: Blob, fileName: string) {
   URL.revokeObjectURL(url);
 }
 
+function detailValue(value: string | number | null | undefined) {
+  if (value === null || value === undefined || value === "") {
+    return "-";
+  }
+  return String(value);
+}
+
 function rankCurrencyOption(option: string, query: string, index: number) {
   const normalizedQuery = query.trim().toUpperCase();
   if (!normalizedQuery) return index;
@@ -201,6 +208,7 @@ function CurrencyInput({
 
 export function QuotePanel({ customerId }: { customerId: string }) {
   const queryClient = useQueryClient();
+  const [detailOpen, setDetailOpen] = useState(false);
   const [form, setForm] = useState({
     quoteNo: `Q-${Date.now()}`,
     productName: "",
@@ -235,6 +243,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
     validUntil: ""
   });
   const [historyQuote, setHistoryQuote] = useState<Quote | null>(null);
+  const [detailQuote, setDetailQuote] = useState<Quote | null>(null);
 
   const { data = [] } = useQuery({ queryKey: ["quotes", customerId], queryFn: () => getQuotes<Quote[]>(customerId) });
   const historyQuery = useQuery({
@@ -428,6 +437,11 @@ export function QuotePanel({ customerId }: { customerId: string }) {
     setHistoryOpen(true);
   };
 
+  const openDetail = (item: Quote) => {
+    setDetailQuote(item);
+    setDetailOpen(true);
+  };
+
   const openDelete = (item: Quote) => {
     setEditing(item);
     setDeleteOpen(true);
@@ -465,7 +479,17 @@ export function QuotePanel({ customerId }: { customerId: string }) {
             <div className="task-row" key={item.id}>
               <NotebookTabs size={16} />
               <div>
-                <strong>{item.quoteNo} · {item.productName || "未命名产品"} · {item.currency} {item.amount}</strong>
+                <strong>
+                  <button
+                    className="table-link"
+                    onClick={() => openDetail(item)}
+                    style={{ background: "transparent", border: 0, cursor: "pointer", padding: 0, textAlign: "left" }}
+                    type="button"
+                  >
+                    {item.quoteNo}
+                  </button>
+                  {` · ${item.productName || "未命名产品"} · ${item.currency} ${item.amount}`}
+                </strong>
                 <span>{statusLabel(item.status)} · {approvalStatusLabel(item.approvalStatus)} · {new Date(item.createdAt).toLocaleDateString()}   |   </span>
                 <span>规格 {item.specification || "未填写"} · MOQ {item.moq} · 数量 {item.quantity} · 单价 {item.unitPrice}   |   </span>
                 <span>物料 {item.materialCost} + 加工 {item.processingCost} + 税费 {item.taxCost} + 运费 {item.shippingCost} - 优惠 {item.discountAmount}=总价{item.amount}</span>
@@ -555,6 +579,110 @@ export function QuotePanel({ customerId }: { customerId: string }) {
         {!createSummary.moqValid ? <div className="error-state">报价数量不能小于 MOQ，请先调整数量或起订量。</div> : null}
         <div><AddIconButton disabled={create.isPending || !createSummary.moqValid} label={create.isPending ? "提交中..." : "新增报价"} onClick={() => create.mutate()} /></div>
       </div>
+
+      <Dialog
+        v2
+        className="crm-action-dialog"
+        title={`报价详情 · ${detailQuote?.quoteNo ?? ""}`}
+        visible={detailOpen}
+        onClose={() => setDetailOpen(false)}
+        footer={(
+          <div className="toolbar crm-dialog-footer">
+            <button className="secondary-button" onClick={() => setDetailOpen(false)} type="button">关闭</button>
+          </div>
+        )}
+      >
+        <div className="detail-window">
+          <section className="detail-section">
+            <div className="detail-hero">
+              <div>
+                <p className="detail-eyebrow">报价单</p>
+                <h3>{detailValue(detailQuote?.quoteNo)}</h3>
+              </div>
+              <span className="status-pill">{statusLabel(detailQuote?.status ?? "")}</span>
+            </div>
+            <div className="detail-grid">
+              <div className="detail-card">
+                <span>产品名称</span>
+                <strong>{detailValue(detailQuote?.productName || "未命名产品")}</strong>
+              </div>
+              <div className="detail-card">
+                <span>规格</span>
+                <strong>{detailValue(detailQuote?.specification)}</strong>
+              </div>
+              <div className="detail-card">
+                <span>审批状态</span>
+                <strong>{approvalStatusLabel(detailQuote?.approvalStatus ?? "")}</strong>
+              </div>
+              <div className="detail-card">
+                <span>报价金额</span>
+                <strong>{detailQuote ? `${detailQuote.currency} ${detailQuote.amount}` : "-"}</strong>
+              </div>
+              <div className="detail-card">
+                <span>单价</span>
+                <strong>{detailQuote ? `${detailQuote.currency} ${detailQuote.unitPrice}` : "-"}</strong>
+              </div>
+              <div className="detail-card">
+                <span>MOQ</span>
+                <strong>{detailValue(detailQuote?.moq)}</strong>
+              </div>
+              <div className="detail-card">
+                <span>数量</span>
+                <strong>{detailValue(detailQuote?.quantity)}</strong>
+              </div>
+              <div className="detail-card">
+                <span>物料价</span>
+                <strong>{detailQuote ? `${detailQuote.currency} ${detailQuote.materialCost}` : "-"}</strong>
+              </div>
+              <div className="detail-card">
+                <span>加工费</span>
+                <strong>{detailQuote ? `${detailQuote.currency} ${detailQuote.processingCost}` : "-"}</strong>
+              </div>
+              <div className="detail-card">
+                <span>税费</span>
+                <strong>{detailQuote ? `${detailQuote.currency} ${detailQuote.taxCost}` : "-"}</strong>
+              </div>
+              <div className="detail-card">
+                <span>运费</span>
+                <strong>{detailQuote ? `${detailQuote.currency} ${detailQuote.shippingCost}` : "-"}</strong>
+              </div>
+              <div className="detail-card">
+                <span>优惠金额</span>
+                <strong>{detailQuote ? `${detailQuote.currency} ${detailQuote.discountAmount}` : "-"}</strong>
+              </div>
+              <div className="detail-card">
+                <span>有效期</span>
+                <strong>{detailQuote?.validUntil ? new Date(detailQuote.validUntil).toLocaleDateString() : "-"}</strong>
+              </div>
+              <div className="detail-card">
+                <span>提交审批时间</span>
+                <strong>{detailQuote?.approvalSubmittedAt ? new Date(detailQuote.approvalSubmittedAt).toLocaleString() : "-"}</strong>
+              </div>
+              <div className="detail-card">
+                <span>审批完成时间</span>
+                <strong>{detailQuote?.approvalReviewedAt ? new Date(detailQuote.approvalReviewedAt).toLocaleString() : "-"}</strong>
+              </div>
+              <div className="detail-card">
+                <span>创建时间</span>
+                <strong>{detailQuote?.createdAt ? new Date(detailQuote.createdAt).toLocaleString() : "-"}</strong>
+              </div>
+              <div className="detail-card">
+                <span>更新时间</span>
+                <strong>{detailQuote?.updatedAt ? new Date(detailQuote.updatedAt).toLocaleString() : "-"}</strong>
+              </div>
+            </div>
+          </section>
+
+          <section className="detail-section">
+            <h4>备注</h4>
+            <div className="detail-note">
+              <strong>审批备注：</strong>{detailValue(detailQuote?.approvalComment)}
+              <br />
+              <strong>备注：</strong>{detailValue(detailQuote?.notes)}
+            </div>
+          </section>
+        </div>
+      </Dialog>
 
       <Dialog v2 className="crm-action-dialog" title="编辑报价" visible={editOpen} onClose={() => setEditOpen(false)}
         footer={

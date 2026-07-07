@@ -702,7 +702,7 @@ export class CommercialService {
     }
     const allowedTransitions: Record<string, string[]> = {
       REQUESTED: ["APPROVING", "VOIDED"],
-      APPROVING: ["PREPARING", "VOIDED"],
+      APPROVING: ["REQUESTED", "PREPARING", "VOIDED"],
       PREPARING: ["SHIPPED", "VOIDED"],
       SHIPPED: ["DELIVERED", "VOIDED"],
       DELIVERED: ["FEEDBACK_RECEIVED", "RETURNED", "STORED", "CLOSED", "VOIDED"],

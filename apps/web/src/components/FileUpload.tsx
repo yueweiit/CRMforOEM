@@ -23,6 +23,7 @@ type FileUploadProps = {
   entityType: string;
   entityId?: string;
   multiple?: boolean;
+  readOnly?: boolean;
 };
 
 type FilePreviewItem = FileAssetMeta & {
@@ -188,23 +189,29 @@ export function FileUpload(props: FileUploadProps) {
   }
 
   return (
-    <div className="file-upload">
-      <div className="file-upload-toolbar">
-        <label className="secondary-button file-upload-button">
-          {busy ? "处理中..." : props.multiple ? "上传文件" : "上传文件/图片"}
-          <input
-            hidden
-            multiple={props.multiple}
-            type="file"
-            accept="image/*,.pdf"
-            onChange={(event) => {
-              void handleSelect(event.target.files);
-              event.currentTarget.value = "";
-            }}
-          />
-        </label>
-        {message ? <span className="file-upload-message">{message}</span> : null}
-      </div>
+      <div className="file-upload">
+      {!props.readOnly ? (
+        <div className="file-upload-toolbar">
+          <label className="secondary-button file-upload-button">
+            {busy ? "处理中..." : props.multiple ? "上传文件" : "上传文件/图片"}
+            <input
+              hidden
+              multiple={props.multiple}
+              type="file"
+              accept="image/*,.pdf"
+              onChange={(event) => {
+                void handleSelect(event.target.files);
+                event.currentTarget.value = "";
+              }}
+            />
+          </label>
+          {message ? <span className="file-upload-message">{message}</span> : null}
+        </div>
+      ) : message ? (
+        <div className="file-upload-toolbar">
+          <span className="file-upload-message">{message}</span>
+        </div>
+      ) : null}
 
       {items.length ? (
         <div className="file-upload-grid">
@@ -222,7 +229,7 @@ export function FileUpload(props: FileUploadProps) {
               )}
               <div className="toolbar">
                 <button className="secondary-button" onClick={() => void openRaw(item)} type="button">预览</button>
-                <DeleteIconButton disabled={busy} onClick={() => void handleRemove(item.id)} />
+                {!props.readOnly ? <DeleteIconButton disabled={busy} onClick={() => void handleRemove(item.id)} /> : null}
               </div>
             </div>
           ))}

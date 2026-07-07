@@ -11,7 +11,7 @@ const user: RequestUser = {
   dataScope: "ALL"
 };
 
-function buildService() {
+function buildService(sampleStatus = "PREPARING") {
   const calls: {
     sampleCreate?: Record<string, unknown>;
     sampleUpdate?: Record<string, unknown>;
@@ -23,7 +23,7 @@ function buildService() {
     quoteId: null,
     quote: null,
     productSummary: "Test sample",
-    status: "PREPARING",
+    status: sampleStatus,
     fileAssetIds: ["file-a"],
     trackingNo: null,
     carrier: null,
@@ -136,6 +136,16 @@ async function main() {
         }),
       BadRequestException
     );
+  }
+
+  {
+    const { service, calls } = buildService("APPROVING");
+
+    await service.updateSample(user, "sample-1", {
+      status: "REQUESTED"
+    });
+
+    assert.equal(calls.sampleUpdate?.status, "REQUESTED");
   }
 
   console.log("commercial.service.spec.ts OK");
