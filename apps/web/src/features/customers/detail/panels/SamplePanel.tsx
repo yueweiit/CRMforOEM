@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog } from "@alifd/next";
 import "@alifd/next/lib/dialog/style.js";
 import { CheckCircle2, Download, History, NotebookTabs, Undo2, XCircle } from "lucide-react";
+import "./analysis-edit.css";
 import { quoteFlowStatusLabel } from "@oem-crm/shared";
 import { showClientToast } from "../../../../components/Toast";
 import {
@@ -22,6 +23,7 @@ import { AddIconButton } from "../../../../components/AddIconButton";
 import { DeleteIconButton } from "../../../../components/DeleteIconButton";
 import { EditIconButton } from "../../../../components/EditIconButton";
 import { FileUpload } from "../../../../components/FileUpload";
+import { Field } from "../../../../components/ui/Field";
 import { formatDateInput } from "../../../../shared/utils/format";
 import type { Quote, Sample, SampleFee, SampleHistoryItem } from "../shared/types";
 
@@ -35,19 +37,6 @@ function downloadBlob(blob: Blob, fileName: string) {
   link.remove();
   URL.revokeObjectURL(url);
 }
-
-const SAMPLE_STATUSES = [
-  "REQUESTED",
-  "APPROVING",
-  "PREPARING",
-  "SHIPPED",
-  "DELIVERED",
-  "FEEDBACK_RECEIVED",
-  "RETURNED",
-  "STORED",
-  "VOIDED",
-  "CLOSED"
-] as const;
 
 const RETURN_TYPES = [
   { value: "RETURNED", label: "已归还" },
@@ -242,6 +231,10 @@ function allowedTransitions(status: string) {
   return transitions[status] ?? [];
 }
 
+function statusDialogTransitions(status: string) {
+  return allowedTransitions(status).filter((nextStatus) => nextStatus !== "VOIDED");
+}
+
 function buildCreatePayload(customerId: string, form: {
   productSummary: string;
   specification: string;
@@ -292,7 +285,6 @@ function buildUpdatePayload(form: {
   fileAssetIds: string[];
   carrier: string;
   trackingNo: string;
-  status: string;
   shippedAt: string;
   deliveredAt: string;
   feedback: string;
@@ -309,7 +301,6 @@ function buildUpdatePayload(form: {
     fileAssetIds: form.fileAssetIds,
     carrier: form.carrier || undefined,
     trackingNo: form.trackingNo || undefined,
-    status: form.status,
     shippedAt: form.shippedAt || undefined,
     deliveredAt: form.deliveredAt || undefined,
     feedback: form.feedback || undefined
@@ -317,11 +308,10 @@ function buildUpdatePayload(form: {
 }
 
 function shippingValidationMessage(form: {
-  status: string;
   carrier: string;
   trackingNo: string;
-}) {
-  if (form.status !== "SHIPPED") {
+}, sampleStatus: string) {
+  if (sampleStatus !== "SHIPPED") {
     return "";
   }
   if (!form.carrier.trim() || !form.trackingNo.trim()) {
@@ -342,8 +332,6 @@ function createSampleValidationMessage(form: {
   const quantity = Number(form.sampleQuantity);
   if (!form.productSummary.trim()) return "请填写样品/产品名称。";
   if (!form.specification.trim()) return "请填写规格。";
-  if (!form.material.trim()) return "请填写材质。";
-  if (!form.process.trim()) return "请填写工艺。";
   if (!form.sampleQuantity.trim() || !Number.isInteger(quantity) || quantity < 1) return "请填写有效的样品数量。";
   if (!form.samplePurpose.trim()) return "请选择样品用途。";
   return "";
@@ -404,6 +392,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   const [detailMode, setDetailMode] = useState<"sample" | "quote">("sample");
   const [detailSample, setDetailSample] = useState<Sample | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [statusOpen, setStatusOpen] = useState(false);
   const [feeOpen, setFeeOpen] = useState(false);
   const [feeMode, setFeeMode] = useState<"create" | "edit">("create");
   const [feeDeleteOpen, setFeeDeleteOpen] = useState(false);
@@ -411,6 +400,11 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [editing, setEditing] = useState<Sample | null>(null);
+  const [statusSample, setStatusSample] = useState<Sample | null>(null);
+  const [statusForm, setStatusForm] = useState({
+    carrier: "",
+    trackingNo: ""
+  });
   const [feeSample, setFeeSample] = useState<Sample | null>(null);
   const [feeEditing, setFeeEditing] = useState<{ sampleId: string; feeId: string } | null>(null);
   const [feeDeleting, setFeeDeleting] = useState<{ sampleId: string; feeId: string; feeType: string } | null>(null);
@@ -428,7 +422,6 @@ export function SamplePanel({ customerId }: { customerId: string }) {
     fileAssetIds: [] as string[],
     carrier: "",
     trackingNo: "",
-    status: "",
     shippedAt: "",
     deliveredAt: "",
     feedback: ""
@@ -477,6 +470,8 @@ export function SamplePanel({ customerId }: { customerId: string }) {
     }
   });
   const currentEditingSample = editing ? data.find((item) => item.id === editing.id) ?? editing : null;
+  const currentStatusSample = statusSample ? data.find((item) => item.id === statusSample.id) ?? statusSample : null;
+  const statusTransitions = statusDialogTransitions(currentStatusSample?.status ?? "");
 
   const refreshSamples = () => {
     queryClient.invalidateQueries({ queryKey: ["samples", customerId] });
@@ -512,7 +507,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
 
   const update = useMutation({
     mutationFn: () => {
-      const message = shippingValidationMessage(editForm);
+      const message = shippingValidationMessage(editForm, editing?.status ?? "");
       if (message) {
         throw new Error(message);
       }
@@ -534,17 +529,39 @@ export function SamplePanel({ customerId }: { customerId: string }) {
         fileAssetIds: [],
         carrier: "",
         trackingNo: "",
-        status: "",
         shippedAt: "",
         deliveredAt: "",
         feedback: ""
       });
-      showClientToast({ type: "success", title: "样品已更新", message: "样品信息和状态已保存。" });
+      showClientToast({ type: "success", title: "样品已更新", message: "样品信息已保存。" });
     },
     onError: (error) => {
       showClientToast({
         type: "error",
         title: "更新样品失败",
+        message: error instanceof Error ? error.message : "操作失败"
+      });
+    }
+  });
+
+  const statusMutation = useMutation({
+    mutationFn: (payload: { sampleId: string; status: string; carrier?: string; trackingNo?: string }) =>
+      updateSample(payload.sampleId, {
+        status: payload.status,
+        ...(payload.carrier !== undefined ? { carrier: payload.carrier } : {}),
+        ...(payload.trackingNo !== undefined ? { trackingNo: payload.trackingNo } : {})
+      }),
+    onSuccess: () => {
+      refreshSamples();
+      setStatusOpen(false);
+      setStatusSample(null);
+      setStatusForm({ carrier: "", trackingNo: "" });
+      showClientToast({ type: "success", title: "状态已更新", message: "样品状态已保存。" });
+    },
+    onError: (error) => {
+      showClientToast({
+        type: "error",
+        title: "更新状态失败",
         message: error instanceof Error ? error.message : "操作失败"
       });
     }
@@ -692,12 +709,20 @@ export function SamplePanel({ customerId }: { customerId: string }) {
       fileAssetIds: item.fileAssetIds ?? [],
       carrier: item.carrier ?? "",
       trackingNo: item.trackingNo ?? "",
-      status: item.status,
       shippedAt: item.shippedAt ? formatDateInput(new Date(item.shippedAt)) : "",
       deliveredAt: item.deliveredAt ? formatDateInput(new Date(item.deliveredAt)) : "",
       feedback: item.feedback ?? ""
     });
     setEditOpen(true);
+  };
+
+  const openStatus = (item: Sample) => {
+    setStatusSample(item);
+    setStatusForm({
+      carrier: item.carrier ?? "",
+      trackingNo: item.trackingNo ?? ""
+    });
+    setStatusOpen(true);
   };
 
   const openSampleDetail = (item: Sample) => {
@@ -779,7 +804,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   const createMessage = createSampleValidationMessage(createForm);
   const createFeeMessage = createFeeValidationMessage(createFeeForms);
   const createReady = createMessage === "" && createFeeMessage === "";
-  const shippingMessage = shippingValidationMessage(editForm);
+  const shippingMessage = shippingValidationMessage(editForm, editing?.status ?? "");
   const detailQuote = detailSample?.quoteId ? quoteOptions.find((quote) => quote.id === detailSample.quoteId) ?? null : null;
 
   return (
@@ -851,6 +876,9 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                   <button className="secondary-button icon-button" onClick={() => openHistory(item)} title="历史" type="button">
                     <History size={14} />
                   </button>
+                  <button className="secondary-button" disabled={item.status === "APPROVING" || !statusDialogTransitions(item.status).length} onClick={() => openStatus(item)} type="button">
+                    状态
+                  </button>
                   <button className="secondary-button icon-button" disabled={!canApprove(item) || approve.isPending} onClick={() => approve.mutate(item)} title="审核通过" type="button">
                     <CheckCircle2 size={14} />
                   </button>
@@ -869,73 +897,61 @@ export function SamplePanel({ customerId }: { customerId: string }) {
       )}
 
       <div className="analysis-edit-form">
-        <div className="analysis-edit-grid">
-          <div className="form-field">
-            <label>样品/产品</label>
-            <input value={createForm.productSummary} onChange={(e) => setCreateForm({ ...createForm, productSummary: e.target.value })} />
+        <div className="form-grid compact-form sample-create-grid">
+        <Field label="样品/产品" value={createForm.productSummary} onChange={(value) => setCreateForm({ ...createForm, productSummary: value })} />
+        <Field label="规格" value={createForm.specification} onChange={(value) => setCreateForm({ ...createForm, specification: value })} />
+        <Field label="材质" value={createForm.material} onChange={(value) => setCreateForm({ ...createForm, material: value })} />
+        <Field label="工艺" value={createForm.process} onChange={(value) => setCreateForm({ ...createForm, process: value })} />
+        <label>
+          <span>样品数量</span>
+          <input type="number" min={1} value={createForm.sampleQuantity} onChange={(e) => setCreateForm({ ...createForm, sampleQuantity: e.target.value })} />
+        </label>
+        <label>
+          <span>样品用途</span>
+          <select value={createForm.samplePurpose} onChange={(e) => setCreateForm({ ...createForm, samplePurpose: e.target.value })}>
+            {SAMPLE_PURPOSES.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>样品交付期限（可选）</span>
+          <input type="date" value={createForm.deliveryDeadline} onChange={(e) => setCreateForm({ ...createForm, deliveryDeadline: e.target.value })} />
+        </label>
+        <label>
+          <span>关联报价</span>
+          <select value={createForm.quoteId} onChange={(e) => setCreateForm({ ...createForm, quoteId: e.target.value })}>
+            <option value="">不关联</option>
+            {quoteOptions.map((quote) => (
+              <option key={quote.id} value={quote.id}>
+                {quote.quoteNo} · {quote.productName}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="wide-field sample-upload-field">
+          <span>附件</span>
+          <FileUpload
+            entityType="sample-request"
+            fileIds={createForm.fileAssetIds}
+            multiple
+            onChange={(ids) => setCreateForm({ ...createForm, fileAssetIds: ids })}
+          />
+        </div>
+        <div className="wide-field toolbar">
+          <button className="secondary-button" onClick={() => setCreateFeeOpen(true)} type="button">
+            填写费用记录
+          </button>
+          <div className="empty-state" style={{ flex: 1, margin: 0 }}>
+            {createFeeMessage ? "费用记录未填写" : `已填写 ${createFeeForms.length} 条费用记录`}
           </div>
-          <div className="form-field">
-            <label>规格</label>
-            <input value={createForm.specification} onChange={(e) => setCreateForm({ ...createForm, specification: e.target.value })} />
-          </div>
-          <div className="form-field">
-            <label>材质</label>
-            <input value={createForm.material} onChange={(e) => setCreateForm({ ...createForm, material: e.target.value })} />
-          </div>
-          <div className="form-field">
-            <label>工艺</label>
-            <input value={createForm.process} onChange={(e) => setCreateForm({ ...createForm, process: e.target.value })} />
-          </div>
-          <div className="form-field">
-            <label>样品数量</label>
-            <input type="number" min={1} value={createForm.sampleQuantity} onChange={(e) => setCreateForm({ ...createForm, sampleQuantity: e.target.value })} />
-          </div>
-          <div className="form-field">
-            <label>样品用途</label>
-            <select value={createForm.samplePurpose} onChange={(e) => setCreateForm({ ...createForm, samplePurpose: e.target.value })}>
-              {SAMPLE_PURPOSES.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="form-field">
-            <label>样品交付期限（可选）</label>
-            <input type="date" value={createForm.deliveryDeadline} onChange={(e) => setCreateForm({ ...createForm, deliveryDeadline: e.target.value })} />
-          </div>
-          <div className="form-field">
-            <label>关联报价</label>
-            <select value={createForm.quoteId} onChange={(e) => setCreateForm({ ...createForm, quoteId: e.target.value })}>
-              <option value="">不关联</option>
-              {quoteOptions.map((quote) => (
-                <option key={quote.id} value={quote.id}>
-                  {quote.quoteNo} · {quote.productName}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="form-field wide-field">
-            <label>附件</label>
-            <FileUpload
-              entityType="sample-request"
-              fileIds={createForm.fileAssetIds}
-              multiple
-              onChange={(ids) => setCreateForm({ ...createForm, fileAssetIds: ids })}
-            />
-          </div>
-          <div className="wide-field toolbar">
-            <button className="secondary-button" onClick={() => setCreateFeeOpen(true)} type="button">
-              填写费用记录
-            </button>
-            <div className="empty-state" style={{ flex: 1, margin: 0 }}>
-              {createFeeMessage ? "费用记录未填写" : `已填写 ${createFeeForms.length} 条费用记录`}
-            </div>
-          </div>
-          {createMessage ? <div className="error-state wide-field">{createMessage}</div> : null}
-          <div className="wide-field">
-            <AddIconButton disabled={create.isPending || !createReady} label={create.isPending ? "提交中..." : "新增样品"} onClick={() => create.mutate()} />
-          </div>
+        </div>
+        {createMessage ? <div className="error-state wide-field">{createMessage}</div> : null}
+        <div className="wide-field">
+          <AddIconButton disabled={create.isPending || !createReady} label={create.isPending ? "提交中..." : "新增样品"} onClick={() => create.mutate()} />
+        </div>
         </div>
       </div>
 
@@ -1354,16 +1370,6 @@ export function SamplePanel({ customerId }: { customerId: string }) {
             />
           </div>
           <div className="form-field">
-            <label>状态</label>
-            <select value={editForm.status} onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}>
-              {SAMPLE_STATUSES.map((status) => (
-                <option key={status} value={status} disabled={status !== editForm.status && !allowedTransitions(editing?.status ?? "").includes(status)}>
-                  {statusLabel(status)}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="form-field">
             <label>物流商</label>
             <input value={editForm.carrier} onChange={(e) => setEditForm({ ...editForm, carrier: e.target.value })} />
           </div>
@@ -1420,6 +1426,92 @@ export function SamplePanel({ customerId }: { customerId: string }) {
               <div className="empty-state">暂无费用记录。</div>
             )}
           </div>
+        </div>
+      </Dialog>
+
+      <Dialog
+        v2
+        className="crm-action-dialog"
+        title={`样品状态 · ${currentStatusSample?.productSummary ?? ""}`}
+        visible={statusOpen}
+        onClose={() => {
+          setStatusOpen(false);
+          setStatusSample(null);
+        }}
+        footer={(
+          <div className="toolbar crm-dialog-footer">
+            <button
+              className="secondary-button"
+              onClick={() => {
+                setStatusOpen(false);
+                setStatusSample(null);
+              }}
+              type="button"
+            >
+              关闭
+            </button>
+          </div>
+        )}
+      >
+        <div className="detail-window">
+          <section className="detail-section">
+            <h4>当前状态</h4>
+            <div className="detail-note">{currentStatusSample ? statusLabel(currentStatusSample.status) : "-"}</div>
+          </section>
+          {currentStatusSample?.status === "PREPARING" ? (
+            <section className="detail-section">
+              <h4>物流信息</h4>
+              <div className="analysis-edit-grid sample-status-shipping-grid">
+                <div className="form-field sample-status-field">
+                  <label>物流商</label>
+                  <input value={statusForm.carrier} onChange={(e) => setStatusForm({ ...statusForm, carrier: e.target.value })} />
+                </div>
+                <div className="form-field sample-status-field">
+                  <label>运单号</label>
+                  <input value={statusForm.trackingNo} onChange={(e) => setStatusForm({ ...statusForm, trackingNo: e.target.value })} />
+                </div>
+              </div>
+              <div className="empty-state" style={{ marginTop: 12 }}>
+                填写后可以直接把状态推进到已寄出。
+              </div>
+            </section>
+          ) : null}
+          <section className="detail-section">
+            <h4>可执行操作</h4>
+            <div className="toolbar">
+              {statusTransitions.length ? (
+                statusTransitions.map((nextStatus) => {
+                  const requiresShipmentInfo = nextStatus === "SHIPPED";
+                  const shipmentMissing = requiresShipmentInfo && (!statusForm.carrier.trim() || !statusForm.trackingNo.trim());
+                  return (
+                    <button
+                      className="primary-button"
+                      disabled={statusMutation.isPending || shipmentMissing || !currentStatusSample}
+                      key={nextStatus}
+                      onClick={() => {
+                        if (!currentStatusSample) return;
+                        statusMutation.mutate({
+                          sampleId: currentStatusSample.id,
+                          status: nextStatus,
+                          ...(requiresShipmentInfo ? { carrier: statusForm.carrier, trackingNo: statusForm.trackingNo } : {})
+                        });
+                      }}
+                      type="button"
+                    >
+                      {statusLabel(nextStatus)}
+                    </button>
+                  );
+                })
+              ) : (
+                <div className="empty-state">当前状态没有可执行的流转操作。</div>
+              )}
+            </div>
+            {currentStatusSample && statusTransitions.includes("SHIPPED") && currentStatusSample.status === "PREPARING" && (!statusForm.carrier.trim() || !statusForm.trackingNo.trim()) ? (
+              <div className="error-state" style={{ marginTop: 12 }}>
+                切换为已寄出前，请先填写物流商和运单号。
+              </div>
+            ) : null}
+          </section>
         </div>
       </Dialog>
 

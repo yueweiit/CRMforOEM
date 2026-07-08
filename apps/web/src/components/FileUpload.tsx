@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiDelete, apiGet, apiGetBlob, apiUpload } from "../api/http";
 import { DeleteIconButton } from "./DeleteIconButton";
 
@@ -47,6 +47,7 @@ export function FileUpload(props: FileUploadProps) {
   const [message, setMessage] = useState("");
   const [apiMode, setApiMode] = useState<ApiMode>("signed");
   const [preview, setPreview] = useState<PreviewState | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const imageItems = items.filter((item) => item.mimeType?.startsWith("image/"));
   const currentImageIndex = preview ? imageItems.findIndex((item) => item.id === preview.id) : -1;
 
@@ -192,19 +193,20 @@ export function FileUpload(props: FileUploadProps) {
       <div className="file-upload">
       {!props.readOnly ? (
         <div className="file-upload-toolbar">
-          <label className="secondary-button file-upload-button">
+          <button className="secondary-button file-upload-button" disabled={busy} onClick={() => fileInputRef.current?.click()} type="button">
             {busy ? "处理中..." : props.multiple ? "上传文件" : "上传文件/图片"}
-            <input
-              hidden
-              multiple={props.multiple}
-              type="file"
-              accept="image/*,.pdf"
-              onChange={(event) => {
-                void handleSelect(event.target.files);
-                event.currentTarget.value = "";
-              }}
-            />
-          </label>
+          </button>
+          <input
+            ref={fileInputRef}
+            hidden
+            multiple={props.multiple}
+            type="file"
+            accept="image/*,.pdf"
+            onChange={(event) => {
+              void handleSelect(event.target.files);
+              event.currentTarget.value = "";
+            }}
+          />
           {message ? <span className="file-upload-message">{message}</span> : null}
         </div>
       ) : message ? (
