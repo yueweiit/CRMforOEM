@@ -2,11 +2,12 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog } from "@alifd/next";
 import "@alifd/next/lib/dialog/style.js";
-import { CheckCircle2, History, NotebookTabs, Undo2, XCircle } from "lucide-react";
+import { CheckCircle2, Download, History, NotebookTabs, Undo2, XCircle } from "lucide-react";
 import { quoteFlowStatusLabel } from "@oem-crm/shared";
 import { showClientToast } from "../../../../components/Toast";
 import {
   createSample,
+  exportSamples,
   deleteSample,
   deleteSampleFee,
   getSampleHistory,
@@ -23,6 +24,17 @@ import { EditIconButton } from "../../../../components/EditIconButton";
 import { FileUpload } from "../../../../components/FileUpload";
 import { formatDateInput } from "../../../../shared/utils/format";
 import type { Quote, Sample, SampleFee, SampleHistoryItem } from "../shared/types";
+
+function downloadBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
 
 const SAMPLE_STATUSES = [
   "REQUESTED",
@@ -446,6 +458,24 @@ export function SamplePanel({ customerId }: { customerId: string }) {
 
   const data = samplesQuery.data ?? [];
   const quoteOptions = quotesQuery.data ?? [];
+  const exportAllMutation = useMutation({
+    mutationFn: () => exportSamples(customerId),
+    onSuccess: async ({ blob, fileName }) => {
+      downloadBlob(blob, fileName ?? `samples-${customerId}.csv`);
+      showClientToast({
+        type: "success",
+        title: "批量导出成功",
+        message: "当前客户的样品表格已下载。"
+      });
+    },
+    onError: (error) => {
+      showClientToast({
+        type: "error",
+        title: "批量导出失败",
+        message: error instanceof Error ? error.message : "操作失败"
+      });
+    }
+  });
   const currentEditingSample = editing ? data.find((item) => item.id === editing.id) ?? editing : null;
 
   const refreshSamples = () => {
@@ -759,6 +789,15 @@ export function SamplePanel({ customerId }: { customerId: string }) {
           <h2>样品记录</h2>
           <span>{data.length} 条</span>
         </div>
+        <button
+          className="secondary-button"
+          disabled={data.length === 0 || exportAllMutation.isPending}
+          onClick={() => exportAllMutation.mutate()}
+          type="button"
+        >
+          <Download size={14} />
+          {exportAllMutation.isPending ? "导出中..." : "批量导出"}
+        </button>
       </div>
 
       {samplesQuery.isLoading ? (

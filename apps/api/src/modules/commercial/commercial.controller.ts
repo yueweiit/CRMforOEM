@@ -104,6 +104,18 @@ export class CommercialController {
     return this.commercialService.listSamples(user, customerId);
   }
 
+  @Get("samples/export")
+  async exportSamples(
+    @CurrentUser() user: RequestUser,
+    @Query("customerId") customerId: string | undefined,
+    @Res({ passthrough: true }) res: Response
+  ) {
+    const { csv, fileName } = await this.commercialService.getSampleExport(user, customerId);
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    return csv;
+  }
+
   @Post("samples")
   createSample(@CurrentUser() user: RequestUser, @Body() dto: CreateSampleRequestDto) {
     return this.commercialService.createSample(user, dto);

@@ -28,6 +28,11 @@ import { formatDateInput } from "../../../../shared/utils/format";
 import type { Quote, QuoteHistoryItem } from "../shared/types";
 
 const CURRENCY_OPTIONS = ["USD", "CNY", "KRW", "JPY", "MXN"] as const;
+const DEFAULT_QUOTE_FORM: { moq: string; quantity: string } = {
+  moq: "50",
+  quantity: "50"
+};
+
 function statusLabel(status: string) {
   return quoteFlowStatusLabel(status);
 }
@@ -253,8 +258,8 @@ export function QuotePanel({ customerId }: { customerId: string }) {
     quoteNo: `Q-${Date.now()}`,
     productName: "",
     specification: "",
-    moq: "1",
-    quantity: "1",
+    moq: DEFAULT_QUOTE_FORM.moq,
+    quantity: DEFAULT_QUOTE_FORM.quantity,
     currency: "USD",
     materialCost: "",
     processingCost: "",
@@ -273,8 +278,8 @@ export function QuotePanel({ customerId }: { customerId: string }) {
     quoteNo: "",
     productName: "",
     specification: "",
-    moq: "1",
-    quantity: "1",
+    moq: DEFAULT_QUOTE_FORM.moq,
+    quantity: DEFAULT_QUOTE_FORM.quantity,
     currency: "",
     materialCost: "",
     processingCost: "",
@@ -302,8 +307,8 @@ export function QuotePanel({ customerId }: { customerId: string }) {
         quoteNo: `Q-${Date.now()}`,
         productName: "",
         specification: "",
-        moq: "1",
-        quantity: "1",
+        moq: DEFAULT_QUOTE_FORM.moq,
+        quantity: DEFAULT_QUOTE_FORM.quantity,
         currency: "USD",
         materialCost: "",
         processingCost: "",

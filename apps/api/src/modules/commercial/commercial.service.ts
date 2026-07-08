@@ -133,6 +133,26 @@ export class CommercialService {
     };
   }
 
+  async getSampleExport(user: RequestUser, customerId?: string) {
+    const samples = await this.prisma.sampleRequest.findMany({
+      where: {
+        ...(customerId ? { customerId } : {}),
+        customer: buildCustomerDataScopeWhere(user)
+      },
+      include: {
+        customer: { select: { id: true, name: true, stage: true } },
+        quote: { select: { id: true, quoteNo: true, productName: true, status: true, approvalStatus: true, amount: true, currency: true } },
+        fees: { orderBy: { incurredAt: "desc" } },
+        returnRecords: { orderBy: { recordedAt: "desc" } }
+      },
+      orderBy: { createdAt: "desc" }
+    });
+    return {
+      csv: this.buildSamplesCsv(samples),
+      fileName: customerId ? `samples-${customerId}.csv` : "samples.csv"
+    };
+  }
+
   listSamples(user: RequestUser, customerId?: string) {
     return this.prisma.sampleRequest.findMany({
       where: {
@@ -1393,6 +1413,89 @@ export class CommercialService {
         quote.updatedAt.toISOString(),
         quote.notes ?? ""
       ]
+    ];
+    return `\ufeff${rows.map((row) => row.map((value) => this.escapeCsv(value)).join(",")).join("\n")}`;
+  }
+
+  private buildSamplesCsv(
+    samples: Array<{
+      id: string;
+      productSummary: string;
+      specification: string | null;
+      material: string | null;
+      process: string | null;
+      sampleQuantity: number | null;
+      samplePurpose: string | null;
+      deliveryDeadline: Date | null;
+      status: string;
+      trackingNo: string | null;
+      carrier: string | null;
+      shippedAt: Date | null;
+      deliveredAt: Date | null;
+      feedback: string | null;
+      fileAssetIds: string[];
+      customer: { name: string };
+      quote: { quoteNo: string; productName: string; status: string; approvalStatus: string; amount: { toString(): string }; currency: string } | null;
+      fees: Array<{ amount: { toString(): string } }>;
+      returnRecords: Array<{ returnType: string; recordedAt: Date; receiverName: string | null; destination: string | null }>;
+      createdAt: Date;
+      updatedAt: Date;
+    }>
+  ) {
+    const headers = [
+      "样品ID",
+      "客户名称",
+      "关联报价",
+      "样品/产品",
+      "规格",
+      "材质",
+      "工艺",
+      "样品数量",
+      "样品用途",
+      "样品状态",
+      "运单号",
+      "物流商",
+      "发货时间",
+      "签收时间",
+      "交付期限",
+      "反馈",
+      "附件数量",
+      "费用总额",
+      "归还/留样",
+      "归还/留样时间",
+      "创建时间",
+      "更新时间"
+    ];
+    const rows = [
+      headers,
+      ...samples.map((sample) => {
+        const latestReturn = sample.returnRecords[0] ?? null;
+        const feeTotal = sample.fees.reduce((total, fee) => total + Number(fee.amount.toString() || 0), 0);
+        return [
+          sample.id,
+          sample.customer.name,
+          sample.quote ? `${sample.quote.quoteNo} · ${sample.quote.productName}` : "",
+          sample.productSummary,
+          sample.specification ?? "",
+          sample.material ?? "",
+          sample.process ?? "",
+          sample.sampleQuantity === null ? "" : String(sample.sampleQuantity),
+          sample.samplePurpose ?? "",
+          this.labelSampleStatus(sample.status),
+          sample.trackingNo ?? "",
+          sample.carrier ?? "",
+          sample.shippedAt ? sample.shippedAt.toISOString() : "",
+          sample.deliveredAt ? sample.deliveredAt.toISOString() : "",
+          sample.deliveryDeadline ? sample.deliveryDeadline.toISOString().slice(0, 10) : "",
+          sample.feedback ?? "",
+          String(sample.fileAssetIds?.length ?? 0),
+          this.roundMoney(feeTotal).toFixed(2),
+          latestReturn ? `${latestReturn.returnType}${latestReturn.receiverName ? ` · ${latestReturn.receiverName}` : ""}${latestReturn.destination ? ` · ${latestReturn.destination}` : ""}` : "",
+          latestReturn ? latestReturn.recordedAt.toISOString() : "",
+          sample.createdAt.toISOString(),
+          sample.updatedAt.toISOString()
+        ];
+      })
     ];
     return `\ufeff${rows.map((row) => row.map((value) => this.escapeCsv(value)).join(",")).join("\n")}`;
   }

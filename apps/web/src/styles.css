@@ -2084,8 +2084,15 @@ td small {
 }
 
 .file-upload-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   position: relative;
   overflow: hidden;
+  margin-left: 0;
+  height: 38px;
+  line-height: 38px;
+  padding-block: 9px;
 }
 
 .file-upload-message {
