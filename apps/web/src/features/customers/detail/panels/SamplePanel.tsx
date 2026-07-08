@@ -2,25 +2,27 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog } from "@alifd/next";
 import "@alifd/next/lib/dialog/style.js";
-import { CheckCircle2, History, NotebookTabs, Plus, Undo2, XCircle } from "lucide-react";
+import { CheckCircle2, History, NotebookTabs, Undo2, XCircle } from "lucide-react";
+import { quoteFlowStatusLabel } from "@oem-crm/shared";
 import { showClientToast } from "../../../../components/Toast";
 import {
   createSample,
   deleteSample,
+  deleteSampleFee,
   getSampleHistory,
   getQuotes,
   getSamples,
   recordSampleFee,
   recordSampleReturn,
+  updateSampleFee,
   updateSample
 } from "../../../../api/customers";
 import { AddIconButton } from "../../../../components/AddIconButton";
 import { DeleteIconButton } from "../../../../components/DeleteIconButton";
 import { EditIconButton } from "../../../../components/EditIconButton";
 import { FileUpload } from "../../../../components/FileUpload";
-import { Field } from "../../../../components/ui/Field";
 import { formatDateInput } from "../../../../shared/utils/format";
-import type { Quote, Sample, SampleHistoryItem } from "../shared/types";
+import type { Quote, Sample, SampleFee, SampleHistoryItem } from "../shared/types";
 
 const SAMPLE_STATUSES = [
   "REQUESTED",
@@ -49,6 +51,12 @@ const FEE_TYPES = [
   { value: "OTHER", label: "其他费用" }
 ] as const;
 
+const SAMPLE_PURPOSES = [
+  { value: "CUSTOMER_TEST", label: "客户测试" },
+  { value: "EXHIBITION", label: "参展" },
+  { value: "APPEARANCE_CONFIRMATION", label: "确认外观" }
+] as const;
+
 function statusLabel(status: string) {
   const labels: Record<string, string> = {
     REQUESTED: "待申请",
@@ -71,6 +79,8 @@ function historyActionLabel(action: string) {
     UPDATED: "更新",
     STATUS_CHANGED: "状态变更",
     FEE_ADDED: "费用记录",
+    FEE_UPDATED: "费用更新",
+    FEE_DELETED: "费用删除",
     QUOTE_LINKED: "关联报价",
     RETURNED: "归还",
     STORED: "留样",
@@ -82,6 +92,10 @@ function historyActionLabel(action: string) {
 
 function feeTypeLabel(type: string) {
   return FEE_TYPES.find((item) => item.value === type)?.label ?? type;
+}
+
+function samplePurposeLabel(purpose?: string | null) {
+  return SAMPLE_PURPOSES.find((item) => item.value === purpose)?.label ?? purpose;
 }
 
 function returnTypeLabel(type: string) {
@@ -105,25 +119,27 @@ function statusCodeLabel(status: string) {
 }
 
 function quoteStatusLabel(status: string) {
-  const labels: Record<string, string> = {
-    DRAFT: "草稿",
-    SENT: "已发送",
-    ACCEPTED: "已接受",
-    REJECTED: "已拒绝",
-    EXPIRED: "已过期",
-    VOIDED: "已作废"
-  };
-  return labels[status] ?? status;
+  return quoteFlowStatusLabel(status);
 }
 
-function quoteApprovalStatusLabel(status: string) {
-  const labels: Record<string, string> = {
-    DRAFT: "待提交",
-    PENDING_APPROVAL: "审批中",
-    APPROVED: "已审批",
-    REJECTED: "已驳回"
-  };
-  return labels[status] ?? status;
+function quoteDisplayStatus(quote: Pick<Quote, "status" | "approvalStatus"> | null | undefined) {
+  if (!quote) return "";
+  if (quote.status === "VOIDED" || quote.status === "SENT" || quote.status === "ACCEPTED" || quote.status === "EXPIRED" || quote.status === "CUSTOMER_REJECTED") {
+    return quote.status;
+  }
+  if (quote.status === "REJECTED") {
+    return quote.approvalStatus === "APPROVED" ? "CUSTOMER_REJECTED" : "REJECTED";
+  }
+  if (quote.approvalStatus === "PENDING_APPROVAL") {
+    return "PENDING_APPROVAL";
+  }
+  if (quote.approvalStatus === "APPROVED") {
+    return "APPROVED";
+  }
+  if (quote.approvalStatus === "REJECTED") {
+    return "REJECTED";
+  }
+  return "DRAFT";
 }
 
 function normalizeHistoryComment(comment: string) {
@@ -145,6 +161,9 @@ function normalizeHistoryComment(comment: string) {
     const feeType = comment.slice("Recorded sample fee ".length).trim();
     return `已记录样品费用 ${feeTypeLabel(feeType)}`;
   }
+  if (comment === "已更新样品费用") {
+    return "已更新样品费用";
+  }
   if (comment.startsWith("Sample status changed to ")) {
     const status = comment.slice("Sample status changed to ".length).trim();
     return `样品状态变更为 ${statusCodeLabel(status)}`;
@@ -153,15 +172,15 @@ function normalizeHistoryComment(comment: string) {
 }
 
 function historyDetailText(item: SampleHistoryItem) {
-  if (item.action !== "FEE_ADDED") {
+  if (item.action !== "FEE_ADDED" && item.action !== "FEE_UPDATED" && item.action !== "FEE_DELETED") {
     return "";
   }
-  const after = item.after as Record<string, unknown> | null | undefined;
-  const feeType = typeof after?.feeType === "string" ? after.feeType : "";
-  const amount = Number(after?.amount ?? NaN);
-  const currency = typeof after?.currency === "string" ? after.currency : "";
-  const incurredAt = typeof after?.incurredAt === "string" ? after.incurredAt : "";
-  const note = typeof after?.note === "string" ? after.note : "";
+  const source = item.action === "FEE_DELETED" ? item.before : item.after;
+  const feeType = typeof source?.feeType === "string" ? source.feeType : "";
+  const amount = Number(source?.amount ?? NaN);
+  const currency = typeof source?.currency === "string" ? source.currency : "";
+  const incurredAt = typeof source?.incurredAt === "string" ? source.incurredAt : "";
+  const note = typeof source?.note === "string" ? source.note : "";
   const segments = [
     feeType ? `费用类型 ${feeTypeLabel(feeType)}` : "",
     Number.isFinite(amount) ? `金额 ${formatMoney(amount, currency)}` : "",
@@ -213,19 +232,50 @@ function allowedTransitions(status: string) {
 
 function buildCreatePayload(customerId: string, form: {
   productSummary: string;
+  specification: string;
+  material: string;
+  process: string;
+  sampleQuantity: string;
+  samplePurpose: string;
+  deliveryDeadline: string;
   quoteId: string;
   fileAssetIds: string[];
-}) {
+}, feeForms: Array<{
+  feeType: string;
+  amount: string;
+  currency: string;
+  note: string;
+  incurredAt: string;
+}>) {
   return {
     customerId,
     productSummary: form.productSummary,
+    specification: form.specification,
+    material: form.material,
+    process: form.process,
+    sampleQuantity: Number(form.sampleQuantity),
+    samplePurpose: form.samplePurpose,
+    deliveryDeadline: form.deliveryDeadline || undefined,
     quoteId: form.quoteId || undefined,
-    fileAssetIds: form.fileAssetIds
+    fileAssetIds: form.fileAssetIds,
+    initialFees: feeForms.map((feeForm) => ({
+      feeType: feeForm.feeType,
+      amount: Number(feeForm.amount),
+      currency: feeForm.currency,
+      note: feeForm.note || undefined,
+      incurredAt: feeForm.incurredAt || undefined
+    }))
   };
 }
 
 function buildUpdatePayload(form: {
   productSummary: string;
+  specification: string;
+  material: string;
+  process: string;
+  sampleQuantity: string;
+  samplePurpose: string;
+  deliveryDeadline: string;
   quoteId: string;
   fileAssetIds: string[];
   carrier: string;
@@ -237,6 +287,12 @@ function buildUpdatePayload(form: {
 }) {
   return {
     productSummary: form.productSummary,
+    specification: form.specification,
+    material: form.material,
+    process: form.process,
+    sampleQuantity: Number(form.sampleQuantity),
+    samplePurpose: form.samplePurpose,
+    deliveryDeadline: form.deliveryDeadline || undefined,
     quoteId: form.quoteId || undefined,
     fileAssetIds: form.fileAssetIds,
     carrier: form.carrier || undefined,
@@ -262,6 +318,40 @@ function shippingValidationMessage(form: {
   return "";
 }
 
+function createSampleValidationMessage(form: {
+  productSummary: string;
+  specification: string;
+  material: string;
+  process: string;
+  sampleQuantity: string;
+  samplePurpose: string;
+  deliveryDeadline: string;
+}) {
+  const quantity = Number(form.sampleQuantity);
+  if (!form.productSummary.trim()) return "请填写样品/产品名称。";
+  if (!form.specification.trim()) return "请填写规格。";
+  if (!form.material.trim()) return "请填写材质。";
+  if (!form.process.trim()) return "请填写工艺。";
+  if (!form.sampleQuantity.trim() || !Number.isInteger(quantity) || quantity < 1) return "请填写有效的样品数量。";
+  if (!form.samplePurpose.trim()) return "请选择样品用途。";
+  return "";
+}
+
+function createFeeValidationMessage(forms: Array<{
+  feeType: string;
+  amount: string;
+  currency: string;
+}>) {
+  if (!forms.length) return "请至少填写一条样品费用记录。";
+  if (forms.some((form) => {
+    const amount = Number(form.amount);
+    return !form.feeType.trim() || !form.amount.trim() || !Number.isFinite(amount) || amount < 0 || !form.currency.trim();
+  })) {
+    return "请把所有样品费用记录填写完整。";
+  }
+  return "";
+}
+
 function detailValue(value: string | number | null | undefined) {
   if (value === null || value === undefined || value === "") {
     return "-";
@@ -269,23 +359,59 @@ function detailValue(value: string | number | null | undefined) {
   return String(value);
 }
 
+function createEmptySampleFee() {
+  return {
+    feeType: "SAMPLE_MAKING",
+    amount: "",
+    currency: "USD",
+    note: "",
+    incurredAt: formatDateInput(new Date())
+  };
+}
+
+function feeDisplayAmount(fee: SampleFee) {
+  return `${fee.currency} ${fee.amount}`;
+}
+
 export function SamplePanel({ customerId }: { customerId: string }) {
   const queryClient = useQueryClient();
-  const [createForm, setCreateForm] = useState({ productSummary: "", quoteId: "", fileAssetIds: [] as string[] });
+  const [createForm, setCreateForm] = useState({
+    productSummary: "",
+    specification: "",
+    material: "",
+    process: "",
+    sampleQuantity: "",
+    samplePurpose: "CUSTOMER_TEST",
+    deliveryDeadline: "",
+    quoteId: "",
+    fileAssetIds: [] as string[]
+  });
+  const [createFeeOpen, setCreateFeeOpen] = useState(false);
+  const [createFeeForms, setCreateFeeForms] = useState([createEmptySampleFee()]);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailMode, setDetailMode] = useState<"sample" | "quote">("sample");
   const [detailSample, setDetailSample] = useState<Sample | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [feeOpen, setFeeOpen] = useState(false);
+  const [feeMode, setFeeMode] = useState<"create" | "edit">("create");
+  const [feeDeleteOpen, setFeeDeleteOpen] = useState(false);
   const [returnOpen, setReturnOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [editing, setEditing] = useState<Sample | null>(null);
   const [feeSample, setFeeSample] = useState<Sample | null>(null);
+  const [feeEditing, setFeeEditing] = useState<{ sampleId: string; feeId: string } | null>(null);
+  const [feeDeleting, setFeeDeleting] = useState<{ sampleId: string; feeId: string; feeType: string } | null>(null);
   const [returnSample, setReturnSample] = useState<Sample | null>(null);
   const [historySample, setHistorySample] = useState<Sample | null>(null);
   const [editForm, setEditForm] = useState({
     productSummary: "",
+    specification: "",
+    material: "",
+    process: "",
+    sampleQuantity: "",
+    samplePurpose: "CUSTOMER_TEST",
+    deliveryDeadline: "",
     quoteId: "",
     fileAssetIds: [] as string[],
     carrier: "",
@@ -320,16 +446,29 @@ export function SamplePanel({ customerId }: { customerId: string }) {
 
   const data = samplesQuery.data ?? [];
   const quoteOptions = quotesQuery.data ?? [];
+  const currentEditingSample = editing ? data.find((item) => item.id === editing.id) ?? editing : null;
 
   const refreshSamples = () => {
     queryClient.invalidateQueries({ queryKey: ["samples", customerId] });
   };
 
   const create = useMutation({
-    mutationFn: () => createSample(buildCreatePayload(customerId, createForm) as never),
+    mutationFn: () => createSample(buildCreatePayload(customerId, createForm, createFeeForms) as never),
     onSuccess: () => {
       refreshSamples();
-      setCreateForm({ productSummary: "", quoteId: "", fileAssetIds: [] });
+      setCreateForm({
+        productSummary: "",
+        specification: "",
+        material: "",
+        process: "",
+        sampleQuantity: "",
+        samplePurpose: "CUSTOMER_TEST",
+        deliveryDeadline: "",
+        quoteId: "",
+        fileAssetIds: []
+      });
+      setCreateFeeOpen(false);
+      setCreateFeeForms([createEmptySampleFee()]);
       showClientToast({ type: "success", title: "新增样品成功", message: "样品申请已创建。" });
     },
     onError: (error) => {
@@ -355,6 +494,12 @@ export function SamplePanel({ customerId }: { customerId: string }) {
       setEditing(null);
       setEditForm({
         productSummary: "",
+        specification: "",
+        material: "",
+        process: "",
+        sampleQuantity: "",
+        samplePurpose: "CUSTOMER_TEST",
+        deliveryDeadline: "",
         quoteId: "",
         fileAssetIds: [],
         carrier: "",
@@ -406,18 +551,52 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   });
 
   const feeMutation = useMutation({
-    mutationFn: () => recordSampleFee(feeSample?.id ?? "", { ...feeForm, amount: toNumber(feeForm.amount), incurredAt: feeForm.incurredAt || undefined }),
+    mutationFn: () => {
+      const payload = { ...feeForm, amount: toNumber(feeForm.amount), incurredAt: feeForm.incurredAt || undefined };
+      if (feeMode === "edit" && feeEditing) {
+        return updateSampleFee(feeEditing.sampleId, feeEditing.feeId, payload);
+      }
+      return recordSampleFee(feeSample?.id ?? "", payload);
+    },
     onSuccess: () => {
       refreshSamples();
       setFeeOpen(false);
+      setFeeMode("create");
+      setFeeEditing(null);
       setFeeSample(null);
       setFeeForm({ feeType: "SAMPLE_MAKING", amount: "", currency: "USD", note: "", incurredAt: formatDateInput(new Date()) });
-      showClientToast({ type: "success", title: "费用已记录", message: "样品费用已写入台账。" });
+      showClientToast({
+        type: "success",
+        title: feeMode === "edit" ? "费用已更新" : "费用已记录",
+        message: feeMode === "edit" ? "样品费用已更新。" : "样品费用已写入台账。"
+      });
     },
     onError: (error) => {
       showClientToast({
         type: "error",
-        title: "记录费用失败",
+        title: "保存费用失败",
+        message: error instanceof Error ? error.message : "操作失败"
+      });
+    }
+  });
+
+  const feeDeleteMutation = useMutation({
+    mutationFn: () => {
+      if (!feeDeleting) {
+        throw new Error("请先选择要删除的费用记录。");
+      }
+      return deleteSampleFee(feeDeleting.sampleId, feeDeleting.feeId);
+    },
+    onSuccess: () => {
+      refreshSamples();
+      setFeeDeleteOpen(false);
+      setFeeDeleting(null);
+      showClientToast({ type: "success", title: "费用已删除", message: "样品费用记录已移除。" });
+    },
+    onError: (error) => {
+      showClientToast({
+        type: "error",
+        title: "删除费用失败",
         message: error instanceof Error ? error.message : "操作失败"
       });
     }
@@ -473,6 +652,12 @@ export function SamplePanel({ customerId }: { customerId: string }) {
     setEditing(item);
     setEditForm({
       productSummary: item.productSummary,
+      specification: item.specification ?? "",
+      material: item.material ?? "",
+      process: item.process ?? "",
+      sampleQuantity: String(item.sampleQuantity ?? ""),
+      samplePurpose: item.samplePurpose || "CUSTOMER_TEST",
+      deliveryDeadline: item.deliveryDeadline ? formatDateInput(new Date(item.deliveryDeadline)) : "",
       quoteId: item.quoteId ?? "",
       fileAssetIds: item.fileAssetIds ?? [],
       carrier: item.carrier ?? "",
@@ -501,6 +686,8 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   };
 
   const openFee = (item: Sample) => {
+    setFeeMode("create");
+    setFeeEditing(null);
     setFeeSample(item);
     setFeeForm({
       feeType: "SAMPLE_MAKING",
@@ -510,6 +697,25 @@ export function SamplePanel({ customerId }: { customerId: string }) {
       incurredAt: formatDateInput(new Date())
     });
     setFeeOpen(true);
+  };
+
+  const openEditFee = (sample: Sample, fee: SampleFee) => {
+    setFeeMode("edit");
+    setFeeSample(sample);
+    setFeeEditing({ sampleId: sample.id, feeId: fee.id });
+    setFeeForm({
+      feeType: fee.feeType,
+      amount: String(fee.amount ?? ""),
+      currency: fee.currency ?? "USD",
+      note: fee.note ?? "",
+      incurredAt: fee.incurredAt ? formatDateInput(new Date(fee.incurredAt)) : formatDateInput(new Date())
+    });
+    setFeeOpen(true);
+  };
+
+  const openDeleteFee = (sample: Sample, fee: SampleFee) => {
+    setFeeDeleting({ sampleId: sample.id, feeId: fee.id, feeType: fee.feeType });
+    setFeeDeleteOpen(true);
   };
 
   const openReturn = (item: Sample) => {
@@ -537,10 +743,12 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   const canEdit = (item: Sample) => item.status !== "VOIDED" && item.status !== "CLOSED";
   const canApprove = (item: Sample) => item.status === "APPROVING";
   const canReject = (item: Sample) => item.status === "APPROVING";
-  const canFee = (item: Sample) => item.status !== "VOIDED";
   const canReturn = (item: Sample) => ["SHIPPED", "DELIVERED", "FEEDBACK_RECEIVED"].includes(item.status);
   const canDelete = (item: Sample) => item.status !== "VOIDED" && item.status !== "CLOSED";
   const currentHistory = historyQuery.data ?? [];
+  const createMessage = createSampleValidationMessage(createForm);
+  const createFeeMessage = createFeeValidationMessage(createFeeForms);
+  const createReady = createMessage === "" && createFeeMessage === "";
   const shippingMessage = shippingValidationMessage(editForm);
   const detailQuote = detailSample?.quoteId ? quoteOptions.find((quote) => quote.id === detailSample.quoteId) ?? null : null;
 
@@ -593,10 +801,10 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                     {item.quote?.productName ? ` · ${item.quote.productName}` : ""}
                   </strong>
                   <span>
-                    {statusLabel(item.status)} 费用 {formatMoney(feeTotal, item.quote?.currency ?? item.fees?.[0]?.currency)}   | {item.trackingNo ? `运单 ${item.trackingNo}` : "未填运单"} {item.carrier ? `物流 ${item.carrier}` : ""}   |   
+                    {statusLabel(item.status)} 费用 {formatMoney(feeTotal, item.quote?.currency ?? item.fees?.[0]?.currency)}   | {item.samplePurpose ? `用途 ${samplePurposeLabel(item.samplePurpose)}` : ""} {item.sampleQuantity ? `数量 ${item.sampleQuantity}   | ` : ""}{item.trackingNo ? `运单 ${item.trackingNo}` : "未填运单"} {item.carrier ? `物流 ${item.carrier}` : ""}   |   
                   </span>
                   <span>
-                      {item.shippedAt ? `发货 ${new Date(item.shippedAt).toLocaleDateString()}` : "未发货"} {item.deliveredAt ? `签收 ${new Date(item.deliveredAt).toLocaleDateString()}` : ""} {lastReturn ? `${returnTypeLabel(lastReturn.returnType)} ${new Date(lastReturn.recordedAt).toLocaleDateString()}` : ""} {item.feedback ? `反馈 ${item.feedback}` : ""}
+                      {item.shippedAt ? `发货 ${new Date(item.shippedAt).toLocaleDateString()}` : "未发货"} {item.deliveredAt ? `签收 ${new Date(item.deliveredAt).toLocaleDateString()}` : ""} {item.deliveryDeadline ? `交付 ${new Date(item.deliveryDeadline).toLocaleDateString()}` : ""} {lastReturn ? `${returnTypeLabel(lastReturn.returnType)} ${new Date(lastReturn.recordedAt).toLocaleDateString()}` : ""} {item.feedback ? `反馈 ${item.feedback}` : ""}
                   </span>
                 </div>
                 <div className="contact-row-actions">
@@ -610,9 +818,6 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                   <button className="secondary-button icon-button" disabled={!canReject(item) || reject.isPending} onClick={() => reject.mutate(item.id)} title="审核驳回" type="button">
                     <XCircle size={14} />
                   </button>
-                  <button className="secondary-button icon-button" disabled={!canFee(item)} onClick={() => openFee(item)} title="记录费用" type="button">
-                    <Plus size={14} />
-                  </button>
                   <button className="secondary-button icon-button" disabled={!canReturn(item)} onClick={() => openReturn(item)} title="归还/留样" type="button">
                     <Undo2 size={14} />
                   </button>
@@ -624,11 +829,44 @@ export function SamplePanel({ customerId }: { customerId: string }) {
         </div>
       )}
 
-      <div className="form-grid compact-form">
-        <Field label="样品/产品" value={createForm.productSummary} onChange={(value) => setCreateForm({ ...createForm, productSummary: value })} />
-        <div className="form-field">
-          <label>
-            <span>关联报价</span>
+      <div className="analysis-edit-form">
+        <div className="analysis-edit-grid">
+          <div className="form-field">
+            <label>样品/产品</label>
+            <input value={createForm.productSummary} onChange={(e) => setCreateForm({ ...createForm, productSummary: e.target.value })} />
+          </div>
+          <div className="form-field">
+            <label>规格</label>
+            <input value={createForm.specification} onChange={(e) => setCreateForm({ ...createForm, specification: e.target.value })} />
+          </div>
+          <div className="form-field">
+            <label>材质</label>
+            <input value={createForm.material} onChange={(e) => setCreateForm({ ...createForm, material: e.target.value })} />
+          </div>
+          <div className="form-field">
+            <label>工艺</label>
+            <input value={createForm.process} onChange={(e) => setCreateForm({ ...createForm, process: e.target.value })} />
+          </div>
+          <div className="form-field">
+            <label>样品数量</label>
+            <input type="number" min={1} value={createForm.sampleQuantity} onChange={(e) => setCreateForm({ ...createForm, sampleQuantity: e.target.value })} />
+          </div>
+          <div className="form-field">
+            <label>样品用途</label>
+            <select value={createForm.samplePurpose} onChange={(e) => setCreateForm({ ...createForm, samplePurpose: e.target.value })}>
+              {SAMPLE_PURPOSES.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="form-field">
+            <label>样品交付期限（可选）</label>
+            <input type="date" value={createForm.deliveryDeadline} onChange={(e) => setCreateForm({ ...createForm, deliveryDeadline: e.target.value })} />
+          </div>
+          <div className="form-field">
+            <label>关联报价</label>
             <select value={createForm.quoteId} onChange={(e) => setCreateForm({ ...createForm, quoteId: e.target.value })}>
               <option value="">不关联</option>
               {quoteOptions.map((quote) => (
@@ -637,25 +875,115 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                 </option>
               ))}
             </select>
-          </label>
-        </div>
-        <div className="form-field wide-field">
-          <label>附件</label>
-          <FileUpload
-            entityType="sample-request"
-            fileIds={createForm.fileAssetIds}
-            multiple
-            onChange={(ids) => setCreateForm({ ...createForm, fileAssetIds: ids })}
-          />
-        </div>
-        <div>
-          <AddIconButton
-            disabled={create.isPending || !createForm.productSummary.trim()}
-            label={create.isPending ? "提交中..." : "新增样品"}
-            onClick={() => create.mutate()}
-          />
+          </div>
+          <div className="form-field wide-field">
+            <label>附件</label>
+            <FileUpload
+              entityType="sample-request"
+              fileIds={createForm.fileAssetIds}
+              multiple
+              onChange={(ids) => setCreateForm({ ...createForm, fileAssetIds: ids })}
+            />
+          </div>
+          <div className="wide-field toolbar">
+            <button className="secondary-button" onClick={() => setCreateFeeOpen(true)} type="button">
+              填写费用记录
+            </button>
+            <div className="empty-state" style={{ flex: 1, margin: 0 }}>
+              {createFeeMessage ? "费用记录未填写" : `已填写 ${createFeeForms.length} 条费用记录`}
+            </div>
+          </div>
+          {createMessage ? <div className="error-state wide-field">{createMessage}</div> : null}
+          <div className="wide-field">
+            <AddIconButton disabled={create.isPending || !createReady} label={create.isPending ? "提交中..." : "新增样品"} onClick={() => create.mutate()} />
+          </div>
         </div>
       </div>
+
+      <Dialog
+        v2
+        className="crm-action-dialog"
+        title="填写费用记录"
+        visible={createFeeOpen}
+        onClose={() => setCreateFeeOpen(false)}
+        footer={
+          <div className="toolbar crm-dialog-footer">
+            <button className="secondary-button" onClick={() => setCreateFeeOpen(false)} type="button">
+              取消
+            </button>
+            <button
+              className="primary-button"
+              disabled={Boolean(createFeeMessage)}
+              onClick={() => setCreateFeeOpen(false)}
+              type="button"
+            >
+              保存
+            </button>
+          </div>
+        }
+      >
+        <div className="analysis-edit-form sample-fee-dialog">
+          <div className="sample-fee-dialog__summary">
+            <div>
+              <strong>已填写 {createFeeForms.length} 条费用记录</strong>
+              <span>支持逐条添加、删除和修改</span>
+            </div>
+            <button
+              className="secondary-button"
+              onClick={() => setCreateFeeForms([...createFeeForms, createEmptySampleFee()])}
+              type="button"
+            >
+              添加费用
+            </button>
+          </div>
+          <div className="analysis-edit-gap-list">
+            {createFeeForms.map((feeItem, index) => (
+              <div className="analysis-edit-gap sample-fee-card" key={`${index}-${feeItem.incurredAt}`}>
+                <div className="sample-fee-card__header">
+                  <strong>费用 {index + 1}</strong>
+                  <button
+                    className="secondary-button"
+                    disabled={createFeeForms.length === 1}
+                    onClick={() => setCreateFeeForms(createFeeForms.filter((_, currentIndex) => currentIndex !== index))}
+                    type="button"
+                  >
+                    删除
+                  </button>
+                </div>
+                <div className="sample-fee-card__fields">
+                  <div className="form-field">
+                    <label>费用类型</label>
+                    <select value={feeItem.feeType} onChange={(e) => setCreateFeeForms(createFeeForms.map((item, currentIndex) => currentIndex === index ? { ...item, feeType: e.target.value } : item))}>
+                      {FEE_TYPES.map((item) => (
+                        <option key={item.value} value={item.value}>
+                          {item.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-field">
+                    <label>金额</label>
+                    <input type="number" min={0} value={feeItem.amount} onChange={(e) => setCreateFeeForms(createFeeForms.map((item, currentIndex) => currentIndex === index ? { ...item, amount: e.target.value } : item))} />
+                  </div>
+                  <div className="form-field">
+                    <label>币种</label>
+                    <input value={feeItem.currency} onChange={(e) => setCreateFeeForms(createFeeForms.map((item, currentIndex) => currentIndex === index ? { ...item, currency: e.target.value } : item))} />
+                  </div>
+                  <div className="form-field">
+                    <label>发生日期</label>
+                    <input type="date" value={feeItem.incurredAt} onChange={(e) => setCreateFeeForms(createFeeForms.map((item, currentIndex) => currentIndex === index ? { ...item, incurredAt: e.target.value } : item))} />
+                  </div>
+                </div>
+                <div className="form-field wide-field sample-fee-card__note">
+                  <label>备注</label>
+                  <textarea value={feeItem.note} onChange={(e) => setCreateFeeForms(createFeeForms.map((item, currentIndex) => currentIndex === index ? { ...item, note: e.target.value } : item))} rows={2} />
+                </div>
+              </div>
+            ))}
+            {createFeeMessage ? <div className="error-state">{createFeeMessage}</div> : null}
+          </div>
+        </div>
+      </Dialog>
 
       <Dialog
         v2
@@ -685,6 +1013,30 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                 <div className="detail-card">
                   <span>关联报价</span>
                   <strong>{detailValue(detailSample?.quote?.quoteNo ?? detailSample?.quoteId ?? "未关联")}</strong>
+                </div>
+                <div className="detail-card">
+                  <span>规格</span>
+                  <strong>{detailValue(detailSample?.specification)}</strong>
+                </div>
+                <div className="detail-card">
+                  <span>材质</span>
+                  <strong>{detailValue(detailSample?.material)}</strong>
+                </div>
+                <div className="detail-card">
+                  <span>工艺</span>
+                  <strong>{detailValue(detailSample?.process)}</strong>
+                </div>
+                <div className="detail-card">
+                  <span>样品数量</span>
+                  <strong>{detailValue(detailSample?.sampleQuantity)}</strong>
+                </div>
+                <div className="detail-card">
+                  <span>样品用途</span>
+                  <strong>{detailValue(detailSample ? samplePurposeLabel(detailSample.samplePurpose) : "")}</strong>
+                </div>
+                <div className="detail-card">
+                  <span>交付期限</span>
+                  <strong>{detailSample?.deliveryDeadline ? new Date(detailSample.deliveryDeadline).toLocaleDateString() : "-"}</strong>
                 </div>
                 <div className="detail-card">
                   <span>费用合计</span>
@@ -798,7 +1150,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                   <p className="detail-eyebrow">关联报价</p>
                   <h3>{detailValue(detailQuote?.quoteNo ?? detailSample?.quote?.quoteNo)}</h3>
                 </div>
-                <span className="status-pill">{quoteStatusLabel(detailQuote?.status ?? detailSample?.quote?.status ?? "")}</span>
+                <span className="status-pill">{quoteStatusLabel(quoteDisplayStatus(detailQuote ?? detailSample?.quote ?? null))}</span>
               </div>
               <div className="detail-grid">
                 <div className="detail-card">
@@ -810,12 +1162,8 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                   <strong>{detailValue(detailQuote?.specification)}</strong>
                 </div>
                 <div className="detail-card">
-                  <span>报价状态</span>
-                  <strong>{quoteStatusLabel(detailQuote?.status ?? detailSample?.quote?.status ?? "")}</strong>
-                </div>
-                <div className="detail-card">
-                  <span>审批状态</span>
-                  <strong>{quoteApprovalStatusLabel(detailQuote?.approvalStatus ?? detailSample?.quote?.approvalStatus ?? "")}</strong>
+                  <span>当前状态</span>
+                  <strong>{quoteStatusLabel(quoteDisplayStatus(detailQuote ?? detailSample?.quote ?? null))}</strong>
                 </div>
                 <div className="detail-card">
                   <span>报价金额</span>
@@ -916,6 +1264,36 @@ export function SamplePanel({ customerId }: { customerId: string }) {
             <input value={editForm.productSummary} onChange={(e) => setEditForm({ ...editForm, productSummary: e.target.value })} />
           </div>
           <div className="form-field">
+            <label>规格</label>
+            <input value={editForm.specification} onChange={(e) => setEditForm({ ...editForm, specification: e.target.value })} />
+          </div>
+          <div className="form-field">
+            <label>材质</label>
+            <input value={editForm.material} onChange={(e) => setEditForm({ ...editForm, material: e.target.value })} />
+          </div>
+          <div className="form-field">
+            <label>工艺</label>
+            <input value={editForm.process} onChange={(e) => setEditForm({ ...editForm, process: e.target.value })} />
+          </div>
+          <div className="form-field">
+            <label>样品数量</label>
+            <input type="number" min={1} value={editForm.sampleQuantity} onChange={(e) => setEditForm({ ...editForm, sampleQuantity: e.target.value })} />
+          </div>
+          <div className="form-field">
+            <label>样品用途</label>
+            <select value={editForm.samplePurpose} onChange={(e) => setEditForm({ ...editForm, samplePurpose: e.target.value })}>
+              {SAMPLE_PURPOSES.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="form-field">
+            <label>交付期限</label>
+            <input type="date" value={editForm.deliveryDeadline} onChange={(e) => setEditForm({ ...editForm, deliveryDeadline: e.target.value })} />
+          </div>
+          <div className="form-field">
             <label>关联报价</label>
             <select value={editForm.quoteId} onChange={(e) => setEditForm({ ...editForm, quoteId: e.target.value })}>
               <option value="">不关联</option>
@@ -967,13 +1345,79 @@ export function SamplePanel({ customerId }: { customerId: string }) {
             <label>反馈</label>
             <textarea value={editForm.feedback} onChange={(e) => setEditForm({ ...editForm, feedback: e.target.value })} rows={3} />
           </div>
+          <div className="analysis-edit-section wide-field">
+            <div className="analysis-edit-section__title">
+              <h4>费用明细</h4>
+              <button className="secondary-button" onClick={() => currentEditingSample && openFee(currentEditingSample)} type="button">
+                新增费用
+              </button>
+            </div>
+            {currentEditingSample?.fees?.length ? (
+              <div className="detail-list">
+                {currentEditingSample.fees.map((fee) => (
+                  <div className="detail-list-item sample-fee-list-item" key={fee.id}>
+                    <div>
+                      <strong>
+                        {feeTypeLabel(fee.feeType)} · {feeDisplayAmount(fee)}
+                      </strong>
+                      <span>
+                        {new Date(fee.incurredAt).toLocaleDateString()} {fee.note ? `· ${fee.note}` : ""}
+                      </span>
+                    </div>
+                    <div className="sample-fee-list-item__actions">
+                      <button className="secondary-button" onClick={() => currentEditingSample && openEditFee(currentEditingSample, fee)} type="button">
+                        编辑
+                      </button>
+                      <DeleteIconButton
+                        disabled={feeDeleteMutation.isPending}
+                        label="删除费用"
+                        onClick={() => currentEditingSample && openDeleteFee(currentEditingSample, fee)}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-state">暂无费用记录。</div>
+            )}
+          </div>
         </div>
       </Dialog>
 
       <Dialog
         v2
         className="crm-action-dialog"
-        title="记录样品费用"
+        title="确认删除费用"
+        visible={feeDeleteOpen}
+        onClose={() => {
+          setFeeDeleteOpen(false);
+          setFeeDeleting(null);
+        }}
+        footer={
+          <div className="toolbar crm-dialog-footer">
+            <button
+              className="secondary-button"
+              onClick={() => {
+                setFeeDeleteOpen(false);
+                setFeeDeleting(null);
+              }}
+              type="button"
+            >
+              取消
+            </button>
+            <button className="primary-button" disabled={feeDeleteMutation.isPending} onClick={() => feeDeleteMutation.mutate()} type="button">
+              {feeDeleteMutation.isPending ? "删除中..." : "确认删除"}
+            </button>
+          </div>
+        }
+      >
+        <p>删除后，这条费用记录会从样品中移除，但历史记录会保留。确定要删除费用 {feeDeleting ? feeTypeLabel(feeDeleting.feeType) : ""} 吗？</p>
+      </Dialog>
+
+      <Dialog
+        v2
+        className="crm-action-dialog"
+        title={feeMode === "edit" ? "编辑费用记录" : "填写费用记录"}
         visible={feeOpen}
         onClose={() => setFeeOpen(false)}
         footer={
@@ -982,37 +1426,51 @@ export function SamplePanel({ customerId }: { customerId: string }) {
               取消
             </button>
             <button className="primary-button" disabled={feeMutation.isPending} onClick={() => feeMutation.mutate()} type="button">
-              {feeMutation.isPending ? "保存中..." : "保存"}
+              {feeMutation.isPending ? "保存中..." : feeMode === "edit" ? "更新" : "保存"}
             </button>
           </div>
         }
-      >
-        <div className="analysis-edit-form">
-          <div className="form-field">
-            <label>费用类型</label>
-            <select value={feeForm.feeType} onChange={(e) => setFeeForm({ ...feeForm, feeType: e.target.value })}>
-              {FEE_TYPES.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
+        >
+        <div className="analysis-edit-form sample-fee-dialog">
+          <div className="sample-fee-dialog__summary">
+            <div>
+              <strong>{feeMode === "edit" ? "编辑费用记录" : "填写费用记录"}</strong>
+              <span>{feeSample?.productSummary ? `样品 ${feeSample.productSummary}` : "请补充费用信息"}</span>
+            </div>
+            <span>{feeMode === "edit" ? "修改后将同步更新历史" : "支持记录单条费用"}</span>
           </div>
-          <div className="form-field">
-            <label>金额</label>
-            <input type="number" value={feeForm.amount} onChange={(e) => setFeeForm({ ...feeForm, amount: e.target.value })} />
-          </div>
-          <div className="form-field">
-            <label>币种</label>
-            <input value={feeForm.currency} onChange={(e) => setFeeForm({ ...feeForm, currency: e.target.value })} />
-          </div>
-          <div className="form-field">
-            <label>发生日期</label>
-            <input type="date" value={feeForm.incurredAt} onChange={(e) => setFeeForm({ ...feeForm, incurredAt: e.target.value })} />
-          </div>
-          <div className="form-field wide-field">
-            <label>备注</label>
-            <textarea value={feeForm.note} onChange={(e) => setFeeForm({ ...feeForm, note: e.target.value })} rows={3} />
+          <div className="analysis-edit-gap sample-fee-card">
+            <div className="sample-fee-card__header">
+              <strong>费用信息</strong>
+            </div>
+            <div className="sample-fee-card__fields">
+              <div className="form-field">
+                <label>费用类型</label>
+                <select value={feeForm.feeType} onChange={(e) => setFeeForm({ ...feeForm, feeType: e.target.value })}>
+                  {FEE_TYPES.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-field">
+                <label>金额</label>
+                <input type="number" value={feeForm.amount} onChange={(e) => setFeeForm({ ...feeForm, amount: e.target.value })} />
+              </div>
+              <div className="form-field">
+                <label>币种</label>
+                <input value={feeForm.currency} onChange={(e) => setFeeForm({ ...feeForm, currency: e.target.value })} />
+              </div>
+              <div className="form-field">
+                <label>发生日期</label>
+                <input type="date" value={feeForm.incurredAt} onChange={(e) => setFeeForm({ ...feeForm, incurredAt: e.target.value })} />
+              </div>
+            </div>
+            <div className="form-field wide-field sample-fee-card__note">
+              <label>备注</label>
+              <textarea value={feeForm.note} onChange={(e) => setFeeForm({ ...feeForm, note: e.target.value })} rows={2} />
+            </div>
           </div>
         </div>
       </Dialog>

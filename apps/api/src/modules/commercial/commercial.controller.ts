@@ -7,6 +7,7 @@ import { CreateQuoteDto } from "./dto/create-quote.dto";
 import { CreateSampleRequestDto } from "./dto/create-sample-request.dto";
 import { QuoteReviewDto } from "./dto/quote-review.dto";
 import { RecordSampleReturnDto } from "./dto/record-sample-return.dto";
+import { UpdateSampleFeeDto } from "./dto/update-sample-fee.dto";
 import { UpdateQuoteDto } from "./dto/update-quote.dto";
 import { UpdateSampleRequestDto } from "./dto/update-sample-request.dto";
 
@@ -73,6 +74,26 @@ export class CommercialController {
     return this.commercialService.rejectQuote(user, id, dto);
   }
 
+  @Post("quotes/:id/send")
+  sendQuote(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: QuoteReviewDto) {
+    return this.commercialService.sendQuote(user, id, dto);
+  }
+
+  @Post("quotes/:id/accept")
+  acceptQuote(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: QuoteReviewDto) {
+    return this.commercialService.acceptQuote(user, id, dto);
+  }
+
+  @Post("quotes/:id/reject-customer")
+  rejectQuoteByCustomer(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: QuoteReviewDto) {
+    return this.commercialService.rejectQuoteByCustomer(user, id, dto);
+  }
+
+  @Post("quotes/:id/expire")
+  expireQuote(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: QuoteReviewDto) {
+    return this.commercialService.expireQuote(user, id, dto);
+  }
+
   @Delete("quotes/:id")
   deleteQuote(@CurrentUser() user: RequestUser, @Param("id") id: string) {
     return this.commercialService.deleteQuote(user, id);
@@ -101,6 +122,21 @@ export class CommercialController {
   @Post("samples/:id/fees")
   recordSampleFee(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: CreateSampleFeeDto) {
     return this.commercialService.recordSampleFee(user, id, dto);
+  }
+
+  @Patch("samples/:sampleId/fees/:feeId")
+  updateSampleFee(
+    @CurrentUser() user: RequestUser,
+    @Param("sampleId") sampleId: string,
+    @Param("feeId") feeId: string,
+    @Body() dto: UpdateSampleFeeDto
+  ) {
+    return this.commercialService.updateSampleFee(user, sampleId, feeId, dto);
+  }
+
+  @Delete("samples/:sampleId/fees/:feeId")
+  deleteSampleFee(@CurrentUser() user: RequestUser, @Param("sampleId") sampleId: string, @Param("feeId") feeId: string) {
+    return this.commercialService.deleteSampleFee(user, sampleId, feeId);
   }
 
   @Post("samples/:id/returns")

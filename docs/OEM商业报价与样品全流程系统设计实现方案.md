@@ -2,7 +2,7 @@
 
 版本：v1.0  
 适用范围：`报价模块`、`样品模块`、`客户询价规则`、`报价审批`、`样品申请/打样/留样/归还`、`报价与样品历史追踪`  
-实现状态：第一阶段已落地，报价草稿、审批分离、历史追踪、价格公式、报价导出以及报价基础字段（产品名、规格、MOQ、数量、单价、总价）已在代码中实现；样品模块已补齐申请登记、状态流转、费用记录、留样/归还、作废关闭、后续报价关联、附件上传与历史追踪。邮件附件上传、报价邮件生成与随邮件附带报价表格属于后续完善项，需要纳入商业闭环。  
+实现状态：第一阶段已落地，报价草稿、审批分离、历史追踪、价格公式、报价导出以及报价基础字段（产品名、规格、MOQ、数量、单价、总价）已在代码中实现；样品模块已补齐申请登记、状态流转、费用记录、留样/归还、作废关闭、后续报价关联、附件上传与历史追踪，并要求新建时同步填写规格、材质、工艺、样品数量、样品用途，并至少填写一条费用记录；交付期限已调整为可选字段。邮件附件上传、报价邮件生成与随邮件附带报价表格属于后续完善项，需要纳入商业闭环。  
 技术背景：当前仓库已具备 `NestJS + React + Prisma` 的 CRM 主体能力，商业模块现有入口位于：
 
 - 后端：`apps/api/src/modules/commercial/*`
@@ -17,7 +17,8 @@
 
 1. 客户询价进入系统后，先完成规则校验、报价草稿、审批、发送和历史留痕。
 2. 客户样品申请进入系统后，支持申请登记、审核、打样、寄出、签收、反馈、留样、归还、作废和费用记录。
-3. 报价与样品不再只是记录型数据，而是可驱动客户阶段推进、后续跟进任务、审批追溯和管理统计的业务对象。
+3. 新建样品时必须同步填写规格、材质、工艺、样品数量、样品用途，以及至少一条费用记录；交付期限为可选字段。
+4. 报价与样品不再只是记录型数据，而是可驱动客户阶段推进、后续跟进任务、审批追溯和管理统计的业务对象。
 4. 报价邮件支持从已有报价记录生成邮件草稿，并在发送时自动附带报价表格或报价附件。
 5. 报价邮件发送成功后，报价业务状态自动同步为 `SENT`，避免销售人员手工重复维护状态。
 6. 只有审批通过的报价才能发送给客户，未审批通过的报价只能停留在草稿或审批中状态。
@@ -64,10 +65,11 @@
 
 Prisma 中已经有基础表和枚举：
 
-- `QuoteStatus`: `DRAFT`、`SENT`、`ACCEPTED`、`REJECTED`、`EXPIRED`
-- `SampleStatus`: `REQUESTED`、`PREPARING`、`SHIPPED`、`DELIVERED`、`FEEDBACK_RECEIVED`、`CLOSED`
+- `QuoteApprovalStatus`: `DRAFT`、`PENDING_APPROVAL`、`APPROVED`、`REJECTED`
+- `QuoteStatus`: `DRAFT`、`PENDING_APPROVAL`、`APPROVED`、`REJECTED`、`CUSTOMER_REJECTED`、`SENT`、`ACCEPTED`、`EXPIRED`、`VOIDED`
+- `SampleStatus`: `REQUESTED`、`APPROVING`、`PREPARING`、`SHIPPED`、`DELIVERED`、`FEEDBACK_RECEIVED`、`RETURNED`、`STORED`、`VOIDED`、`CLOSED`
 - `Quote`：`quoteNo`、`productName`、`specification`、`moq`、`quantity`、`unitPrice`、`currency`、`amount`、`validUntil`、`fileAssetId`、`notes`
-- `SampleRequest`：`productSummary`、`trackingNo`、`carrier`、`shippedAt`、`deliveredAt`、`feedback`
+- `SampleRequest`：`productSummary`、`trackingNo`、`carrier`、`shippedAt`、`deliveredAt`、`returnedAt`、`storedAt`、`closedAt`、`feedback`
 
 ### 2.4 当前现状判断
 
@@ -193,19 +195,20 @@ Prisma 中已经有基础表和枚举：
 1. `SampleRequest`：样品申请单头
 2. `SampleItem`：样品明细，支持多个样品项
 3. `SampleFlowEvent`：状态流转事件
-4. `SampleFee`：费用记录，包含打样费、快递费、包装费、返还费用等
+4. `SampleFee`：费用记录，包含打样费、快递费、包装费、返还费用等，且新建样品时必须至少写入一条初始费用
 5. `SampleReturnRecord`：留样/归还记录，支持归还日期、归还状态、去向说明
 
 ### 5.4 状态设计建议
 
 #### 报价状态
 
-推荐将报价状态从单一业务状态扩展为“审批态 + 业务态”：
+推荐将报价状态从单一业务状态扩展为“审批态 + 业务态”组合管理：
 
 - 审批态：`DRAFT`、`PENDING_APPROVAL`、`APPROVED`、`REJECTED`
-- 业务态：`DRAFT`、`SENT`、`ACCEPTED`、`REJECTED`、`EXPIRED`、`VOIDED`
+- 业务态：`DRAFT`、`SENT`、`ACCEPTED`、`CUSTOMER_REJECTED`、`EXPIRED`、`VOIDED`
 
 这样可以避免“刚建单就是已发送”的语义错误。
+其中 `CUSTOMER_REJECTED` 代表客户拒绝，审批驳回则由审批态 `REJECTED` 表达。
 
 #### 样品状态
 
@@ -221,6 +224,55 @@ Prisma 中已经有基础表和枚举：
 - `STORED`
 - `VOIDED`
 - `CLOSED`
+
+### 5.4.1 报价状态流转规则
+
+报价建议把“审批态”和“业务态”分开管理，避免审批结果和客户结果混在同一字段里。
+
+审批态只表达内部审核结果，业务态只表达对客户可见的报价生命周期。
+
+| 当前状态 | 允许动作 | 目标状态 | 说明 |
+| --- | --- | --- | --- |
+| `DRAFT` | 新建 / 编辑 | `DRAFT` | 报价草稿可反复修改，价格公式在每次保存时重算。 |
+| `DRAFT` | 提交审批 | `PENDING_APPROVAL` | 进入审批流后，审批态变为待审批。 |
+| `PENDING_APPROVAL` | 审批通过 | `APPROVED` | 通过后才能进入发送链路。 |
+| `PENDING_APPROVAL` | 审批驳回 | `REJECTED` | 允许返回草稿修改后重新提交。 |
+| `APPROVED` | 发送报价 | `SENT` | 只有审批通过的报价才可发送。 |
+| `SENT` | 客户接受 | `ACCEPTED` | 客户接受后进入终态。 |
+| `SENT` | 客户拒绝 | `CUSTOMER_REJECTED` | 客户拒绝后进入终态，可作为后续跟进依据。 |
+| `SENT` | 到期失效 | `EXPIRED` | 超过有效期后关闭。 |
+| 任意可编辑状态 | 作废关闭 | `VOIDED` | 作废后不再继续流转。 |
+
+补充约束：
+
+- 报价普通编辑只更新业务字段，不应通过通用保存接口夹带状态变更。
+- `VOIDED` 是终态，作废后不再允许继续编辑或发送。
+- `SENT` 是客户动作入口，只有在该状态下才允许客户接受、客户拒绝或到期失效。
+- `REJECTED` 同时存在于审批态和业务态语义中时，必须依赖上下文区分，避免把“审批驳回”和“客户拒绝”混为一谈。
+
+### 5.4.2 样品状态流转规则
+
+样品建议使用单条状态机覆盖申请、审核、制样、寄出、签收、反馈、留样、归还和关闭。
+
+| 当前状态 | 允许动作 | 目标状态 | 说明 |
+| --- | --- | --- | --- |
+| `REQUESTED` | 提交审核 / 驳回取消 | `APPROVING` / `VOIDED` | 样品申请的起点。 |
+| `APPROVING` | 回退修改 / 进入制样 / 作废 | `REQUESTED` / `PREPARING` / `VOIDED` | 审核过程中允许退回补充信息。 |
+| `PREPARING` | 寄出 / 作废 | `SHIPPED` / `VOIDED` | 制样完成后才能进入物流节点。 |
+| `SHIPPED` | 签收 / 作废 | `DELIVERED` / `VOIDED` | 寄出后必须记录物流信息。 |
+| `DELIVERED` | 反馈 / 留样 / 归还 / 关闭 / 作废 | `FEEDBACK_RECEIVED` / `RETURNED` / `STORED` / `CLOSED` / `VOIDED` | 签收后进入结果回收阶段。 |
+| `FEEDBACK_RECEIVED` | 归还 / 留样 / 关闭 / 作废 | `RETURNED` / `STORED` / `CLOSED` / `VOIDED` | 已收到反馈后可继续处理样品去向。 |
+| `RETURNED` | 留样 / 关闭 / 作废 | `STORED` / `CLOSED` / `VOIDED` | 已归还后可转为留样或关闭。 |
+| `STORED` | 关闭 / 作废 | `CLOSED` / `VOIDED` | 留样后可关闭。 |
+| `CLOSED` | 无 | 无 | 终态。 |
+| `VOIDED` | 无 | 无 | 终态。 |
+
+补充约束：
+
+- 只有在填写物流商和运单号后，才允许从制样阶段进入 `SHIPPED`。
+- `RETURNED` 和 `STORED` 只能从已寄出、已签收或已反馈的样品继续流转，不允许从草稿态直接跳转。
+- 状态变化要同步写入时间戳字段，例如 `approvedAt`、`shippedAt`、`deliveredAt`、`returnedAt`、`storedAt`、`voidedAt`、`closedAt`。
+- 样品费用、反馈和附件可以随着状态推进持续补充，但不能破坏状态机的单向约束。
 
 ### 5.5 价格公式设计
 
@@ -310,12 +362,17 @@ Prisma 中已经有基础表和枚举：
 | 需求项 | 现状 | 建议优先级 | 难易度 | 影响范围 |
 | --- | --- | --- | --- | --- |
 | 样品申请登记 | 已实现，登记后默认进入待审核 | P0 | 低 | 基础录入 |
-| 样品状态流转 | 已实现，主线应收敛为待审核/打样中/已寄出/已签收/作废 | P0 | 中 | 全流程 |
-| 待审核 | 已实现，作为申请登记后的默认状态 | P0 | 低 | 申请控制 |
-| 打样中 | 已实现，审核通过后进入 | P0 | 低 | 生产跟踪 |
-| 已寄出 | 已实现，变更前必须填写物流商和运单号 | P0 | 中 | 物流跟踪 |
-| 已签收 | 已实现 | P0 | 低 | 反馈起点 |
-| 作废 | 已实现 | P0 | 低 | 异常关闭 |
+| 样品状态流转 | 已实现，主线应收敛为申请/审批/打样/寄出/签收/反馈/留样/归还/关闭/作废 | P0 | 中 | 全流程 |
+| 待审核（`REQUESTED`） | 已实现，作为申请登记后的默认状态 | P0 | 低 | 申请控制 |
+| 审批中（`APPROVING`） | 已实现，作为制样前的前置状态 | P0 | 低 | 审核控制 |
+| 打样中（`PREPARING`） | 已实现，审核通过后进入 | P0 | 低 | 生产跟踪 |
+| 已寄出（`SHIPPED`） | 已实现，变更前必须填写物流商和运单号 | P0 | 中 | 物流跟踪 |
+| 已签收（`DELIVERED`） | 已实现 | P0 | 低 | 反馈起点 |
+| 已反馈（`FEEDBACK_RECEIVED`） | 已实现 | P1 | 低 | 回收确认 |
+| 已归还（`RETURNED`） | 已实现 | P1 | 低 | 样品回收 |
+| 已留样（`STORED`） | 已实现 | P1 | 低 | 留样管理 |
+| 已关闭（`CLOSED`） | 已实现 | P1 | 低 | 业务收口 |
+| 作废（`VOIDED`） | 已实现 | P0 | 低 | 异常关闭 |
 | 样品费用记录 | 已实现 | P1 | 中 | 成本管理 |
 | 样品关联客户 | 已实现，必须作为主数据归属存在 | P0 | 低 | 主数据 |
 | 样品关联后续报价订单 | 已实现 | P1 | 中 | 转化闭环 |

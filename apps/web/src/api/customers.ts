@@ -123,20 +123,36 @@ export function createQuote<T = unknown>(payload: unknown) {
   return apiPost<T>("/quotes", payload);
 }
 
-export function submitQuoteReview<T = unknown>(quoteId: string, payload: { comment?: string } = {}) {
-  return apiPost<T>(`/quotes/${quoteId}/submit-review`, payload);
+export function submitQuoteReview<T = unknown>(quoteId: string, payload: { comment?: string } = {}, options?: MutationOptions) {
+  return apiPost<T>(`/quotes/${quoteId}/submit-review`, payload, options);
 }
 
-export function approveQuote<T = unknown>(quoteId: string, payload: { comment?: string } = {}) {
-  return apiPost<T>(`/quotes/${quoteId}/approve`, payload);
+export function approveQuote<T = unknown>(quoteId: string, payload: { comment?: string } = {}, options?: MutationOptions) {
+  return apiPost<T>(`/quotes/${quoteId}/approve`, payload, options);
 }
 
-export function rejectQuote<T = unknown>(quoteId: string, payload: { comment?: string } = {}) {
-  return apiPost<T>(`/quotes/${quoteId}/reject`, payload);
+export function rejectQuote<T = unknown>(quoteId: string, payload: { comment?: string } = {}, options?: MutationOptions) {
+  return apiPost<T>(`/quotes/${quoteId}/reject`, payload, options);
 }
 
-export function updateQuote<T = unknown>(quoteId: string, payload: unknown) {
-  return apiPatch<T>(`/quotes/${quoteId}`, payload);
+export function sendQuote<T = unknown>(quoteId: string, payload: { comment?: string } = {}, options?: MutationOptions) {
+  return apiPost<T>(`/quotes/${quoteId}/send`, payload, options);
+}
+
+export function acceptQuote<T = unknown>(quoteId: string, payload: { comment?: string } = {}, options?: MutationOptions) {
+  return apiPost<T>(`/quotes/${quoteId}/accept`, payload, options);
+}
+
+export function rejectCustomerQuote<T = unknown>(quoteId: string, payload: { comment?: string } = {}, options?: MutationOptions) {
+  return apiPost<T>(`/quotes/${quoteId}/reject-customer`, payload, options);
+}
+
+export function expireQuote<T = unknown>(quoteId: string, payload: { comment?: string } = {}, options?: MutationOptions) {
+  return apiPost<T>(`/quotes/${quoteId}/expire`, payload, options);
+}
+
+export function updateQuote<T = unknown>(quoteId: string, payload: unknown, options?: MutationOptions) {
+  return apiPatch<T>(`/quotes/${quoteId}`, payload, options);
 }
 
 export function deleteQuote<T = unknown>(quoteId: string, options?: MutationOptions) {
@@ -173,6 +189,14 @@ export function getSampleHistory<T = unknown>(sampleId: string) {
 
 export function recordSampleFee<T = unknown>(sampleId: string, payload: unknown) {
   return apiPost<T>(`/samples/${sampleId}/fees`, payload);
+}
+
+export function updateSampleFee<T = unknown>(sampleId: string, feeId: string, payload: unknown) {
+  return apiPatch<T>(`/samples/${sampleId}/fees/${feeId}`, payload);
+}
+
+export function deleteSampleFee<T = unknown>(sampleId: string, feeId: string) {
+  return apiDelete<T>(`/samples/${sampleId}/fees/${feeId}`);
 }
 
 export function recordSampleReturn<T = unknown>(sampleId: string, payload: unknown) {

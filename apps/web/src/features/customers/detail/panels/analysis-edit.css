@@ -56,6 +56,76 @@
   padding: 12px;
 }
 
+.sample-fee-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 12px 10px;
+}
+
+.sample-fee-dialog {
+  gap: 12px;
+}
+
+.sample-fee-dialog__summary {
+  align-items: center;
+  background: #f7faf7;
+  border: 1px solid #e5ece4;
+  border-radius: 10px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+}
+
+.sample-fee-dialog__summary strong {
+  display: block;
+  color: #24323a;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.sample-fee-dialog__summary span {
+  color: #66747d;
+  font-size: 12px;
+}
+
+.sample-fee-card__header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sample-fee-card__header strong {
+  color: #24323a;
+  font-size: 13px;
+}
+
+.sample-fee-card__fields {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.sample-fee-card__note {
+  margin-top: -2px;
+}
+
+.sample-fee-list-item {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.sample-fee-list-item__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .analysis-edit-gap__actions {
   display: flex;
   align-items: flex-end;
@@ -67,5 +137,17 @@
   .analysis-edit-price,
   .analysis-edit-gap {
     grid-template-columns: 1fr;
+  }
+
+  .sample-fee-card__fields {
+    grid-template-columns: 1fr;
+  }
+
+  .sample-fee-list-item {
+    grid-template-columns: 1fr;
+  }
+
+  .sample-fee-list-item__actions {
+    justify-content: flex-start;
   }
 }

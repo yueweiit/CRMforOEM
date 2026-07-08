@@ -109,7 +109,7 @@ export function emailDraftPurposeLabel(purpose?: string | null) {
   return EMAIL_DRAFT_PURPOSE_LABELS[normalizeEmailDraftPurpose(purpose)];
 }
 
-export { STAGE_LABELS, stageLabel, TASK_TYPE_LABELS, taskTypeLabel } from "./labels";
+export { QUOTE_FLOW_STATUS_LABELS, STAGE_LABELS, stageLabel, TASK_TYPE_LABELS, taskTypeLabel, quoteFlowStatusLabel } from "./labels";
 
 export type OemScoreBreakdown = {
   productLineFit: number;

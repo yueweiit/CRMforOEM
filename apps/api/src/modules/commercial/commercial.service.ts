@@ -10,6 +10,7 @@ import { CreateQuoteDto } from "./dto/create-quote.dto";
 import { CreateSampleRequestDto } from "./dto/create-sample-request.dto";
 import { QuoteReviewDto } from "./dto/quote-review.dto";
 import { RecordSampleReturnDto } from "./dto/record-sample-return.dto";
+import { UpdateSampleFeeDto } from "./dto/update-sample-fee.dto";
 import { UpdateQuoteDto } from "./dto/update-quote.dto";
 import { UpdateSampleRequestDto } from "./dto/update-sample-request.dto";
 
@@ -42,6 +43,7 @@ export class CommercialService {
       quantity: dto.quantity,
       moq: dto.moq
     });
+    const actorName = await this.resolveActorName(user);
     const quote = await this.prisma.$transaction(async (tx) => {
       const created = await tx.quote.create({
         data: {
@@ -72,7 +74,7 @@ export class CommercialService {
           action: "CREATED" as never,
           after: this.buildQuoteSnapshot(created) as never,
           actorId: user.id,
-          actorName: user.name ?? user.email ?? user.id,
+          actorName,
           comment: "已创建报价"
         }
       });
@@ -149,6 +151,9 @@ export class CommercialService {
 
   async createSample(user: RequestUser, dto: CreateSampleRequestDto) {
     await this.ensureCustomerVisible(user, dto.customerId);
+    if (!dto.initialFees?.length) {
+      throw new BadRequestException("At least one sample fee is required");
+    }
     const quote = dto.quoteId ? await this.ensureQuoteVisible(user, dto.quoteId, dto.customerId) : null;
     const actorName = await this.resolveActorName(user);
     const sample = await this.prisma.$transaction(async (tx) => {
@@ -157,6 +162,12 @@ export class CommercialService {
           customerId: dto.customerId,
           quoteId: quote?.id ?? null,
           productSummary: dto.productSummary,
+          specification: dto.specification,
+          material: dto.material,
+          process: dto.process,
+          sampleQuantity: dto.sampleQuantity,
+          samplePurpose: dto.samplePurpose as never,
+          deliveryDeadline: dto.deliveryDeadline ? new Date(dto.deliveryDeadline) : undefined,
           fileAssetIds: dto.fileAssetIds ?? [],
           carrier: this.normalizeOptionalText(dto.carrier),
           trackingNo: this.normalizeOptionalText(dto.trackingNo),
@@ -174,6 +185,36 @@ export class CommercialService {
           comment: "已创建样品申请"
         }
       });
+      for (const feeInput of dto.initialFees) {
+        const createdFee = await tx.sampleFee.create({
+          data: {
+            sampleRequestId: created.id,
+            feeType: feeInput.feeType as never,
+            amount: new Prisma.Decimal(this.normalizeMoney(feeInput.amount).toFixed(2)),
+            currency: feeInput.currency,
+            note: this.normalizeOptionalText(feeInput.note),
+            incurredAt: feeInput.incurredAt ? new Date(feeInput.incurredAt) : new Date(),
+            createdById: user.id
+          }
+        });
+        await tx.sampleHistory.create({
+          data: {
+            sampleRequestId: created.id,
+            action: "FEE_ADDED" as never,
+            after: {
+              id: createdFee.id,
+              feeType: createdFee.feeType,
+              amount: createdFee.amount.toString(),
+              currency: createdFee.currency,
+              note: createdFee.note,
+              incurredAt: createdFee.incurredAt.toISOString()
+            } as never,
+            actorId: user.id,
+            actorName,
+            comment: `已记录样品费用 ${createdFee.feeType}`
+          }
+        });
+      }
       if (quote) {
         await tx.sampleHistory.create({
           data: {
@@ -208,9 +249,9 @@ export class CommercialService {
     if (!quote) {
       throw new NotFoundException("Quote not found");
     }
-    if (quote.status === "VOIDED") {
-      throw new BadRequestException("Voided quote cannot be edited");
-    }
+    this.assertQuoteEditable(quote.status);
+    const quoteStatusPatch = dto.status ? this.resolveQuoteStatusPatch(quote, dto.status, user.id) : {};
+    const actorName = await this.resolveActorName(user);
     const mergedPricing = this.calculateQuotePricing({
       materialCost: dto.materialCost ?? Number(quote.materialCost),
       processingCost: dto.processingCost ?? Number(quote.processingCost),
@@ -239,12 +280,7 @@ export class CommercialService {
           discountAmount: new Prisma.Decimal(mergedPricing.discountAmount.toFixed(2)),
           ...(dto.notes !== undefined ? { notes: dto.notes } : {}),
           ...(dto.validUntil !== undefined ? { validUntil: dto.validUntil ? new Date(dto.validUntil) : null } : {}),
-          approvalStatus: "DRAFT" as never,
-          approvalComment: null,
-          approvalSubmittedAt: null,
-          approvalSubmittedById: null,
-          approvalReviewedAt: null,
-          approvalReviewedById: null
+          ...quoteStatusPatch
         }
       });
       await tx.quoteHistory.create({
@@ -254,8 +290,132 @@ export class CommercialService {
           before: this.buildQuoteSnapshot(quote) as never,
           after: this.buildQuoteSnapshot(updated) as never,
           actorId: user.id,
-          actorName: user.name ?? user.email ?? user.id,
+          actorName,
           comment: "已更新报价"
+        }
+      });
+      return updated;
+    });
+  }
+
+  async sendQuote(user: RequestUser, quoteId: string, dto: QuoteReviewDto) {
+    const quote = await this.prisma.quote.findFirst({
+      where: { id: quoteId, customer: buildCustomerDataScopeWhere(user) }
+    });
+    if (!quote) {
+      throw new NotFoundException("Quote not found");
+    }
+    this.assertQuoteSendable(quote.status, quote.approvalStatus);
+    const actorName = await this.resolveActorName(user);
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.quote.update({
+        where: { id: quoteId },
+        data: {
+          status: "SENT" as never
+        }
+      });
+      await tx.quoteHistory.create({
+        data: {
+          quoteId,
+          action: "UPDATED" as never,
+          before: this.buildQuoteSnapshot(quote) as never,
+          after: this.buildQuoteSnapshot(updated) as never,
+          actorId: user.id,
+          actorName,
+          comment: dto.comment ?? "已手动发送报价"
+        }
+      });
+      return updated;
+    });
+  }
+
+  async acceptQuote(user: RequestUser, quoteId: string, dto: QuoteReviewDto) {
+    const quote = await this.prisma.quote.findFirst({
+      where: { id: quoteId, customer: buildCustomerDataScopeWhere(user) }
+    });
+    if (!quote) {
+      throw new NotFoundException("Quote not found");
+    }
+    this.assertQuoteCustomerActionable(quote.status);
+    const actorName = await this.resolveActorName(user);
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.quote.update({
+        where: { id: quoteId },
+        data: {
+          status: "ACCEPTED" as never
+        }
+      });
+      await tx.quoteHistory.create({
+        data: {
+          quoteId,
+          action: "UPDATED" as never,
+          before: this.buildQuoteSnapshot(quote) as never,
+          after: this.buildQuoteSnapshot(updated) as never,
+          actorId: user.id,
+          actorName,
+          comment: dto.comment ?? "客户已接受报价"
+        }
+      });
+      return updated;
+    });
+  }
+
+  async rejectQuoteByCustomer(user: RequestUser, quoteId: string, dto: QuoteReviewDto) {
+    const quote = await this.prisma.quote.findFirst({
+      where: { id: quoteId, customer: buildCustomerDataScopeWhere(user) }
+    });
+    if (!quote) {
+      throw new NotFoundException("Quote not found");
+    }
+    this.assertQuoteCustomerActionable(quote.status);
+    const actorName = await this.resolveActorName(user);
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.quote.update({
+        where: { id: quoteId },
+        data: {
+          status: "REJECTED" as never
+        }
+      });
+      await tx.quoteHistory.create({
+        data: {
+          quoteId,
+          action: "REJECTED" as never,
+          before: this.buildQuoteSnapshot(quote) as never,
+          after: this.buildQuoteSnapshot(updated) as never,
+          actorId: user.id,
+          actorName,
+          comment: dto.comment ?? "客户已拒绝报价"
+        }
+      });
+      return updated;
+    });
+  }
+
+  async expireQuote(user: RequestUser, quoteId: string, dto: QuoteReviewDto) {
+    const quote = await this.prisma.quote.findFirst({
+      where: { id: quoteId, customer: buildCustomerDataScopeWhere(user) }
+    });
+    if (!quote) {
+      throw new NotFoundException("Quote not found");
+    }
+    this.assertQuoteExpirable(quote.status);
+    const actorName = await this.resolveActorName(user);
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.quote.update({
+        where: { id: quoteId },
+        data: {
+          status: "EXPIRED" as never
+        }
+      });
+      await tx.quoteHistory.create({
+        data: {
+          quoteId,
+          action: "UPDATED" as never,
+          before: this.buildQuoteSnapshot(quote) as never,
+          after: this.buildQuoteSnapshot(updated) as never,
+          actorId: user.id,
+          actorName,
+          comment: dto.comment ?? "报价已到期失效"
         }
       });
       return updated;
@@ -272,6 +432,7 @@ export class CommercialService {
     if (quote.status === "VOIDED") {
       return quote;
     }
+    const actorName = await this.resolveActorName(user);
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.quote.update({
         where: { id: quoteId },
@@ -286,7 +447,7 @@ export class CommercialService {
           before: this.buildQuoteSnapshot(quote) as never,
           after: this.buildQuoteSnapshot(updated) as never,
           actorId: user.id,
-          actorName: user.name ?? user.email ?? user.id,
+          actorName,
           comment: "已作废报价"
         }
       });
@@ -307,6 +468,7 @@ export class CommercialService {
     if (quote.approvalStatus !== "DRAFT" && quote.approvalStatus !== "REJECTED") {
       throw new BadRequestException("Only draft or rejected quotes can be submitted for review");
     }
+    const actorName = await this.resolveActorName(user);
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.quote.update({
         where: { id: quoteId },
@@ -324,7 +486,7 @@ export class CommercialService {
           before: this.buildQuoteSnapshot(quote) as never,
           after: this.buildQuoteSnapshot(updated) as never,
           actorId: user.id,
-          actorName: user.name ?? user.email ?? user.id,
+          actorName,
           comment: dto.comment ?? "已提交报价审批"
         }
       });
@@ -342,6 +504,7 @@ export class CommercialService {
     if (quote.approvalStatus !== "PENDING_APPROVAL") {
       throw new BadRequestException("Only pending review quotes can be approved");
     }
+    const actorName = await this.resolveActorName(user);
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.quote.update({
         where: { id: quoteId },
@@ -359,7 +522,7 @@ export class CommercialService {
           before: this.buildQuoteSnapshot(quote) as never,
           after: this.buildQuoteSnapshot(updated) as never,
           actorId: user.id,
-          actorName: user.name ?? user.email ?? user.id,
+          actorName,
           comment: dto.comment ?? "已通过报价审批"
         }
       });
@@ -377,6 +540,7 @@ export class CommercialService {
     if (quote.approvalStatus !== "PENDING_APPROVAL") {
       throw new BadRequestException("Only pending review quotes can be rejected");
     }
+    const actorName = await this.resolveActorName(user);
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.quote.update({
         where: { id: quoteId },
@@ -394,7 +558,7 @@ export class CommercialService {
           before: this.buildQuoteSnapshot(quote) as never,
           after: this.buildQuoteSnapshot(updated) as never,
           actorId: user.id,
-          actorName: user.name ?? user.email ?? user.id,
+          actorName,
           comment: dto.comment ?? "已驳回报价审批"
         }
       });
@@ -425,6 +589,12 @@ export class CommercialService {
         where: { id: sampleId },
         data: {
           ...(dto.productSummary !== undefined ? { productSummary: dto.productSummary } : {}),
+          ...(dto.specification !== undefined ? { specification: dto.specification } : {}),
+          ...(dto.material !== undefined ? { material: dto.material } : {}),
+          ...(dto.process !== undefined ? { process: dto.process } : {}),
+          ...(dto.sampleQuantity !== undefined ? { sampleQuantity: dto.sampleQuantity } : {}),
+          ...(dto.samplePurpose !== undefined ? { samplePurpose: dto.samplePurpose as never } : {}),
+          ...(dto.deliveryDeadline !== undefined ? { deliveryDeadline: new Date(dto.deliveryDeadline) } : {}),
           ...(dto.quoteId !== undefined ? { quoteId: dto.quoteId || null } : {}),
           ...(dto.fileAssetIds !== undefined ? { fileAssetIds: dto.fileAssetIds } : {}),
           ...(dto.carrier !== undefined ? { carrier: nextCarrier } : {}),
@@ -541,6 +711,109 @@ export class CommercialService {
       return created;
     });
     return fee;
+  }
+
+  async updateSampleFee(user: RequestUser, sampleRequestId: string, feeId: string, dto: UpdateSampleFeeDto) {
+    const sample = await this.prisma.sampleRequest.findFirst({
+      where: { id: sampleRequestId, customer: buildCustomerDataScopeWhere(user) }
+    });
+    if (!sample) {
+      throw new NotFoundException("Sample request not found");
+    }
+    this.ensureSampleNotVoided(sample.status);
+    const fee = await this.prisma.sampleFee.findFirst({
+      where: {
+        id: feeId,
+        sampleRequestId,
+        sampleRequest: { customer: buildCustomerDataScopeWhere(user) }
+      }
+    });
+    if (!fee) {
+      throw new NotFoundException("Sample fee not found");
+    }
+    const actorName = await this.resolveActorName(user);
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.sampleFee.update({
+        where: { id: feeId },
+        data: {
+          ...(dto.feeType !== undefined ? { feeType: dto.feeType as never } : {}),
+          ...(dto.amount !== undefined ? { amount: new Prisma.Decimal(this.normalizeMoney(dto.amount).toFixed(2)) } : {}),
+          ...(dto.currency !== undefined ? { currency: dto.currency } : {}),
+          ...(dto.note !== undefined ? { note: this.normalizeOptionalText(dto.note) } : {}),
+          ...(dto.incurredAt !== undefined ? { incurredAt: dto.incurredAt ? new Date(dto.incurredAt) : new Date() } : {})
+        }
+      });
+      await tx.sampleHistory.create({
+        data: {
+          sampleRequestId,
+          action: "FEE_UPDATED" as never,
+          before: {
+            id: fee.id,
+            feeType: fee.feeType,
+            amount: fee.amount.toString(),
+            currency: fee.currency,
+            note: fee.note,
+            incurredAt: fee.incurredAt.toISOString()
+          } as never,
+          after: {
+            id: updated.id,
+            feeType: updated.feeType,
+            amount: updated.amount.toString(),
+            currency: updated.currency,
+            note: updated.note,
+            incurredAt: updated.incurredAt.toISOString()
+          } as never,
+          actorId: user.id,
+          actorName,
+          comment: "已更新样品费用"
+        }
+      });
+      return updated;
+    });
+  }
+
+  async deleteSampleFee(user: RequestUser, sampleRequestId: string, feeId: string) {
+    const sample = await this.prisma.sampleRequest.findFirst({
+      where: { id: sampleRequestId, customer: buildCustomerDataScopeWhere(user) }
+    });
+    if (!sample) {
+      throw new NotFoundException("Sample request not found");
+    }
+    this.ensureSampleNotVoided(sample.status);
+    const fee = await this.prisma.sampleFee.findFirst({
+      where: {
+        id: feeId,
+        sampleRequestId,
+        sampleRequest: { customer: buildCustomerDataScopeWhere(user) }
+      }
+    });
+    if (!fee) {
+      throw new NotFoundException("Sample fee not found");
+    }
+    const actorName = await this.resolveActorName(user);
+    return this.prisma.$transaction(async (tx) => {
+      const deleted = await tx.sampleFee.delete({
+        where: { id: feeId }
+      });
+      await tx.sampleHistory.create({
+        data: {
+          sampleRequestId,
+          action: "FEE_DELETED" as never,
+          before: {
+            id: fee.id,
+            feeType: fee.feeType,
+            amount: fee.amount.toString(),
+            currency: fee.currency,
+            note: fee.note,
+            incurredAt: fee.incurredAt.toISOString()
+          } as never,
+          actorId: user.id,
+          actorName,
+          comment: "已删除样品费用"
+        }
+      });
+      return deleted;
+    });
   }
 
   async recordSampleReturn(user: RequestUser, sampleRequestId: string, dto: RecordSampleReturnDto) {
@@ -718,6 +991,125 @@ export class CommercialService {
     }
   }
 
+  private assertQuoteEditable(status: string) {
+    if (status === "VOIDED") {
+      throw new BadRequestException("Finalized quote cannot be edited");
+    }
+  }
+
+  private resolveQuoteStatusPatch(
+    quote: {
+      status: string;
+      approvalStatus: string;
+      approvalComment: string | null;
+      approvalSubmittedAt: Date | null;
+      approvalSubmittedById: string | null;
+      approvalReviewedAt: Date | null;
+      approvalReviewedById: string | null;
+    },
+    status: string,
+    userId: string
+  ) {
+    const now = new Date();
+    switch (status) {
+      case "DRAFT":
+        return {
+          status: "DRAFT" as never,
+          approvalStatus: "DRAFT" as never,
+          approvalComment: null,
+          approvalSubmittedAt: null,
+          approvalSubmittedById: null,
+          approvalReviewedAt: null,
+          approvalReviewedById: null
+        };
+      case "PENDING_APPROVAL":
+        return {
+          status: "DRAFT" as never,
+          approvalStatus: "PENDING_APPROVAL" as never,
+          approvalSubmittedAt: now,
+          approvalSubmittedById: userId,
+          approvalComment: quote.approvalComment
+        };
+      case "APPROVED":
+        return {
+          status: "DRAFT" as never,
+          approvalStatus: "APPROVED" as never,
+          approvalReviewedAt: now,
+          approvalReviewedById: userId
+        };
+      case "REJECTED":
+        if (quote.status === "SENT" || quote.status === "ACCEPTED" || quote.status === "EXPIRED") {
+          return {
+            status: "REJECTED" as never,
+            approvalStatus: "APPROVED" as never,
+            approvalReviewedAt: now,
+            approvalReviewedById: userId
+          };
+        }
+        return {
+          status: "DRAFT" as never,
+          approvalStatus: "REJECTED" as never,
+          approvalReviewedAt: now,
+          approvalReviewedById: userId
+        };
+      case "CUSTOMER_REJECTED":
+        return {
+          status: "CUSTOMER_REJECTED" as never,
+          approvalStatus: "APPROVED" as never,
+          approvalReviewedAt: quote.approvalReviewedAt ?? now,
+          approvalReviewedById: quote.approvalReviewedById ?? userId
+        };
+      case "SENT":
+        return {
+          status: "SENT" as never,
+          approvalStatus: "APPROVED" as never,
+          approvalReviewedAt: quote.approvalReviewedAt ?? now,
+          approvalReviewedById: quote.approvalReviewedById ?? userId
+        };
+      case "ACCEPTED":
+        return {
+          status: "ACCEPTED" as never,
+          approvalStatus: "APPROVED" as never,
+          approvalReviewedAt: quote.approvalReviewedAt ?? now,
+          approvalReviewedById: quote.approvalReviewedById ?? userId
+        };
+      case "EXPIRED":
+        return {
+          status: "EXPIRED" as never,
+          approvalStatus: "APPROVED" as never,
+          approvalReviewedAt: quote.approvalReviewedAt ?? now,
+          approvalReviewedById: quote.approvalReviewedById ?? userId
+        };
+      case "VOIDED":
+        return {
+          status: "VOIDED" as never
+        };
+      default:
+        throw new BadRequestException(`Unsupported quote status: ${status}`);
+    }
+  }
+
+  private assertQuoteSendable(status: string, approvalStatus: string) {
+    if (status !== "DRAFT") {
+      throw new BadRequestException("Only draft quotes can be sent");
+    }
+    if (approvalStatus !== "APPROVED") {
+      throw new BadRequestException("Only approved quotes can be sent");
+    }
+  }
+
+  private assertQuoteCustomerActionable(status: string) {
+    if (status !== "SENT") {
+      throw new BadRequestException("Only sent quotes can be accepted or rejected by customer");
+    }
+  }
+
+  private assertQuoteExpirable(status: string) {
+    if (status !== "SENT") {
+      throw new BadRequestException("Only sent quotes can be expired");
+    }
+  }
+
   private assertSampleShipmentFields(status: string, carrier: string | null, trackingNo: string | null) {
     if (status !== "SHIPPED") {
       return;
@@ -764,6 +1156,12 @@ export class CommercialService {
     quoteId: string | null;
     status: string;
     productSummary: string;
+    specification: string | null;
+    material: string | null;
+    process: string | null;
+    sampleQuantity: number | null;
+    samplePurpose: string | null;
+    deliveryDeadline: Date | null;
     fileAssetIds: string[];
     trackingNo: string | null;
     carrier: string | null;
@@ -788,9 +1186,15 @@ export class CommercialService {
             quoteNo: quote.quoteNo,
             productName: quote.productName
           }
-        : null,
+      : null,
       status: sample.status,
       productSummary: sample.productSummary,
+      specification: sample.specification,
+      material: sample.material,
+      process: sample.process,
+      sampleQuantity: sample.sampleQuantity,
+      samplePurpose: sample.samplePurpose,
+      deliveryDeadline: sample.deliveryDeadline ? sample.deliveryDeadline.toISOString() : null,
       fileAssetIds: sample.fileAssetIds ?? [],
       trackingNo: sample.trackingNo,
       carrier: sample.carrier,

@@ -207,6 +207,12 @@ export type SampleHistoryItem = {
 export type Sample = {
   id: string;
   productSummary: string;
+  specification?: string | null;
+  material?: string | null;
+  process?: string | null;
+  sampleQuantity?: number | null;
+  samplePurpose?: string | null;
+  deliveryDeadline?: string | null;
   status: string;
   quoteId?: string | null;
   quote?: SampleLinkedQuote | null;

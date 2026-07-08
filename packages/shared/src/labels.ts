@@ -37,3 +37,21 @@ export const TASK_TYPE_LABELS: Record<string, string> = {
 export function taskTypeLabel(type: string) {
   return TASK_TYPE_LABELS[type] ?? type;
 }
+
+export const QUOTE_FLOW_STATUS_LABELS = {
+  DRAFT: "新建",
+  PENDING_APPROVAL: "提交审批",
+  APPROVED: "审批通过",
+  REJECTED: "审批驳回",
+  CUSTOMER_REJECTED: "客户拒绝",
+  SENT: "已发送",
+  ACCEPTED: "客户接受",
+  EXPIRED: "到期失效",
+  VOIDED: "作废关闭"
+} as const;
+
+export type QuoteFlowStatus = keyof typeof QUOTE_FLOW_STATUS_LABELS;
+
+export function quoteFlowStatusLabel(status: string) {
+  return QUOTE_FLOW_STATUS_LABELS[status as QuoteFlowStatus] ?? status;
+}

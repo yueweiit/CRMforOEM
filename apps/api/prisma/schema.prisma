@@ -156,6 +156,7 @@ enum QuoteStatus {
   SENT
   ACCEPTED
   REJECTED
+  CUSTOMER_REJECTED
   EXPIRED
   VOIDED
 }
@@ -194,6 +195,8 @@ enum SampleHistoryAction {
   UPDATED
   STATUS_CHANGED
   FEE_ADDED
+  FEE_UPDATED
+  FEE_DELETED
   QUOTE_LINKED
   RETURNED
   STORED
@@ -208,6 +211,12 @@ enum SampleFeeType {
   PACKAGING
   RETURN
   OTHER
+}
+
+enum SamplePurpose {
+  CUSTOMER_TEST
+  EXHIBITION
+  APPEARANCE_CONFIRMATION
 }
 
 enum SampleReturnType {
@@ -1055,24 +1064,30 @@ model QuoteHistory {
 }
 
 model SampleRequest {
-  id             String       @id @default(cuid())
-  customerId      String
-  quoteId         String?
-  status          SampleStatus @default(REQUESTED)
-  productSummary  String
-  fileAssetIds    String[]     @default([])
-  trackingNo      String?
-  carrier         String?
-  shippedAt       DateTime?
-  deliveredAt     DateTime?
-  approvedAt      DateTime?
-  returnedAt      DateTime?
-  storedAt        DateTime?
-  voidedAt        DateTime?
-  closedAt        DateTime?
-  feedback        String?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  id               String        @id @default(cuid())
+  customerId        String
+  quoteId           String?
+  status            SampleStatus  @default(REQUESTED)
+  productSummary    String
+  specification     String?
+  material          String?
+  process           String?
+  sampleQuantity    Int?
+  samplePurpose     SamplePurpose?
+  deliveryDeadline  DateTime?
+  fileAssetIds      String[]      @default([])
+  trackingNo        String?
+  carrier           String?
+  shippedAt         DateTime?
+  deliveredAt       DateTime?
+  approvedAt        DateTime?
+  returnedAt        DateTime?
+  storedAt          DateTime?
+  voidedAt          DateTime?
+  closedAt          DateTime?
+  feedback          String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
 
   customer       Customer            @relation(fields: [customerId], references: [id], onDelete: Cascade)
   quote          Quote?              @relation(fields: [quoteId], references: [id], onDelete: SetNull)

@@ -1,4 +1,4 @@
-import { IsArray, IsOptional, IsString, IsDateString, IsIn } from "class-validator";
+import { IsArray, IsDateString, IsIn, IsInt, IsOptional, IsString, Min } from "class-validator";
 
 const SAMPLE_STATUSES = [
   "REQUESTED",
@@ -15,6 +15,12 @@ const SAMPLE_STATUSES = [
 
 export class UpdateSampleRequestDto {
   @IsOptional() @IsString() productSummary?: string;
+  @IsOptional() @IsString() specification?: string;
+  @IsOptional() @IsString() material?: string;
+  @IsOptional() @IsString() process?: string;
+  @IsOptional() @IsInt() @Min(1) sampleQuantity?: number;
+  @IsOptional() @IsIn(["CUSTOMER_TEST", "EXHIBITION", "APPEARANCE_CONFIRMATION"]) samplePurpose?: string;
+  @IsOptional() @IsDateString() deliveryDeadline?: string;
   @IsOptional() @IsIn(SAMPLE_STATUSES) status?: string;
   @IsOptional() @IsString() quoteId?: string;
   @IsOptional() @IsArray() @IsString({ each: true }) fileAssetIds?: string[];
