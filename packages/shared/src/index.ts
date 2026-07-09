@@ -110,6 +110,16 @@ export function emailDraftPurposeLabel(purpose?: string | null) {
 }
 
 export { QUOTE_FLOW_STATUS_LABELS, STAGE_LABELS, stageLabel, TASK_TYPE_LABELS, taskTypeLabel, quoteFlowStatusLabel } from "./labels";
+export {
+  QUOTE_PRICING_FORMULA_TEXT,
+  QUOTE_UNIT_PRICE_FORMULA_TEXT,
+  calculateQuotePricing
+} from "./quote-pricing";
+export type {
+  QuotePricingInput,
+  QuotePricingResult,
+  QuotePricingValue
+} from "./quote-pricing";
 
 export type OemScoreBreakdown = {
   productLineFit: number;

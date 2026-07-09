@@ -342,7 +342,7 @@ function createFeeValidationMessage(forms: Array<{
   amount: string;
   currency: string;
 }>) {
-  if (!forms.length) return "请至少填写一条样品费用记录。";
+  if (!forms.length) return "";
   if (forms.some((form) => {
     const amount = Number(form.amount);
     return !form.feeType.trim() || !form.amount.trim() || !Number.isFinite(amount) || amount < 0 || !form.currency.trim();
@@ -387,7 +387,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
     fileAssetIds: [] as string[]
   });
   const [createFeeOpen, setCreateFeeOpen] = useState(false);
-  const [createFeeForms, setCreateFeeForms] = useState([createEmptySampleFee()]);
+  const [createFeeForms, setCreateFeeForms] = useState<ReturnType<typeof createEmptySampleFee>[]>([]);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailMode, setDetailMode] = useState<"sample" | "quote">("sample");
   const [detailSample, setDetailSample] = useState<Sample | null>(null);
@@ -493,7 +493,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
         fileAssetIds: []
       });
       setCreateFeeOpen(false);
-      setCreateFeeForms([createEmptySampleFee()]);
+      setCreateFeeForms([]);
       showClientToast({ type: "success", title: "新增样品成功", message: "样品申请已创建。" });
     },
     onError: (error) => {
@@ -992,6 +992,11 @@ export function SamplePanel({ customerId }: { customerId: string }) {
             </button>
           </div>
           <div className="analysis-edit-gap-list">
+            {!createFeeForms.length ? (
+              <div className="empty-state">
+                当前未填写费用记录，直接保存即可。需要费用时再点击“添加费用”。
+              </div>
+            ) : null}
             {createFeeForms.map((feeItem, index) => (
               <div className="analysis-edit-gap sample-fee-card" key={`${index}-${feeItem.incurredAt}`}>
                 <div className="sample-fee-card__header">

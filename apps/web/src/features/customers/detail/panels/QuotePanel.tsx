@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog } from "@alifd/next";
 import "@alifd/next/lib/dialog/style.js";
 import { CheckCircle2, Download, History, NotebookTabs, Send, XCircle } from "lucide-react";
-import { quoteFlowStatusLabel } from "@oem-crm/shared";
+import { QUOTE_PRICING_FORMULA_TEXT, QUOTE_UNIT_PRICE_FORMULA_TEXT, calculateQuotePricing, quoteFlowStatusLabel } from "@oem-crm/shared";
 import { showClientToast } from "../../../../components/Toast";
 import {
   approveQuote,
@@ -131,28 +131,6 @@ function buildQuoteEditPayload(form: {
     ...buildQuotePayload(form),
     validUntil: form.validUntil || undefined,
     notes: form.notes
-  };
-}
-
-function calculateQuoteSummary(form: {
-  moq: string;
-  quantity: string;
-  materialCost: string;
-  processingCost: string;
-  taxCost: string;
-  shippingCost: string;
-  discountAmount: string;
-}) {
-  const total = toMoney(form.materialCost) + toMoney(form.processingCost) + toMoney(form.taxCost) + toMoney(form.shippingCost) - toMoney(form.discountAmount);
-  const quantity = Math.max(toMoney(form.quantity), 0);
-  const moq = Math.max(toMoney(form.moq), 0);
-  const unitPrice = quantity > 0 ? total / quantity : 0;
-  return {
-    total: Math.round((total + Number.EPSILON) * 100) / 100,
-    unitPrice: Math.round((unitPrice + Number.EPSILON) * 100) / 100,
-    quantity,
-    moq,
-    moqValid: quantity === 0 || moq === 0 ? true : quantity >= moq
   };
 }
 
@@ -300,7 +278,12 @@ export function QuotePanel({ customerId }: { customerId: string }) {
   });
 
   const create = useMutation({
-    mutationFn: () => createQuote({ ...buildQuotePayload(form), customerId, quoteNo: form.quoteNo, currency: form.currency, notes: form.notes }),
+    mutationFn: () => {
+      if (!createSummary.moqValid) {
+        throw new Error("报价数量不能小于 MOQ，请先调整数量或起订量。");
+      }
+      return createQuote({ ...buildQuotePayload(form), customerId, quoteNo: form.quoteNo, currency: form.currency, notes: form.notes });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["quotes", customerId] });
       setForm({
@@ -452,6 +435,9 @@ export function QuotePanel({ customerId }: { customerId: string }) {
 
   const update = useMutation({
     mutationFn: async (payload: { basePayload: Record<string, unknown> }) => {
+      if (!editSummary.moqValid) {
+        throw new Error("报价数量不能小于 MOQ，请先调整数量或起订量。");
+      }
       const quoteId = editing?.id ?? "";
       await updateQuote(quoteId, payload.basePayload, { toast: false });
       return null;
@@ -594,8 +580,8 @@ export function QuotePanel({ customerId }: { customerId: string }) {
   };
   const statusQuoteId = statusQuote?.id ?? "";
   const statusDisplay = quoteDisplayStatus(statusQuote);
-  const createSummary = calculateQuoteSummary(form);
-  const editSummary = calculateQuoteSummary(editForm);
+  const createSummary = calculateQuotePricing(form);
+  const editSummary = calculateQuotePricing(editForm);
 
   return (
     <section className="panel">
@@ -728,6 +714,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
             <input readOnly value={createSummary.total.toFixed(2)} />
           </label>
         </div>
+        <div className="detail-note">{QUOTE_PRICING_FORMULA_TEXT}；{QUOTE_UNIT_PRICE_FORMULA_TEXT}</div>
         {!createSummary.moqValid ? <div className="error-state">报价数量不能小于 MOQ，请先调整数量或起订量。</div> : null}
         <div><AddIconButton disabled={create.isPending || !createSummary.moqValid} label={create.isPending ? "提交中..." : "新增报价"} onClick={() => create.mutate()} /></div>
       </div>
@@ -919,6 +906,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
               <input readOnly value={editSummary.total.toFixed(2)} />
             </label>
           </div>
+          <div className="detail-note">{QUOTE_PRICING_FORMULA_TEXT}；{QUOTE_UNIT_PRICE_FORMULA_TEXT}</div>
           {!editSummary.moqValid ? <div className="error-state">报价数量不能小于 MOQ，请先调整数量或起订量。</div> : null}
         </div>
       </Dialog>

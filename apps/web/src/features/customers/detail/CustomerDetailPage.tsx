@@ -5,6 +5,7 @@ import { Dialog, Loading } from "@alifd/next";
 import "@alifd/next/lib/dialog/style.js";
 import "@alifd/next/lib/loading/style.js";
 import { Bot, Globe2, MailPlus, NotebookTabs, Star } from "lucide-react";
+import { DetailPageHeader } from "../../../components/ui/DetailPageHeader";
 import { getCustomerDetail, getCustomerBackgroundTasks, createWebsiteAnalysis, createResearchReport, createOemFitScore } from "../../../api/customers";
 import type { CustomerDetail, CustomerBackgroundTaskView, CustomerBackgroundTasksResponse, AcceptedResponse, WebsiteAnalysis, ResearchReport } from "./shared/types";
 import { OverviewPanel } from "./panels/OverviewPanel";
@@ -141,36 +142,42 @@ export function CustomerDetailPage() {
 
   return (
     <section className="page-stack">
-      <header className="page-header">
-        <div>
-          <p className="eyebrow">{customer?.websiteDomain ?? `Customer #${id}`}</p>
-          <h1>{customer?.name ?? "客户详情"}</h1>
-        </div>
-        <div className="toolbar">
-          <button
-            className={`secondary-button${hasActiveTask("WEBSITE_ANALYSIS") ? " active-task" : ""}`}
-            title={customer?.websiteUrl ? "抓取并分析客户官网" : "请先在概览中编辑并保存官网URL"}
-            onClick={() => openGenerationConfirm("website")}
-            disabled={!customer?.websiteUrl || analyzeMutation.isPending || hasActiveTask("WEBSITE_ANALYSIS")}
-          >
-            {hasActiveTask("WEBSITE_ANALYSIS") ? <ProcessingButtonLabel /> : customer?.websiteUrl ? "官网分析" : "先填写官网"}
-          </button>
-          <button
-            className={`secondary-button${hasActiveTask("RESEARCH_REPORT") ? " active-task" : ""}`}
-            onClick={() => openGenerationConfirm("research")}
-            disabled={researchMutation.isPending || hasActiveTask("RESEARCH_REPORT")}
-          >
-            {hasActiveTask("RESEARCH_REPORT") ? <ProcessingButtonLabel /> : "生成背调"}
-          </button>
-          <button
-            className={`secondary-button${isOemScoreGenerating ? " active-task" : ""}`}
-            onClick={() => openGenerationConfirm("oem")}
-            disabled={isOemScoreGenerating}
-          >
-            {isOemScoreGenerating ? <ProcessingButtonLabel /> : "OEM评分"}
-          </button>
-        </div>
-      </header>
+      <DetailPageHeader
+        backTo="/customers"
+        backLabel="返回客户开发池"
+        eyebrow={customer?.websiteDomain ?? `Customer #${id}`}
+        title={customer?.name ?? "客户详情"}
+        breadcrumbs={[
+          { label: "客户开发", to: "/customers" },
+          { label: customer?.name ?? "客户详情" }
+        ]}
+        actions={(
+          <>
+            <button
+              className={`secondary-button${hasActiveTask("WEBSITE_ANALYSIS") ? " active-task" : ""}`}
+              title={customer?.websiteUrl ? "抓取并分析客户官网" : "请先在概览中编辑并保存官网URL"}
+              onClick={() => openGenerationConfirm("website")}
+              disabled={!customer?.websiteUrl || analyzeMutation.isPending || hasActiveTask("WEBSITE_ANALYSIS")}
+            >
+              {hasActiveTask("WEBSITE_ANALYSIS") ? <ProcessingButtonLabel /> : customer?.websiteUrl ? "官网分析" : "先填写官网"}
+            </button>
+            <button
+              className={`secondary-button${hasActiveTask("RESEARCH_REPORT") ? " active-task" : ""}`}
+              onClick={() => openGenerationConfirm("research")}
+              disabled={researchMutation.isPending || hasActiveTask("RESEARCH_REPORT")}
+            >
+              {hasActiveTask("RESEARCH_REPORT") ? <ProcessingButtonLabel /> : "生成背调"}
+            </button>
+            <button
+              className={`secondary-button${isOemScoreGenerating ? " active-task" : ""}`}
+              onClick={() => openGenerationConfirm("oem")}
+              disabled={isOemScoreGenerating}
+            >
+              {isOemScoreGenerating ? <ProcessingButtonLabel /> : "OEM评分"}
+            </button>
+          </>
+        )}
+      />
 
       <GenerationConfirmDialog
         action={pendingAction}

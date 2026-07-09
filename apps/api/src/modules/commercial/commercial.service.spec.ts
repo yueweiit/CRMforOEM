@@ -1,5 +1,6 @@
 import * as assert from "node:assert/strict";
 import { BadRequestException } from "@nestjs/common";
+import { calculateQuotePricing } from "@oem-crm/shared";
 import { CommercialService } from "./commercial.service";
 import type { RequestUser } from "../../common/auth/current-user.decorator";
 
@@ -13,6 +14,7 @@ const user: RequestUser = {
 
 function buildService(sampleStatus = "PREPARING", quoteState?: { status: string; approvalStatus: string }) {
   const calls: {
+    quoteCreate?: Record<string, unknown>;
     sampleCreate?: Record<string, unknown>;
     sampleFeeCreates?: Record<string, unknown>[];
     sampleFeeDeletes?: Record<string, unknown>[];
@@ -94,6 +96,38 @@ function buildService(sampleStatus = "PREPARING", quoteState?: { status: string;
 
   const tx = {
     quote: {
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        calls.quoteCreate = data;
+        return {
+          id: "quote-created",
+          customerId: data.customerId,
+          quoteNo: data.quoteNo,
+          productName: data.productName,
+          specification: data.specification ?? null,
+          moq: data.moq,
+          quantity: data.quantity,
+          unitPrice: data.unitPrice,
+          status: data.status,
+          approvalStatus: data.approvalStatus,
+          currency: data.currency,
+          amount: data.amount,
+          materialCost: data.materialCost,
+          processingCost: data.processingCost,
+          taxCost: data.taxCost,
+          shippingCost: data.shippingCost,
+          discountAmount: data.discountAmount,
+          validUntil: data.validUntil ?? null,
+          fileAssetId: data.fileAssetId ?? null,
+          notes: data.notes ?? null,
+          approvalComment: null,
+          approvalSubmittedAt: null,
+          approvalSubmittedById: null,
+          approvalReviewedAt: null,
+          approvalReviewedById: null,
+          createdAt: new Date("2026-07-06T00:00:00.000Z"),
+          updatedAt: new Date("2026-07-06T00:00:00.000Z")
+        };
+      },
       update: async ({ data }: { data: Record<string, unknown> }) => {
         calls.quoteUpdate = data;
         if (!quoteState) {
@@ -251,6 +285,70 @@ async function main() {
   {
     const { service, calls } = buildService();
 
+    const pricing = calculateQuotePricing({
+      materialCost: "12.345",
+      processingCost: "0.335",
+      taxCost: "1.5",
+      shippingCost: "0.8",
+      discountAmount: "0.2",
+      quantity: "3",
+      moq: "1"
+    });
+
+    assert.equal(pricing.subtotal, 14.99);
+    assert.equal(pricing.total, 14.79);
+    assert.equal(pricing.unitPrice, 4.93);
+    assert.equal(pricing.moqValid, true);
+
+    // MOQ大于数量时应报错（边界情况：quantity=0）
+    const edgeCase = calculateQuotePricing({ quantity: "0", moq: "60" });
+    assert.equal(edgeCase.moqValid, false);
+
+    // MOQ大于数量时应报错（正常情况）
+    const moqExceedsQty = calculateQuotePricing({ quantity: "50", moq: "60" });
+    assert.equal(moqExceedsQty.moqValid, false);
+
+    await service.createQuote(user, {
+      customerId: "customer-1",
+      quoteNo: "Q-NEW",
+      productName: "New quote",
+      specification: "Spec D",
+      moq: 1,
+      quantity: 3,
+      currency: "USD",
+      materialCost: 12.345,
+      processingCost: 0.335,
+      taxCost: 1.5,
+      shippingCost: 0.8,
+      discountAmount: 0.2
+    });
+
+    assert.equal((calls.quoteCreate?.amount as { toString(): string }).toString(), "14.79");
+    assert.equal((calls.quoteCreate?.unitPrice as { toString(): string }).toString(), "4.93");
+    assert.equal(calls.quoteCreate?.status, "DRAFT");
+    assert.equal(calls.quoteCreate?.approvalStatus, "DRAFT");
+  }
+
+  {
+    const { service } = buildService();
+
+    await assert.rejects(
+      () =>
+        service.createQuote(user, {
+          customerId: "customer-1",
+          quoteNo: "Q-INVALID",
+          productName: "Invalid quote",
+          moq: 10,
+          quantity: 5,
+          currency: "USD"
+        }),
+      BadRequestException
+    );
+  }
+
+  {
+    const { service, calls } = buildService();
+
     await service.createSample(user, {
       customerId: "customer-1",
       productSummary: "New sample",
@@ -281,6 +379,25 @@ async function main() {
     assert.equal(calls.sampleFeeCreates?.length, 2);
     assert.equal(calls.sampleFeeCreates?.[0]?.feeType, "SAMPLE_MAKING");
     assert.equal(calls.sampleFeeCreates?.[1]?.feeType, "COURIER");
+  }
+
+  {
+    const { service, calls } = buildService();
+
+    await service.createSample(user, {
+      customerId: "customer-1",
+      productSummary: "No fee sample",
+      specification: "Spec D",
+      material: "ABS",
+      process: "Molding",
+      sampleQuantity: 2,
+      samplePurpose: "APPEARANCE_CONFIRMATION",
+      fileAssetIds: [],
+      initialFees: []
+    });
+
+    assert.equal(calls.sampleCreate?.status, "APPROVING");
+    assert.equal(calls.sampleFeeCreates?.length ?? 0, 0);
   }
 
   {
@@ -385,9 +502,10 @@ async function main() {
 
   {
     const { service, calls } = buildService("PREPARING", { status: "REJECTED", approvalStatus: "APPROVED" });
-    await service.updateQuote(user, "quote-1", { notes: "revised" });
-    assert.equal(calls.quoteUpdate?.status, "REJECTED");
-    assert.equal(calls.quoteUpdate?.approvalStatus, "APPROVED");
+    const updated = await service.updateQuote(user, "quote-1", { notes: "revised" });
+    assert.equal(calls.quoteUpdate?.notes, "revised");
+    assert.equal(updated.status, "REJECTED");
+    assert.equal(updated.approvalStatus, "APPROVED");
   }
 
   {

@@ -1,4 +1,4 @@
-import { ArrayMinSize, IsArray, IsDateString, IsIn, IsInt, IsOptional, IsString, Min } from "class-validator";
+import { IsArray, IsDateString, IsIn, IsInt, IsOptional, IsString, Min } from "class-validator";
 
 const SAMPLE_PURPOSES = ["CUSTOMER_TEST", "EXHIBITION", "APPEARANCE_CONFIRMATION"] as const;
 
@@ -50,9 +50,9 @@ export class CreateSampleRequestDto {
   @IsDateString()
   shippedAt?: string;
 
+  @IsOptional()
   @IsArray()
-  @ArrayMinSize(1)
-  initialFees!: Array<{
+  initialFees?: Array<{
     feeType: string;
     amount: number;
     currency: string;

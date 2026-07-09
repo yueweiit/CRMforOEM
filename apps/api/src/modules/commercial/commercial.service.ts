@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
-import { CustomerStage } from "@oem-crm/shared";
+import { CustomerStage, calculateQuotePricing } from "@oem-crm/shared";
 import { RequestUser } from "../../common/auth/current-user.decorator";
 import { buildCustomerDataScopeWhere } from "../../common/query/data-scope";
 import { PrismaService } from "../../infrastructure/prisma/prisma.service";
@@ -34,7 +34,7 @@ export class CommercialService {
 
   async createQuote(user: RequestUser, dto: CreateQuoteDto) {
     await this.ensureCustomerVisible(user, dto.customerId);
-    const pricing = this.calculateQuotePricing({
+    const pricing = calculateQuotePricing({
       materialCost: dto.materialCost,
       processingCost: dto.processingCost,
       taxCost: dto.taxCost,
@@ -43,6 +43,9 @@ export class CommercialService {
       quantity: dto.quantity,
       moq: dto.moq
     });
+    if (!pricing.moqValid) {
+      throw new BadRequestException(`Quote quantity must be greater than or equal to MOQ (${pricing.moq})`);
+    }
     const actorName = await this.resolveActorName(user);
     const quote = await this.prisma.$transaction(async (tx) => {
       const created = await tx.quote.create({
@@ -171,9 +174,6 @@ export class CommercialService {
 
   async createSample(user: RequestUser, dto: CreateSampleRequestDto) {
     await this.ensureCustomerVisible(user, dto.customerId);
-    if (!dto.initialFees?.length) {
-      throw new BadRequestException("At least one sample fee is required");
-    }
     const quote = dto.quoteId ? await this.ensureQuoteVisible(user, dto.quoteId, dto.customerId) : null;
     const actorName = await this.resolveActorName(user);
     const sample = await this.prisma.$transaction(async (tx) => {
@@ -205,7 +205,7 @@ export class CommercialService {
           comment: "已创建样品申请"
         }
       });
-      for (const feeInput of dto.initialFees) {
+      for (const feeInput of dto.initialFees ?? []) {
         const createdFee = await tx.sampleFee.create({
           data: {
             sampleRequestId: created.id,
@@ -272,7 +272,7 @@ export class CommercialService {
     this.assertQuoteEditable(quote.status);
     const quoteStatusPatch = dto.status ? this.resolveQuoteStatusPatch(quote, dto.status, user.id) : {};
     const actorName = await this.resolveActorName(user);
-    const mergedPricing = this.calculateQuotePricing({
+    const mergedPricing = calculateQuotePricing({
       materialCost: dto.materialCost ?? Number(quote.materialCost),
       processingCost: dto.processingCost ?? Number(quote.processingCost),
       taxCost: dto.taxCost ?? Number(quote.taxCost),
@@ -281,6 +281,9 @@ export class CommercialService {
       quantity: dto.quantity ?? quote.quantity,
       moq: dto.moq ?? quote.moq
     });
+    if (!mergedPricing.moqValid) {
+      throw new BadRequestException(`Quote quantity must be greater than or equal to MOQ (${mergedPricing.moq})`);
+    }
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.quote.update({
         where: { id: quoteId },
@@ -1291,30 +1294,6 @@ export class CommercialService {
     };
   }
 
-  private calculateQuotePricing(input: {
-    materialCost?: number;
-    processingCost?: number;
-    taxCost?: number;
-    shippingCost?: number;
-    discountAmount?: number;
-    quantity?: number;
-    moq?: number;
-  }) {
-    const materialCost = this.normalizeMoney(input.materialCost);
-    const processingCost = this.normalizeMoney(input.processingCost);
-    const taxCost = this.normalizeMoney(input.taxCost);
-    const shippingCost = this.normalizeMoney(input.shippingCost);
-    const discountAmount = this.normalizeMoney(input.discountAmount);
-    const quantity = this.normalizeInteger(input.quantity, "quantity");
-    const moq = this.normalizeInteger(input.moq ?? 1, "moq");
-    if (quantity < moq) {
-      throw new BadRequestException(`Quote quantity must be greater than or equal to MOQ (${moq})`);
-    }
-    const total = this.roundMoney(materialCost + processingCost + taxCost + shippingCost - discountAmount);
-    const unitPrice = this.roundMoney(total / quantity);
-    return { materialCost, processingCost, taxCost, shippingCost, discountAmount, total, quantity, moq, unitPrice };
-  }
-
   private normalizeOptionalText(value?: string | null) {
     const trimmed = value?.trim();
     return trimmed ? trimmed : null;
@@ -1326,14 +1305,6 @@ export class CommercialService {
       throw new BadRequestException("Quote cost values must be valid numbers");
     }
     return this.roundMoney(normalized);
-  }
-
-  private normalizeInteger(value: number | undefined, fieldName: string) {
-    const normalized = Number(value ?? 0);
-    if (!Number.isInteger(normalized) || normalized < 1) {
-      throw new BadRequestException(`${fieldName} must be a positive integer`);
-    }
-    return normalized;
   }
 
   private roundMoney(value: number) {

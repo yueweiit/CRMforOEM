@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Navigate, NavLink, Outlet, useLocation } from "react-router-dom";
+import { Link, Navigate, Outlet, useLocation } from "react-router-dom";
 import { Suspense } from "react";
 import {
   BarChart3,
@@ -21,19 +21,20 @@ import { useSse } from "../hooks/useSse";
 
 type NavItem = {
   to: string | ((user: CurrentUser | null) => string);
+  activeRoot: string;
   label: string;
   icon: typeof BarChart3;
   canView?: (user: CurrentUser | null) => boolean;
 };
 
 const navItems: NavItem[] = [
-  { to: "/dashboard", label: "工作台", icon: BarChart3 },
-  { to: "/customers", label: "客户开发", icon: Building2 },
-  { to: "/email-center/inbox", label: "邮件中心", icon: Mail },
-  { to: "/follow-ups", label: "跟进任务", icon: ClipboardCheck },
-  { to: "/knowledge/company", label: "企业资料库", icon: BookOpen },
-  { to: defaultReportPath, label: "数据看板", icon: UsersRound, canView: canViewReports },
-  { to: defaultSettingsPath, label: "系统设置", icon: Settings }
+  { to: "/dashboard", activeRoot: "/dashboard", label: "工作台", icon: BarChart3 },
+  { to: "/customers", activeRoot: "/customers", label: "客户开发", icon: Building2 },
+  { to: "/email-center/inbox", activeRoot: "/email-center", label: "邮件中心", icon: Mail },
+  { to: "/follow-ups", activeRoot: "/follow-ups", label: "跟进任务", icon: ClipboardCheck },
+  { to: "/knowledge/company", activeRoot: "/knowledge", label: "企业资料库", icon: BookOpen },
+  { to: defaultReportPath, activeRoot: "/reports", label: "数据看板", icon: UsersRound, canView: canViewReports },
+  { to: defaultSettingsPath, activeRoot: "/settings", label: "系统设置", icon: Settings }
 ];
 
 type NavFollowUpSummary = { count: number };
@@ -117,12 +118,13 @@ export function AppShell() {
         <nav className="nav-list">
           {visibleNavItems.map((item) => {
             const Icon = item.icon;
+            const active = isActivePath(location.pathname, item.activeRoot);
             return (
-              <NavLink key={item.to} to={item.to} className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}>
+              <Link key={item.to} to={item.to} className={`nav-item ${active ? "active" : ""}`} aria-current={active ? "page" : undefined}>
                 <Icon size={18} />
                 <span>{item.label}</span>
                 {item.to === "/follow-ups" && openFollowUpCount > 0 ? <span className="nav-alert-badge">{badgeCount(openFollowUpCount)}</span> : null}
-              </NavLink>
+              </Link>
             );
           })}
         </nav>
@@ -137,4 +139,9 @@ export function AppShell() {
       <ToastContainer />
     </div>
   );
+}
+
+function isActivePath(pathname: string, activeRoot: string) {
+  if (pathname === activeRoot) return true;
+  return pathname.startsWith(`${activeRoot}/`);
 }
