@@ -269,6 +269,10 @@ export function QuotePanel({ customerId }: { customerId: string }) {
   });
   const [historyQuote, setHistoryQuote] = useState<Quote | null>(null);
   const [detailQuote, setDetailQuote] = useState<Quote | null>(null);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewMode, setReviewMode] = useState<"approve" | "reject">("approve");
+  const [reviewQuote, setReviewQuote] = useState<Quote | null>(null);
+  const [reviewComment, setReviewComment] = useState("");
 
   const { data = [] } = useQuery({ queryKey: ["quotes", customerId], queryFn: () => getQuotes<Quote[]>(customerId) });
   const historyQuery = useQuery({
@@ -311,12 +315,13 @@ export function QuotePanel({ customerId }: { customerId: string }) {
   });
 
   const submitReview = useMutation({
-    mutationFn: (quoteId: string) => submitQuoteReview(quoteId),
+    mutationFn: ({ quoteId, comment }: { quoteId: string; comment?: string }) => submitQuoteReview(quoteId, { comment }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["quotes", customerId] });
       if (historyQuote) {
         queryClient.invalidateQueries({ queryKey: ["quotes", customerId, historyQuote.id] });
       }
+      closeReview();
     },
     onError: (error) => {
       showClientToast({
@@ -328,12 +333,13 @@ export function QuotePanel({ customerId }: { customerId: string }) {
   });
 
   const approve = useMutation({
-    mutationFn: (quoteId: string) => approveQuote(quoteId),
+    mutationFn: ({ quoteId, comment }: { quoteId: string; comment?: string }) => approveQuote(quoteId, { comment }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["quotes", customerId] });
       if (historyQuote) {
         queryClient.invalidateQueries({ queryKey: ["quotes", customerId, historyQuote.id] });
       }
+      closeReview();
     },
     onError: (error) => {
       showClientToast({
@@ -345,12 +351,13 @@ export function QuotePanel({ customerId }: { customerId: string }) {
   });
 
   const reject = useMutation({
-    mutationFn: (quoteId: string) => rejectQuote(quoteId, { comment: "审批驳回" }),
+    mutationFn: ({ quoteId, comment }: { quoteId: string; comment?: string }) => rejectQuote(quoteId, { comment }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["quotes", customerId] });
       if (historyQuote) {
         queryClient.invalidateQueries({ queryKey: ["quotes", customerId, historyQuote.id] });
       }
+      closeReview();
     },
     onError: (error) => {
       showClientToast({
@@ -566,6 +573,19 @@ export function QuotePanel({ customerId }: { customerId: string }) {
     setDeleteOpen(true);
   };
 
+  const openReview = (item: Quote, mode: "approve" | "reject") => {
+    setReviewQuote(item);
+    setReviewMode(mode);
+    setReviewComment(item.approvalComment ?? "");
+    setReviewOpen(true);
+  };
+
+  const closeReview = () => {
+    setReviewOpen(false);
+    setReviewQuote(null);
+    setReviewComment("");
+  };
+
   const canSubmitReview = (item: Quote) =>
     item.status !== "VOIDED" &&
     item.status !== "SENT" &&
@@ -582,6 +602,10 @@ export function QuotePanel({ customerId }: { customerId: string }) {
   const statusDisplay = quoteDisplayStatus(statusQuote);
   const createSummary = calculateQuotePricing(form);
   const editSummary = calculateQuotePricing(editForm);
+  const reviewDialogTitle = reviewMode === "approve" ? "通过审批" : "驳回审批";
+  const reviewDialogConfirmLabel = reviewMode === "approve" ? "通过" : "驳回";
+  const reviewDialogDescription = "备注可留空。";
+  const reviewPending = reviewMode === "approve" ? approve.isPending : reject.isPending;
 
   return (
     <section className="panel">
@@ -649,7 +673,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
                 <button
                   className="secondary-button icon-button"
                   disabled={!canSubmitReview(item) || submitReview.isPending}
-                  onClick={() => submitReview.mutate(item.id)}
+                  onClick={() => submitReview.mutate({ quoteId: item.id })}
                   title="提交审批流"
                   type="button"
                 >
@@ -658,7 +682,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
                 <button
                   className="secondary-button icon-button"
                   disabled={!canReview(item) || approve.isPending}
-                  onClick={() => approve.mutate(item.id)}
+                  onClick={() => openReview(item, "approve")}
                   title="通过审批"
                   type="button"
                 >
@@ -667,7 +691,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
                 <button
                   className="secondary-button icon-button"
                   disabled={!canReview(item) || reject.isPending}
-                  onClick={() => reject.mutate(item.id)}
+                  onClick={() => openReview(item, "reject")}
                   title="驳回审批"
                   type="button"
                 >
@@ -820,6 +844,48 @@ export function QuotePanel({ customerId }: { customerId: string }) {
               <strong>备注：</strong>{detailValue(detailQuote?.notes)}
             </div>
           </section>
+        </div>
+      </Dialog>
+
+      <Dialog
+        v2
+        className="crm-action-dialog"
+        title={reviewDialogTitle}
+        visible={reviewOpen}
+        onClose={closeReview}
+        footer={(
+          <div className="toolbar crm-dialog-footer">
+            <button className="secondary-button" onClick={closeReview} type="button">取消</button>
+            <button
+              className="primary-button"
+              disabled={reviewPending || !reviewQuote}
+              onClick={() => {
+                if (!reviewQuote) return;
+                const payload = { quoteId: reviewQuote.id, comment: reviewComment.trim() };
+                if (reviewMode === "approve") {
+                  approve.mutate(payload);
+                } else {
+                  reject.mutate(payload);
+                }
+              }}
+              type="button"
+            >
+              {reviewPending ? "处理中..." : reviewDialogConfirmLabel}
+            </button>
+          </div>
+        )}
+      >
+        <div className="analysis-edit-form">
+          <div className="detail-note">{reviewDialogDescription}</div>
+          <div className="form-field wide-field">
+            <label>备注（可选）</label>
+            <textarea
+              autoFocus
+              value={reviewComment}
+              onChange={(event) => setReviewComment(event.target.value)}
+              rows={4}
+            />
+          </div>
         </div>
       </Dialog>
 

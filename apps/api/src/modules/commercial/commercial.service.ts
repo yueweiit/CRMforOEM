@@ -331,6 +331,7 @@ export class CommercialService {
     this.assertQuoteSendable(quote.status, quote.approvalStatus);
     const actorName = await this.resolveActorName(user);
     return this.prisma.$transaction(async (tx) => {
+      const historyComment = this.normalizeOptionalText(dto.comment) ?? "已手动发送报价";
       const updated = await tx.quote.update({
         where: { id: quoteId },
         data: {
@@ -345,7 +346,7 @@ export class CommercialService {
           after: this.buildQuoteSnapshot(updated) as never,
           actorId: user.id,
           actorName,
-          comment: dto.comment ?? "已手动发送报价"
+          comment: historyComment
         }
       });
       return updated;
@@ -362,6 +363,7 @@ export class CommercialService {
     this.assertQuoteCustomerActionable(quote.status);
     const actorName = await this.resolveActorName(user);
     return this.prisma.$transaction(async (tx) => {
+      const historyComment = this.normalizeOptionalText(dto.comment) ?? "客户已接受报价";
       const updated = await tx.quote.update({
         where: { id: quoteId },
         data: {
@@ -376,7 +378,7 @@ export class CommercialService {
           after: this.buildQuoteSnapshot(updated) as never,
           actorId: user.id,
           actorName,
-          comment: dto.comment ?? "客户已接受报价"
+          comment: historyComment
         }
       });
       return updated;
@@ -393,6 +395,7 @@ export class CommercialService {
     this.assertQuoteCustomerActionable(quote.status);
     const actorName = await this.resolveActorName(user);
     return this.prisma.$transaction(async (tx) => {
+      const historyComment = this.normalizeOptionalText(dto.comment) ?? "客户已拒绝报价";
       const updated = await tx.quote.update({
         where: { id: quoteId },
         data: {
@@ -407,7 +410,7 @@ export class CommercialService {
           after: this.buildQuoteSnapshot(updated) as never,
           actorId: user.id,
           actorName,
-          comment: dto.comment ?? "客户已拒绝报价"
+          comment: historyComment
         }
       });
       return updated;
@@ -424,6 +427,7 @@ export class CommercialService {
     this.assertQuoteExpirable(quote.status);
     const actorName = await this.resolveActorName(user);
     return this.prisma.$transaction(async (tx) => {
+      const historyComment = this.normalizeOptionalText(dto.comment) ?? "报价已到期失效";
       const updated = await tx.quote.update({
         where: { id: quoteId },
         data: {
@@ -438,7 +442,7 @@ export class CommercialService {
           after: this.buildQuoteSnapshot(updated) as never,
           actorId: user.id,
           actorName,
-          comment: dto.comment ?? "报价已到期失效"
+          comment: historyComment
         }
       });
       return updated;
@@ -493,13 +497,14 @@ export class CommercialService {
     }
     const actorName = await this.resolveActorName(user);
     return this.prisma.$transaction(async (tx) => {
+      const approvalComment = this.normalizeOptionalText(dto.comment);
       const updated = await tx.quote.update({
         where: { id: quoteId },
         data: {
           approvalStatus: "PENDING_APPROVAL" as never,
           approvalSubmittedAt: new Date(),
           approvalSubmittedById: user.id,
-          approvalComment: dto.comment ?? null
+          approvalComment
         }
       });
       await tx.quoteHistory.create({
@@ -510,7 +515,7 @@ export class CommercialService {
           after: this.buildQuoteSnapshot(updated) as never,
           actorId: user.id,
           actorName,
-          comment: dto.comment ?? "已提交报价审批"
+          comment: approvalComment ?? "已提交报价审批"
         }
       });
       return updated;
@@ -529,13 +534,14 @@ export class CommercialService {
     }
     const actorName = await this.resolveActorName(user);
     return this.prisma.$transaction(async (tx) => {
+      const approvalComment = this.normalizeOptionalText(dto.comment);
       const updated = await tx.quote.update({
         where: { id: quoteId },
         data: {
           approvalStatus: "APPROVED" as never,
           approvalReviewedAt: new Date(),
           approvalReviewedById: user.id,
-          approvalComment: dto.comment ?? quote.approvalComment
+          approvalComment: approvalComment ?? quote.approvalComment
         }
       });
       await tx.quoteHistory.create({
@@ -546,7 +552,7 @@ export class CommercialService {
           after: this.buildQuoteSnapshot(updated) as never,
           actorId: user.id,
           actorName,
-          comment: dto.comment ?? "已通过报价审批"
+          comment: approvalComment ?? "已通过报价审批"
         }
       });
       return updated;
@@ -565,13 +571,14 @@ export class CommercialService {
     }
     const actorName = await this.resolveActorName(user);
     return this.prisma.$transaction(async (tx) => {
+      const approvalComment = this.normalizeOptionalText(dto.comment);
       const updated = await tx.quote.update({
         where: { id: quoteId },
         data: {
           approvalStatus: "REJECTED" as never,
           approvalReviewedAt: new Date(),
           approvalReviewedById: user.id,
-          approvalComment: dto.comment ?? quote.approvalComment
+          approvalComment: approvalComment ?? quote.approvalComment
         }
       });
       await tx.quoteHistory.create({
@@ -582,7 +589,7 @@ export class CommercialService {
           after: this.buildQuoteSnapshot(updated) as never,
           actorId: user.id,
           actorName,
-          comment: dto.comment ?? "已驳回报价审批"
+          comment: approvalComment ?? "已驳回报价审批"
         }
       });
       return updated;
@@ -603,6 +610,7 @@ export class CommercialService {
     this.assertSampleTransition(sample.status, targetStatus as string);
     const nextCarrier = dto.carrier !== undefined ? this.normalizeOptionalText(dto.carrier) : sample.carrier;
     const nextTrackingNo = dto.trackingNo !== undefined ? this.normalizeOptionalText(dto.trackingNo) : sample.trackingNo;
+    const approvalComment = dto.comment !== undefined ? this.normalizeOptionalText(dto.comment) : sample.approvalComment;
     this.assertSampleShipmentFields(targetStatus as string, nextCarrier, nextTrackingNo);
     const targetQuote = dto.quoteId !== undefined
       ? (dto.quoteId ? await this.ensureQuoteVisible(user, dto.quoteId, sample.customerId) : null)
@@ -625,6 +633,7 @@ export class CommercialService {
           ...(dto.shippedAt !== undefined ? { shippedAt: dto.shippedAt ? new Date(dto.shippedAt) : null } : {}),
           ...(dto.deliveredAt !== undefined ? { deliveredAt: dto.deliveredAt ? new Date(dto.deliveredAt) : null } : {}),
           ...(dto.feedback !== undefined ? { feedback: dto.feedback } : {}),
+          ...(["PREPARING", "REQUESTED"].includes(targetStatus as string) && dto.comment !== undefined ? { approvalComment } : {}),
           ...(dto.status !== undefined ? { status: dto.status as never } : {}),
           ...(dto.status === "PREPARING" ? { approvedAt: sample.approvedAt ?? new Date() } : {}),
           ...(dto.status === "SHIPPED" ? { shippedAt: sample.shippedAt ?? new Date() } : {}),
@@ -665,6 +674,7 @@ export class CommercialService {
         });
       }
       if (dto.status !== undefined && dto.status !== sample.status) {
+        const isApprovalDecision = ["PREPARING", "REQUESTED"].includes(targetStatus as string);
         await tx.sampleHistory.create({
           data: {
             sampleRequestId: sampleId,
@@ -673,7 +683,9 @@ export class CommercialService {
             after: this.buildSampleSnapshot(updated, targetQuote ?? sample.quote ?? null) as never,
             actorId: user.id,
             actorName,
-          comment: `样品状态变更为 ${this.labelSampleStatus(dto.status as string)}`
+            comment: isApprovalDecision && approvalComment
+              ? approvalComment
+              : `样品状态变更为 ${this.labelSampleStatus(dto.status as string)}`
           }
         });
       } else {
@@ -1191,6 +1203,7 @@ export class CommercialService {
     shippedAt: Date | null;
     deliveredAt: Date | null;
     approvedAt: Date | null;
+    approvalComment: string | null;
     returnedAt: Date | null;
     storedAt: Date | null;
     voidedAt: Date | null;
@@ -1224,6 +1237,7 @@ export class CommercialService {
       shippedAt: sample.shippedAt ? sample.shippedAt.toISOString() : null,
       deliveredAt: sample.deliveredAt ? sample.deliveredAt.toISOString() : null,
       approvedAt: sample.approvedAt ? sample.approvedAt.toISOString() : null,
+      approvalComment: sample.approvalComment,
       returnedAt: sample.returnedAt ? sample.returnedAt.toISOString() : null,
       storedAt: sample.storedAt ? sample.storedAt.toISOString() : null,
       voidedAt: sample.voidedAt ? sample.voidedAt.toISOString() : null,
@@ -1404,6 +1418,7 @@ export class CommercialService {
       shippedAt: Date | null;
       deliveredAt: Date | null;
       feedback: string | null;
+      approvalComment: string | null;
       fileAssetIds: string[];
       customer: { name: string };
       quote: { quoteNo: string; productName: string; status: string; approvalStatus: string; amount: { toString(): string }; currency: string } | null;
@@ -1424,6 +1439,7 @@ export class CommercialService {
       "样品数量",
       "样品用途",
       "样品状态",
+      "审批备注",
       "运单号",
       "物流商",
       "发货时间",
@@ -1453,6 +1469,7 @@ export class CommercialService {
           sample.sampleQuantity === null ? "" : String(sample.sampleQuantity),
           sample.samplePurpose ?? "",
           this.labelSampleStatus(sample.status),
+          sample.approvalComment ?? "",
           sample.trackingNo ?? "",
           sample.carrier ?? "",
           sample.shippedAt ? sample.shippedAt.toISOString() : "",

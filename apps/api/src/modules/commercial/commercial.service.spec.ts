@@ -41,6 +41,7 @@ function buildService(sampleStatus = "PREPARING", quoteState?: { status: string;
     shippedAt: null,
     deliveredAt: null,
     approvedAt: null,
+    approvalComment: null,
     returnedAt: null,
     storedAt: null,
     voidedAt: null,
@@ -166,6 +167,7 @@ function buildService(sampleStatus = "PREPARING", quoteState?: { status: string;
           shippedAt: null,
           deliveredAt: null,
           approvedAt: null,
+          approvalComment: null,
           returnedAt: null,
           storedAt: null,
           voidedAt: null,
@@ -183,6 +185,7 @@ function buildService(sampleStatus = "PREPARING", quoteState?: { status: string;
           fileAssetIds: data.fileAssetIds ?? sample.fileAssetIds,
           trackingNo: data.trackingNo ?? sample.trackingNo,
           carrier: data.carrier ?? sample.carrier,
+          approvalComment: data.approvalComment ?? sample.approvalComment,
           status: data.status ?? sample.status,
           updatedAt: new Date("2026-07-06T01:00:00.000Z")
         };
@@ -442,10 +445,35 @@ async function main() {
     const { service, calls } = buildService("APPROVING");
 
     await service.updateSample(user, "sample-1", {
-      status: "REQUESTED"
+      status: "PREPARING",
+      comment: "样品审核通过"
+    });
+
+    assert.equal(calls.sampleUpdate?.status, "PREPARING");
+    assert.equal(calls.sampleUpdate?.approvalComment, "样品审核通过");
+  }
+
+  {
+    const { service, calls } = buildService("APPROVING");
+
+    await service.updateSample(user, "sample-1", {
+      status: "REQUESTED",
+      comment: "资料还不完整"
     });
 
     assert.equal(calls.sampleUpdate?.status, "REQUESTED");
+    assert.equal(calls.sampleUpdate?.approvalComment, "资料还不完整");
+  }
+
+  {
+    const { service, calls } = buildService("APPROVING");
+
+    await service.updateSample(user, "sample-1", {
+      status: "PREPARING",
+      comment: ""
+    });
+
+    assert.equal(calls.sampleUpdate?.approvalComment, null);
   }
 
   {
@@ -474,6 +502,26 @@ async function main() {
     const { service, calls } = buildService("PREPARING", { status: "DRAFT", approvalStatus: "DRAFT" });
     await service.submitQuoteReview(user, "quote-1", {});
     assert.equal(calls.quoteUpdate?.approvalStatus, "PENDING_APPROVAL");
+  }
+
+  {
+    const { service, calls } = buildService("PREPARING", { status: "DRAFT", approvalStatus: "DRAFT" });
+    await service.submitQuoteReview(user, "quote-1", { comment: "" });
+    assert.equal(calls.quoteUpdate?.approvalComment, null);
+  }
+
+  {
+    const { service, calls } = buildService("PREPARING", { status: "DRAFT", approvalStatus: "PENDING_APPROVAL" });
+    await service.approveQuote(user, "quote-1", { comment: "审批通过，建议继续发送" });
+    assert.equal(calls.quoteUpdate?.approvalStatus, "APPROVED");
+    assert.equal(calls.quoteUpdate?.approvalComment, "审批通过，建议继续发送");
+  }
+
+  {
+    const { service, calls } = buildService("PREPARING", { status: "DRAFT", approvalStatus: "PENDING_APPROVAL" });
+    await service.rejectQuote(user, "quote-1", { comment: "报价参数需要调整" });
+    assert.equal(calls.quoteUpdate?.approvalStatus, "REJECTED");
+    assert.equal(calls.quoteUpdate?.approvalComment, "报价参数需要调整");
   }
 
   {

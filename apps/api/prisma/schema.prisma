@@ -1081,6 +1081,7 @@ model SampleRequest {
   shippedAt         DateTime?
   deliveredAt       DateTime?
   approvedAt        DateTime?
+  approvalComment   String?
   returnedAt        DateTime?
   storedAt          DateTime?
   voidedAt          DateTime?

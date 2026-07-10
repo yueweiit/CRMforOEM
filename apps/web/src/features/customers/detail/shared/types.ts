@@ -222,6 +222,7 @@ export type Sample = {
   shippedAt?: string | null;
   deliveredAt?: string | null;
   approvedAt?: string | null;
+  approvalComment?: string | null;
   returnedAt?: string | null;
   storedAt?: string | null;
   voidedAt?: string | null;

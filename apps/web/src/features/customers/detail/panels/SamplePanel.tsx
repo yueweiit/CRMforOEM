@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog } from "@alifd/next";
 import "@alifd/next/lib/dialog/style.js";
-import { CheckCircle2, Download, History, NotebookTabs, Undo2, XCircle } from "lucide-react";
+import { CheckCircle2, Download, History, NotebookTabs, XCircle } from "lucide-react";
 import "./analysis-edit.css";
 import { quoteFlowStatusLabel } from "@oem-crm/shared";
 import { showClientToast } from "../../../../components/Toast";
@@ -74,11 +74,28 @@ function statusLabel(status: string) {
   return labels[status] ?? status;
 }
 
-function historyActionLabel(action: string) {
+function historyActionLabel(item: SampleHistoryItem) {
+  if (item.action === "STATUS_CHANGED") {
+    const beforeStatus = typeof item.before?.status === "string" ? item.before.status : "";
+    const afterStatus = typeof item.after?.status === "string" ? item.after.status : "";
+    const statusLabels: Record<string, string> = {
+      APPROVING: "发起审核",
+      PREPARING: beforeStatus === "APPROVING" ? "审核通过" : "打样中",
+      REQUESTED: beforeStatus === "APPROVING" ? "审核驳回" : "待申请",
+      SHIPPED: "已寄出",
+      DELIVERED: "已签收",
+      FEEDBACK_RECEIVED: "已反馈",
+      RETURNED: "已归还",
+      STORED: "已留样",
+      VOIDED: "已作废",
+      CLOSED: "已关闭"
+    };
+    return statusLabels[afterStatus] ?? "状态变更";
+  }
+
   const labels: Record<string, string> = {
     CREATED: "创建",
     UPDATED: "更新",
-    STATUS_CHANGED: "状态变更",
     FEE_ADDED: "费用记录",
     FEE_UPDATED: "费用更新",
     FEE_DELETED: "费用删除",
@@ -88,7 +105,7 @@ function historyActionLabel(action: string) {
     VOIDED: "作废",
     CLOSED: "关闭"
   };
-  return labels[action] ?? action;
+  return labels[item.action] ?? item.action;
 }
 
 function feeTypeLabel(type: string) {
@@ -235,6 +252,13 @@ function statusDialogTransitions(status: string) {
   return allowedTransitions(status).filter((nextStatus) => nextStatus !== "VOIDED");
 }
 
+function statusDialogActionLabel(currentStatus: string, nextStatus: string) {
+  if (currentStatus === "REQUESTED" && nextStatus === "APPROVING") {
+    return "发起审核";
+  }
+  return statusLabel(nextStatus);
+}
+
 function buildCreatePayload(customerId: string, form: {
   productSummary: string;
   specification: string;
@@ -310,12 +334,13 @@ function buildUpdatePayload(form: {
 function shippingValidationMessage(form: {
   carrier: string;
   trackingNo: string;
+  shippedAt: string;
 }, sampleStatus: string) {
   if (sampleStatus !== "SHIPPED") {
     return "";
   }
-  if (!form.carrier.trim() || !form.trackingNo.trim()) {
-    return "样品寄出时必须填写物流商和运单号。";
+  if (!form.carrier.trim() || !form.trackingNo.trim() || !form.shippedAt.trim()) {
+    return "样品寄出时必须填写物流商、运单号和发货日期。";
   }
   return "";
 }
@@ -396,20 +421,25 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   const [feeOpen, setFeeOpen] = useState(false);
   const [feeMode, setFeeMode] = useState<"create" | "edit">("create");
   const [feeDeleteOpen, setFeeDeleteOpen] = useState(false);
-  const [returnOpen, setReturnOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [editing, setEditing] = useState<Sample | null>(null);
   const [statusSample, setStatusSample] = useState<Sample | null>(null);
   const [statusForm, setStatusForm] = useState({
     carrier: "",
-    trackingNo: ""
+    trackingNo: "",
+    shippedAt: formatDateInput(new Date()),
+    deliveredAt: "",
+    feedback: ""
   });
   const [feeSample, setFeeSample] = useState<Sample | null>(null);
   const [feeEditing, setFeeEditing] = useState<{ sampleId: string; feeId: string } | null>(null);
   const [feeDeleting, setFeeDeleting] = useState<{ sampleId: string; feeId: string; feeType: string } | null>(null);
-  const [returnSample, setReturnSample] = useState<Sample | null>(null);
   const [historySample, setHistorySample] = useState<Sample | null>(null);
+  const [approvalOpen, setApprovalOpen] = useState(false);
+  const [approvalMode, setApprovalMode] = useState<"approve" | "reject">("approve");
+  const [approvalSample, setApprovalSample] = useState<Sample | null>(null);
+  const [approvalComment, setApprovalComment] = useState("");
   const [editForm, setEditForm] = useState({
     productSummary: "",
     specification: "",
@@ -545,17 +575,20 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   });
 
   const statusMutation = useMutation({
-    mutationFn: (payload: { sampleId: string; status: string; carrier?: string; trackingNo?: string }) =>
+    mutationFn: (payload: { sampleId: string; status: string; carrier?: string; trackingNo?: string; shippedAt?: string; deliveredAt?: string; feedback?: string }) =>
       updateSample(payload.sampleId, {
         status: payload.status,
         ...(payload.carrier !== undefined ? { carrier: payload.carrier } : {}),
-        ...(payload.trackingNo !== undefined ? { trackingNo: payload.trackingNo } : {})
+        ...(payload.trackingNo !== undefined ? { trackingNo: payload.trackingNo } : {}),
+        ...(payload.shippedAt !== undefined ? { shippedAt: payload.shippedAt } : {}),
+        ...(payload.deliveredAt !== undefined ? { deliveredAt: payload.deliveredAt } : {}),
+        ...(payload.feedback !== undefined ? { feedback: payload.feedback } : {})
       }),
     onSuccess: () => {
       refreshSamples();
       setStatusOpen(false);
       setStatusSample(null);
-      setStatusForm({ carrier: "", trackingNo: "" });
+      setStatusForm({ carrier: "", trackingNo: "", shippedAt: formatDateInput(new Date()), deliveredAt: "", feedback: "" });
       showClientToast({ type: "success", title: "状态已更新", message: "样品状态已保存。" });
     },
     onError: (error) => {
@@ -568,9 +601,13 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   });
 
   const approve = useMutation({
-    mutationFn: (item: Sample) => updateSample(item.id, { status: "PREPARING" }),
+    mutationFn: ({ sampleId, comment }: { sampleId: string; comment?: string }) =>
+      updateSample(sampleId, { status: "PREPARING", ...(comment ? { comment } : {}) }),
     onSuccess: () => {
       refreshSamples();
+      setApprovalOpen(false);
+      setApprovalSample(null);
+      setApprovalComment("");
       showClientToast({ type: "success", title: "审核成功", message: "样品已进入打样中。" });
     },
     onError: (error) => {
@@ -583,9 +620,13 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   });
 
   const reject = useMutation({
-    mutationFn: (sampleId: string) => updateSample(sampleId, { status: "REQUESTED" }),
+    mutationFn: ({ sampleId, comment }: { sampleId: string; comment?: string }) =>
+      updateSample(sampleId, { status: "REQUESTED", ...(comment ? { comment } : {}) }),
     onSuccess: () => {
       refreshSamples();
+      setApprovalOpen(false);
+      setApprovalSample(null);
+      setApprovalComment("");
       showClientToast({ type: "success", title: "驳回成功", message: "样品申请已退回待申请。" });
     },
     onError: (error) => {
@@ -650,16 +691,14 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   });
 
   const returnMutation = useMutation({
-    mutationFn: () =>
-      recordSampleReturn(returnSample?.id ?? "", {
+    mutationFn: (returnType: "RETURNED" | "STORED") =>
+      recordSampleReturn(currentStatusSample?.id ?? "", {
         ...returnForm,
-        returnType: returnForm.returnType,
+        returnType,
         recordedAt: returnForm.recordedAt || undefined
       }),
     onSuccess: () => {
       refreshSamples();
-      setReturnOpen(false);
-      setReturnSample(null);
       setReturnForm({
         returnType: "RETURNED",
         receiverName: "",
@@ -667,6 +706,8 @@ export function SamplePanel({ customerId }: { customerId: string }) {
         note: "",
         recordedAt: formatDateInput(new Date())
       });
+      setStatusOpen(false);
+      setStatusSample(null);
       showClientToast({ type: "success", title: "归还/留样已记录", message: "样品状态已更新。" });
     },
     onError: (error) => {
@@ -720,7 +761,10 @@ export function SamplePanel({ customerId }: { customerId: string }) {
     setStatusSample(item);
     setStatusForm({
       carrier: item.carrier ?? "",
-      trackingNo: item.trackingNo ?? ""
+      trackingNo: item.trackingNo ?? "",
+      shippedAt: item.shippedAt ? formatDateInput(new Date(item.shippedAt)) : formatDateInput(new Date()),
+      deliveredAt: item.deliveredAt ? formatDateInput(new Date(item.deliveredAt)) : "",
+      feedback: item.feedback ?? ""
     });
     setStatusOpen(true);
   };
@@ -773,18 +817,6 @@ export function SamplePanel({ customerId }: { customerId: string }) {
     setFeeDeleteOpen(true);
   };
 
-  const openReturn = (item: Sample) => {
-    setReturnSample(item);
-    setReturnForm({
-      returnType: item.status === "STORED" ? "STORED" : "RETURNED",
-      receiverName: "",
-      destination: "",
-      note: "",
-      recordedAt: formatDateInput(new Date())
-    });
-    setReturnOpen(true);
-  };
-
   const openHistory = (item: Sample) => {
     setHistorySample(item);
     setHistoryOpen(true);
@@ -795,16 +827,34 @@ export function SamplePanel({ customerId }: { customerId: string }) {
     setDeleteOpen(true);
   };
 
+  const openApproval = (item: Sample, mode: "approve" | "reject") => {
+    setApprovalSample(item);
+    setApprovalMode(mode);
+    setApprovalComment(item.approvalComment ?? "");
+    setApprovalOpen(true);
+  };
+
+  const closeApproval = () => {
+    setApprovalOpen(false);
+    setApprovalSample(null);
+    setApprovalComment("");
+  };
+
   const canEdit = (item: Sample) => item.status !== "VOIDED" && item.status !== "CLOSED";
   const canApprove = (item: Sample) => item.status === "APPROVING";
   const canReject = (item: Sample) => item.status === "APPROVING";
-  const canReturn = (item: Sample) => ["SHIPPED", "DELIVERED", "FEEDBACK_RECEIVED"].includes(item.status);
   const canDelete = (item: Sample) => item.status !== "VOIDED" && item.status !== "CLOSED";
   const currentHistory = historyQuery.data ?? [];
   const createMessage = createSampleValidationMessage(createForm);
   const createFeeMessage = createFeeValidationMessage(createFeeForms);
   const createReady = createMessage === "" && createFeeMessage === "";
   const shippingMessage = shippingValidationMessage(editForm, editing?.status ?? "");
+  const approvalDialogTitle = approvalMode === "approve" ? "审核通过" : "审核驳回";
+  const approvalDialogConfirmLabel = approvalMode === "approve" ? "通过" : "驳回";
+  const approvalDialogDescription =
+    approvalMode === "approve" ? "备注可留空；填写后保留审核依据。" : "备注可留空；填写后说明需要补充或修改的内容。";
+  const approvalPending = approvalMode === "approve" ? approve.isPending : reject.isPending;
+  const currentStatus = currentStatusSample?.status ?? "";
   const detailQuote = detailSample?.quoteId ? quoteOptions.find((quote) => quote.id === detailSample.quoteId) ?? null : null;
 
   return (
@@ -879,14 +929,11 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                   <button className="secondary-button" disabled={item.status === "APPROVING" || !statusDialogTransitions(item.status).length} onClick={() => openStatus(item)} type="button">
                     状态
                   </button>
-                  <button className="secondary-button icon-button" disabled={!canApprove(item) || approve.isPending} onClick={() => approve.mutate(item)} title="审核通过" type="button">
+                  <button className="secondary-button icon-button" disabled={!canApprove(item) || approve.isPending} onClick={() => openApproval(item, "approve")} title="审核通过" type="button">
                     <CheckCircle2 size={14} />
                   </button>
-                  <button className="secondary-button icon-button" disabled={!canReject(item) || reject.isPending} onClick={() => reject.mutate(item.id)} title="审核驳回" type="button">
+                  <button className="secondary-button icon-button" disabled={!canReject(item) || reject.isPending} onClick={() => openApproval(item, "reject")} title="审核驳回" type="button">
                     <XCircle size={14} />
-                  </button>
-                  <button className="secondary-button icon-button" disabled={!canReturn(item)} onClick={() => openReturn(item)} title="归还/留样" type="button">
-                    <Undo2 size={14} />
                   </button>
                   <DeleteIconButton disabled={!canDelete(item)} onClick={() => openDelete(item)} />
                 </div>
@@ -1125,6 +1172,10 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                 <div className="detail-card">
                   <span>审核通过时间</span>
                   <strong>{detailSample?.approvedAt ? new Date(detailSample.approvedAt).toLocaleString() : "-"}</strong>
+                </div>
+                <div className="detail-card">
+                  <span>审批备注</span>
+                  <strong>{detailValue(detailSample?.approvalComment)}</strong>
                 </div>
                 <div className="detail-card">
                   <span>归还时间</span>
@@ -1475,9 +1526,64 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                   <label>运单号</label>
                   <input value={statusForm.trackingNo} onChange={(e) => setStatusForm({ ...statusForm, trackingNo: e.target.value })} />
                 </div>
+                <div className="form-field sample-status-field">
+                  <label>发货日期</label>
+                  <input type="date" value={statusForm.shippedAt} onChange={(e) => setStatusForm({ ...statusForm, shippedAt: e.target.value })} />
+                </div>
               </div>
               <div className="empty-state" style={{ marginTop: 12 }}>
                 填写后可以直接把状态推进到已寄出。
+              </div>
+            </section>
+          ) : null}
+          {currentStatusSample?.status === "SHIPPED" ? (
+            <section className="detail-section">
+              <h4>签收信息</h4>
+              <div className="form-field sample-status-field">
+                <label>签收日期（可选）</label>
+                <input
+                  type="date"
+                  value={statusForm.deliveredAt}
+                  onChange={(e) => setStatusForm({ ...statusForm, deliveredAt: e.target.value })}
+                />
+              </div>
+              <div className="empty-state" style={{ marginTop: 12 }}>
+                可留空；填写后会一并记录到已签收状态。
+              </div>
+            </section>
+          ) : null}
+          {currentStatusSample?.status === "DELIVERED" ? (
+            <section className="detail-section">
+              <h4>反馈 / 归还信息</h4>
+              <div className="analysis-edit-form">
+                <div className="form-field wide-field">
+                  <label>反馈（可选）</label>
+                  <textarea value={statusForm.feedback} onChange={(e) => setStatusForm({ ...statusForm, feedback: e.target.value })} rows={4} />
+                </div>
+              </div>
+              <div className="empty-state" style={{ marginTop: 12 }}>
+                可留空；填写后会记录在样品反馈中。
+              </div>
+              <div className="analysis-edit-form" style={{ marginTop: 16 }}>
+                <div className="form-field">
+                  <label>接收人</label>
+                  <input
+                    value={returnForm.receiverName}
+                    onChange={(e) => setReturnForm({ ...returnForm, receiverName: e.target.value })}
+                  />
+                </div>
+                <div className="form-field">
+                  <label>去向</label>
+                  <input value={returnForm.destination} onChange={(e) => setReturnForm({ ...returnForm, destination: e.target.value })} />
+                </div>
+                <div className="form-field">
+                  <label>记录日期</label>
+                  <input type="date" value={returnForm.recordedAt} onChange={(e) => setReturnForm({ ...returnForm, recordedAt: e.target.value })} />
+                </div>
+                <div className="form-field wide-field">
+                  <label>备注</label>
+                  <textarea value={returnForm.note} onChange={(e) => setReturnForm({ ...returnForm, note: e.target.value })} rows={3} />
+                </div>
               </div>
             </section>
           ) : null}
@@ -1485,38 +1591,91 @@ export function SamplePanel({ customerId }: { customerId: string }) {
             <h4>可执行操作</h4>
             <div className="toolbar">
               {statusTransitions.length ? (
-                statusTransitions.map((nextStatus) => {
+                statusTransitions
+                  .filter((nextStatus) => currentStatusSample?.status !== "DELIVERED" || ["RETURNED", "STORED"].includes(nextStatus))
+                  .map((nextStatus) => {
                   const requiresShipmentInfo = nextStatus === "SHIPPED";
+                  const requiresDeliveryInfo = nextStatus === "DELIVERED";
                   const shipmentMissing = requiresShipmentInfo && (!statusForm.carrier.trim() || !statusForm.trackingNo.trim());
                   return (
                     <button
                       className="primary-button"
-                      disabled={statusMutation.isPending || shipmentMissing || !currentStatusSample}
+                      disabled={statusMutation.isPending || returnMutation.isPending || shipmentMissing || !currentStatusSample}
                       key={nextStatus}
                       onClick={() => {
                         if (!currentStatusSample) return;
+                        if (nextStatus === "RETURNED" || nextStatus === "STORED") {
+                          returnMutation.mutate(nextStatus);
+                          return;
+                        }
                         statusMutation.mutate({
                           sampleId: currentStatusSample.id,
                           status: nextStatus,
-                          ...(requiresShipmentInfo ? { carrier: statusForm.carrier, trackingNo: statusForm.trackingNo } : {})
+                          ...(requiresShipmentInfo ? { carrier: statusForm.carrier, trackingNo: statusForm.trackingNo, shippedAt: statusForm.shippedAt } : {}),
+                          ...(requiresDeliveryInfo ? { deliveredAt: statusForm.deliveredAt || undefined } : {}),
+                          ...(currentStatusSample.status === "DELIVERED" ? { feedback: statusForm.feedback || undefined } : {})
                         });
                       }}
                       type="button"
                     >
-                      {statusLabel(nextStatus)}
+                      {statusDialogActionLabel(currentStatus, nextStatus)}
                     </button>
                   );
-                })
+                  })
               ) : (
                 <div className="empty-state">当前状态没有可执行的流转操作。</div>
               )}
             </div>
-            {currentStatusSample && statusTransitions.includes("SHIPPED") && currentStatusSample.status === "PREPARING" && (!statusForm.carrier.trim() || !statusForm.trackingNo.trim()) ? (
+            {currentStatusSample && statusTransitions.includes("SHIPPED") && currentStatusSample.status === "PREPARING" && (!statusForm.carrier.trim() || !statusForm.trackingNo.trim() || !statusForm.shippedAt.trim()) ? (
               <div className="error-state" style={{ marginTop: 12 }}>
-                切换为已寄出前，请先填写物流商和运单号。
+                切换为已寄出前，请先填写物流商、运单号和发货日期。
               </div>
             ) : null}
           </section>
+        </div>
+      </Dialog>
+
+      <Dialog
+        v2
+        className="crm-action-dialog"
+        title={approvalDialogTitle}
+        visible={approvalOpen}
+        onClose={closeApproval}
+        footer={
+          <div className="toolbar crm-dialog-footer">
+            <button className="secondary-button" onClick={closeApproval} type="button">
+              取消
+            </button>
+            <button
+              className="primary-button"
+              disabled={approvalPending || !approvalSample}
+              onClick={() => {
+                if (!approvalSample) return;
+                const payload = { sampleId: approvalSample.id, comment: approvalComment.trim() };
+                if (approvalMode === "approve") {
+                  approve.mutate(payload);
+                } else {
+                  reject.mutate(payload);
+                }
+              }}
+              type="button"
+            >
+              {approvalPending ? "处理中..." : approvalDialogConfirmLabel}
+            </button>
+          </div>
+        }
+      >
+        <div className="analysis-edit-form">
+          <div className="detail-note">{approvalDialogDescription}</div>
+          <div className="form-field wide-field">
+            <label>备注（可选）</label>
+            <textarea
+              autoFocus
+              value={approvalComment}
+              onChange={(event) => setApprovalComment(event.target.value)}
+              rows={4}
+            />
+          </div>
         </div>
       </Dialog>
 
@@ -1614,53 +1773,6 @@ export function SamplePanel({ customerId }: { customerId: string }) {
       <Dialog
         v2
         className="crm-action-dialog"
-        title="归还 / 留样"
-        visible={returnOpen}
-        onClose={() => setReturnOpen(false)}
-        footer={
-          <div className="toolbar crm-dialog-footer">
-            <button className="secondary-button" onClick={() => setReturnOpen(false)} type="button">
-              取消
-            </button>
-            <button className="primary-button" disabled={returnMutation.isPending} onClick={() => returnMutation.mutate()} type="button">
-              {returnMutation.isPending ? "保存中..." : "保存"}
-            </button>
-          </div>
-        }
-      >
-        <div className="analysis-edit-form">
-          <div className="form-field">
-            <label>动作类型</label>
-            <select value={returnForm.returnType} onChange={(e) => setReturnForm({ ...returnForm, returnType: e.target.value })}>
-              {RETURN_TYPES.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="form-field">
-            <label>接收人</label>
-            <input value={returnForm.receiverName} onChange={(e) => setReturnForm({ ...returnForm, receiverName: e.target.value })} />
-          </div>
-          <div className="form-field">
-            <label>去向</label>
-            <input value={returnForm.destination} onChange={(e) => setReturnForm({ ...returnForm, destination: e.target.value })} />
-          </div>
-          <div className="form-field">
-            <label>记录日期</label>
-            <input type="date" value={returnForm.recordedAt} onChange={(e) => setReturnForm({ ...returnForm, recordedAt: e.target.value })} />
-          </div>
-          <div className="form-field wide-field">
-            <label>备注</label>
-            <textarea value={returnForm.note} onChange={(e) => setReturnForm({ ...returnForm, note: e.target.value })} rows={3} />
-          </div>
-        </div>
-      </Dialog>
-
-      <Dialog
-        v2
-        className="crm-action-dialog"
         title={`样品历史 · ${historySample?.productSummary ?? ""}`}
         visible={historyOpen}
         onClose={() => setHistoryOpen(false)}
@@ -1681,7 +1793,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                 <div className="task-row" key={item.id}>
                   <History size={16} />
                   <div>
-                    <strong>{historyActionLabel(item.action)}</strong>
+                    <strong>{historyActionLabel(item)}</strong>
                     <span>
                       {new Date(item.createdAt).toLocaleString()} {item.actorName ?? item.actorId ?? "系统"}
                     </span>

@@ -29,4 +29,5 @@ export class UpdateSampleRequestDto {
   @IsOptional() @IsDateString() shippedAt?: string;
   @IsOptional() @IsDateString() deliveredAt?: string;
   @IsOptional() @IsString() feedback?: string;
+  @IsOptional() @IsString() comment?: string;
 }
