@@ -113,12 +113,20 @@ export { QUOTE_FLOW_STATUS_LABELS, STAGE_LABELS, stageLabel, TASK_TYPE_LABELS, t
 export {
   QUOTE_PRICING_FORMULA_TEXT,
   QUOTE_UNIT_PRICE_FORMULA_TEXT,
+  QUOTE_FORMULA_TEXT_MATERIAL,
+  QUOTE_FORMULA_TEXT_PROCESSING,
+  QUOTE_FORMULA_TEXT_SHIPPING,
+  QUOTE_FORMULA_TEXT_TAX,
   calculateQuotePricing
 } from "./quote-pricing";
 export type {
   QuotePricingInput,
   QuotePricingResult,
-  QuotePricingValue
+  QuotePricingValue,
+  QuotePricingCalcMode,
+  QuotePricingBreakdown,
+  QuotePricingMaterialItem,
+  QuotePricingMaterialBreakdownItem
 } from "./quote-pricing";
 
 export type OemScoreBreakdown = {

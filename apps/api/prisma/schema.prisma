@@ -1024,8 +1024,22 @@ model Quote {
   materialCost         Decimal             @default(0)
   processingCost       Decimal             @default(0)
   taxCost              Decimal             @default(0)
-  shippingCost         Decimal             @default(0)
+  shippingCost          Decimal             @default(0)
   discountAmount       Decimal             @default(0)
+  // 公式模式：成本计算明细输入（calcMode="formula" 时使用，直接模式为 null）
+  calcMode              String              @default("direct")
+  materialItems         Json?
+  materialProfitRate    Decimal?
+  processingTime        Decimal?
+  processingHourlyRate  Decimal?
+  processingProfitRate Decimal?
+  grossWeight           Decimal?
+  packageLength         Decimal?
+  packageWidth          Decimal?
+  packageHeight         Decimal?
+  volumeDivisor         Decimal?
+  shippingUnitPrice     Decimal?
+  vatRate               Decimal?
   validUntil           DateTime?
   fileAssetId          String?
   notes                String?

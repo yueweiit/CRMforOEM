@@ -910,7 +910,8 @@ td small {
 .score-manual-input,
 .analysis-edit-form textarea,
 .analysis-edit-form input,
-.analysis-edit-form select {
+.analysis-edit-form select,
+.quote-calc-mode-select {
   min-height: 38px;
   border: 1px solid #dce3dd;
   border-radius: 8px;
@@ -925,7 +926,8 @@ td small {
 .score-manual-input:hover,
 .analysis-edit-form textarea:hover,
 .analysis-edit-form input:hover,
-.analysis-edit-form select:hover {
+.analysis-edit-form select:hover,
+.quote-calc-mode-select:hover {
   border-color: #c8d4cc;
   background: white;
 }
@@ -933,7 +935,8 @@ td small {
 .score-manual-input:focus,
 .analysis-edit-form textarea:focus,
 .analysis-edit-form input:focus,
-.analysis-edit-form select:focus {
+.analysis-edit-form select:focus,
+.quote-calc-mode-select:focus {
   border-color: #0f766e;
   background: white;
   box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
@@ -942,6 +945,11 @@ td small {
 .analysis-edit-form textarea {
   min-height: 76px;
   resize: none;
+}
+
+.quote-calc-mode-select {
+  width: 100%;
+  min-width: 0;
 }
 
 .analysis-edit-form .sample-create-grid input,
@@ -1193,6 +1201,89 @@ td small {
   margin-left: 8px;
 }
 
+.quote-formula-section {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #e3e8df;
+  border-radius: 8px;
+  background: #fbfcfa;
+}
+
+.quote-formula-section__header {
+  display: grid;
+  gap: 4px;
+}
+
+.quote-formula-section__header strong {
+  color: #1f2933;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.quote-formula-section__header span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.quote-formula-subtitle {
+  color: #334155;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+  margin-top: 2px;
+}
+
+.quote-formula-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.quote-formula-grid--three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.quote-formula-grid--four {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.quote-formula-grid--five {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.quote-add-material-button.secondary-button {
+  justify-self: start;
+  margin-left: 0;
+}
+
+.quote-material-row {
+  align-items: end;
+  display: grid;
+  grid-template-columns: minmax(170px, 1.4fr) repeat(3, minmax(100px, 1fr)) auto;
+  gap: 10px;
+}
+
+.quote-material-row .secondary-button {
+  margin-left: 0;
+  min-height: 38px;
+  white-space: nowrap;
+}
+
+.quote-inline-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.quote-dimension-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.quote-row-action {
+  align-self: end;
+}
+
 .markdown-preview,
 .ai-versions pre {
   overflow: auto;
@@ -1437,6 +1528,35 @@ td small {
   color: #334155;
   line-height: 1.6;
   white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.quote-snapshot-formulas {
+  display: grid;
+  gap: 12px;
+}
+
+.quote-snapshot-formula {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid #e3e8df;
+  border-radius: 8px;
+  background: #fbfcfa;
+}
+
+.quote-snapshot-formula span {
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.quote-snapshot-formula strong {
+  color: #1f2933;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.45;
   word-break: break-word;
 }
 
@@ -2047,6 +2167,14 @@ td small {
 
   .detail-page-breadcrumb-list {
     flex-wrap: wrap;
+  }
+
+  .quote-material-row,
+  .quote-dimension-grid,
+  .quote-formula-grid--three,
+  .quote-formula-grid--four,
+  .quote-formula-grid--five {
+    grid-template-columns: 1fr;
   }
 }
 

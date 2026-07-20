@@ -63,13 +63,238 @@
 
 ### 2.3 当前数据合同
 
-Prisma 中已经有基础表和枚举：
+Prisma 中已有完整的报价与样品相关表和枚举定义，以下为详细结构。
 
-- `QuoteApprovalStatus`: `DRAFT`、`PENDING_APPROVAL`、`APPROVED`、`REJECTED`
-- `QuoteStatus`: `DRAFT`、`PENDING_APPROVAL`、`APPROVED`、`REJECTED`、`CUSTOMER_REJECTED`、`SENT`、`ACCEPTED`、`EXPIRED`、`VOIDED`
-- `SampleStatus`: `REQUESTED`、`APPROVING`、`PREPARING`、`SHIPPED`、`DELIVERED`、`FEEDBACK_RECEIVED`、`RETURNED`、`STORED`、`VOIDED`、`CLOSED`
-- `Quote`：`quoteNo`、`productName`、`specification`、`moq`、`quantity`、`unitPrice`、`currency`、`amount`、`validUntil`、`fileAssetId`、`notes`
-- `SampleRequest`：`productSummary`、`trackingNo`、`carrier`、`shippedAt`、`deliveredAt`、`returnedAt`、`storedAt`、`closedAt`、`feedback`
+#### 2.3.1 枚举定义
+
+**报价状态 `QuoteStatus`**
+
+| 值 | 说明 |
+|---|---|
+| `DRAFT` | 草稿 |
+| `SENT` | 已发送 |
+| `ACCEPTED` | 客户接受 |
+| `REJECTED` | 客户拒绝 |
+| `CUSTOMER_REJECTED` | 客户拒绝（显式） |
+| `EXPIRED` | 已过期 |
+| `VOIDED` | 已作废 |
+
+**报价审批状态 `QuoteApprovalStatus`**
+
+| 值 | 说明 |
+|---|---|
+| `DRAFT` | 草稿 |
+| `PENDING_APPROVAL` | 待审批 |
+| `APPROVED` | 已通过 |
+| `REJECTED` | 已驳回 |
+
+**报价历史动作 `QuoteHistoryAction`**
+
+| 值 | 说明 |
+|---|---|
+| `CREATED` | 新建 |
+| `UPDATED` | 修改 |
+| `SUBMITTED` | 提交审批 |
+| `APPROVED` | 审批通过 |
+| `REJECTED` | 审批驳回 |
+| `VOIDED` | 作废 |
+
+**样品状态 `SampleStatus`**
+
+| 值 | 说明 |
+|---|---|
+| `REQUESTED` | 待审核 |
+| `APPROVING` | 审批中 |
+| `PREPARING` | 打样中 |
+| `SHIPPED` | 已寄出 |
+| `DELIVERED` | 已签收 |
+| `FEEDBACK_RECEIVED` | 已反馈 |
+| `RETURNED` | 已归还 |
+| `STORED` | 已留样 |
+| `VOIDED` | 已作废 |
+| `CLOSED` | 已关闭 |
+
+**样品历史动作 `SampleHistoryAction`**
+
+| 值 | 说明 |
+|---|---|
+| `CREATED` | 新建 |
+| `UPDATED` | 修改 |
+| `STATUS_CHANGED` | 状态变更 |
+| `FEE_ADDED` | 新增费用 |
+| `FEE_UPDATED` | 修改费用 |
+| `FEE_DELETED` | 删除费用 |
+| `QUOTE_LINKED` | 关联报价 |
+| `RETURNED` | 归还 |
+| `STORED` | 留样 |
+| `VOIDED` | 作废 |
+| `CLOSED` | 关闭 |
+
+**样品费用类型 `SampleFeeType`**
+
+| 值 | 说明 |
+|---|---|
+| `SAMPLE_MAKING` | 打样费 |
+| `MOLD` | 模具费 |
+| `COURIER` | 快递费 |
+| `PACKAGING` | 包装费 |
+| `RETURN` | 退回运费 |
+| `OTHER` | 其他费用 |
+
+**样品用途 `SamplePurpose`**
+
+| 值 | 说明 |
+|---|---|
+| `CUSTOMER_TEST` | 客户测试 |
+| `EXHIBITION` | 展会 |
+| `APPEARANCE_CONFIRMATION` | 外观确认 |
+
+**样品退回类型 `SampleReturnType`**
+
+| 值 | 说明 |
+|---|---|
+| `RETURNED` | 退回 |
+| `STORED` | 入库留样 |
+
+#### 2.3.2 报价表 `quotes`（Quote）
+
+| 字段 | 类型 | 约束 | 说明 |
+|---|---|---|---|
+| `id` | String | PK, cuid | 主键 |
+| `customerId` | String | FK → Customer, INDEX | 关联客户 |
+| `quoteNo` | String | UNIQUE | 报价单号 |
+| `status` | QuoteStatus | 默认 DRAFT | 报价业务状态 |
+| `approvalStatus` | QuoteApprovalStatus | 默认 DRAFT | 审批状态 |
+| `productName` | String | 默认 "" | 产品名称 |
+| `specification` | String? | | 规格 |
+| `moq` | Int | 默认 1 | 最小起订量 |
+| `quantity` | Int | 默认 1 | 数量 |
+| `unitPrice` | Decimal | 默认 0 | 单价 |
+| `currency` | String | | 币种 |
+| `amount` | Decimal | | 总金额 |
+| `materialCost` | Decimal | 默认 0 | 材料成本 |
+| `processingCost` | Decimal | 默认 0 | 加工成本 |
+| `taxCost` | Decimal | 默认 0 | 税费 |
+| `shippingCost` | Decimal | 默认 0 | 运费 |
+| `discountAmount` | Decimal | 默认 0 | 折扣金额 |
+| `validUntil` | DateTime? | | 有效期至 |
+| `fileAssetId` | String? | | 附件ID |
+| `notes` | String? | | 备注 |
+| `approvalComment` | String? | | 审批意见 |
+| `approvalSubmittedAt` | DateTime? | | 提交审批时间 |
+| `approvalSubmittedById` | String? | | 提交审批人ID |
+| `approvalReviewedAt` | DateTime? | | 审批完成时间 |
+| `approvalReviewedById` | String? | | 审批人ID |
+| `createdAt` | DateTime | 默认 now() | 创建时间 |
+| `updatedAt` | DateTime | @updatedAt | 更新时间 |
+
+关系：一个 Quote 属于一个 Customer，拥有多个 QuoteHistory 和 SampleRequest。
+
+#### 2.3.3 报价历史表 `quote_histories`（QuoteHistory）
+
+| 字段 | 类型 | 约束 | 说明 |
+|---|---|---|---|
+| `id` | String | PK, cuid | 主键 |
+| `quoteId` | String | FK → Quote, INDEX | 关联报价单 |
+| `action` | QuoteHistoryAction | | 操作类型 |
+| `before` | Json? | | 变更前快照 |
+| `after` | Json? | | 变更后快照 |
+| `comment` | String? | | 操作备注 |
+| `actorId` | String? | | 操作人ID |
+| `actorName` | String? | | 操作人姓名 |
+| `createdAt` | DateTime | 默认 now() | 操作时间 |
+
+索引：`(quoteId, createdAt)` 复合索引，支持按时间查询报价历史。
+
+#### 2.3.4 样品申请表 `sample_requests`（SampleRequest）
+
+| 字段 | 类型 | 约束 | 说明 |
+|---|---|---|---|
+| `id` | String | PK, cuid | 主键 |
+| `customerId` | String | FK → Customer, INDEX | 关联客户 |
+| `quoteId` | String? | FK → Quote, INDEX | 关联报价单 |
+| `status` | SampleStatus | 默认 REQUESTED | 样品状态 |
+| `productSummary` | String | | 产品摘要 |
+| `specification` | String? | | 规格 |
+| `material` | String? | | 材质 |
+| `process` | String? | | 工艺 |
+| `sampleQuantity` | Int? | | 样品数量 |
+| `samplePurpose` | SamplePurpose? | | 样品用途 |
+| `deliveryDeadline` | DateTime? | | 交付期限 |
+| `fileAssetIds` | String[] | 默认 [] | 附件ID列表 |
+| `trackingNo` | String? | | 快递单号 |
+| `carrier` | String? | | 物流承运商 |
+| `shippedAt` | DateTime? | | 发货时间 |
+| `deliveredAt` | DateTime? | | 签收时间 |
+| `approvedAt` | DateTime? | | 审批时间 |
+| `approvalComment` | String? | | 审批意见 |
+| `returnedAt` | DateTime? | | 退回时间 |
+| `storedAt` | DateTime? | | 入库留样时间 |
+| `voidedAt` | DateTime? | | 作废时间 |
+| `closedAt` | DateTime? | | 关闭时间 |
+| `feedback` | String? | | 客户反馈 |
+| `createdAt` | DateTime | 默认 now() | 创建时间 |
+| `updatedAt` | DateTime | @updatedAt | 更新时间 |
+
+关系：一个 SampleRequest 属于一个 Customer，可选关联一个 Quote，拥有多个 SampleHistory、SampleFee 和 SampleReturnRecord。
+
+#### 2.3.5 样品历史表 `sample_histories`（SampleHistory）
+
+| 字段 | 类型 | 约束 | 说明 |
+|---|---|---|---|
+| `id` | String | PK, cuid | 主键 |
+| `sampleRequestId` | String | FK → SampleRequest, INDEX | 关联样品申请 |
+| `action` | SampleHistoryAction | | 操作类型 |
+| `before` | Json? | | 变更前快照 |
+| `after` | Json? | | 变更后快照 |
+| `comment` | String? | | 操作备注 |
+| `actorId` | String? | | 操作人ID |
+| `actorName` | String? | | 操作人姓名 |
+| `createdAt` | DateTime | 默认 now() | 操作时间 |
+
+索引：`(sampleRequestId, createdAt)` 复合索引。
+
+#### 2.3.6 样品费用表 `sample_fees`（SampleFee）
+
+| 字段 | 类型 | 约束 | 说明 |
+|---|---|---|---|
+| `id` | String | PK, cuid | 主键 |
+| `sampleRequestId` | String | FK → SampleRequest, INDEX | 关联样品申请 |
+| `feeType` | SampleFeeType | | 费用类型 |
+| `amount` | Decimal | | 金额 |
+| `currency` | String | | 币种 |
+| `note` | String? | | 备注 |
+| `incurredAt` | DateTime | 默认 now() | 费用发生时间 |
+| `createdById` | String? | | 创建人ID |
+| `createdAt` | DateTime | 默认 now() | 记录时间 |
+
+索引：`(sampleRequestId, incurredAt)` 复合索引。
+
+#### 2.3.7 样品退回/入库记录表 `sample_return_records`（SampleReturnRecord）
+
+| 字段 | 类型 | 约束 | 说明 |
+|---|---|---|---|
+| `id` | String | PK, cuid | 主键 |
+| `sampleRequestId` | String | FK → SampleRequest, INDEX | 关联样品申请 |
+| `returnType` | SampleReturnType | | 退回类型（退回/入库） |
+| `receiverName` | String? | | 接收人 |
+| `destination` | String? | | 去向/目的地 |
+| `note` | String? | | 备注 |
+| `recordedById` | String? | | 记录人ID |
+| `recordedAt` | DateTime | 默认 now() | 记录时间 |
+| `createdAt` | DateTime | 默认 now() | 创建时间 |
+
+索引：`(sampleRequestId, recordedAt)` 复合索引。
+
+#### 2.3.8 表关系总览
+
+```
+Customer ──1:N──> Quote ──1:N──> QuoteHistory
+                  │
+                  └──1:N──> SampleRequest ──1:N──> SampleHistory
+                                                  ──1:N──> SampleFee
+                                                  ──1:N──> SampleReturnRecord
+```
 
 ### 2.4 当前现状判断
 

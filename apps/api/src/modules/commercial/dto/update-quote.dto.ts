@@ -1,4 +1,6 @@
-import { IsOptional, IsString, IsNumber, IsDateString, IsInt, Min, IsIn } from "class-validator";
+import { Type } from "class-transformer";
+import { IsOptional, IsString, IsNumber, IsDateString, IsInt, Min, IsIn, IsArray, ValidateNested } from "class-validator";
+import { QuoteMaterialItemDto } from "./create-quote.dto";
 
 const QUOTE_STATUS_VALUES = [
   "DRAFT",
@@ -19,6 +21,19 @@ export class UpdateQuoteDto {
   @IsOptional() @IsInt() @Min(1) moq?: number;
   @IsOptional() @IsInt() @Min(1) quantity?: number;
   @IsOptional() @IsString() currency?: string;
+  @IsOptional() @IsString() @IsIn(["formula", "direct"]) calcMode?: string;
+  @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => QuoteMaterialItemDto) materialItems?: QuoteMaterialItemDto[];
+  @IsOptional() @IsNumber() materialProfitRate?: number;
+  @IsOptional() @IsNumber() processingTime?: number;
+  @IsOptional() @IsNumber() processingHourlyRate?: number;
+  @IsOptional() @IsNumber() processingProfitRate?: number;
+  @IsOptional() @IsNumber() grossWeight?: number;
+  @IsOptional() @IsNumber() packageLength?: number;
+  @IsOptional() @IsNumber() packageWidth?: number;
+  @IsOptional() @IsNumber() packageHeight?: number;
+  @IsOptional() @IsNumber() volumeDivisor?: number;
+  @IsOptional() @IsNumber() shippingUnitPrice?: number;
+  @IsOptional() @IsNumber() vatRate?: number;
   @IsOptional() @IsNumber() materialCost?: number;
   @IsOptional() @IsNumber() processingCost?: number;
   @IsOptional() @IsNumber() taxCost?: number;

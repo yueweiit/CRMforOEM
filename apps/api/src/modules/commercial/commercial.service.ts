@@ -35,6 +35,19 @@ export class CommercialService {
   async createQuote(user: RequestUser, dto: CreateQuoteDto) {
     await this.ensureCustomerVisible(user, dto.customerId);
     const pricing = calculateQuotePricing({
+      calcMode: dto.calcMode as "formula" | "direct" | undefined,
+      materialItems: dto.materialItems,
+      materialProfitRate: dto.materialProfitRate,
+      processingTime: dto.processingTime,
+      processingHourlyRate: dto.processingHourlyRate,
+      processingProfitRate: dto.processingProfitRate,
+      grossWeight: dto.grossWeight,
+      packageLength: dto.packageLength,
+      packageWidth: dto.packageWidth,
+      packageHeight: dto.packageHeight,
+      volumeDivisor: dto.volumeDivisor,
+      shippingUnitPrice: dto.shippingUnitPrice,
+      vatRate: dto.vatRate,
       materialCost: dto.materialCost,
       processingCost: dto.processingCost,
       taxCost: dto.taxCost,
@@ -64,6 +77,19 @@ export class CommercialService {
           taxCost: new Prisma.Decimal(pricing.taxCost.toFixed(2)),
           shippingCost: new Prisma.Decimal(pricing.shippingCost.toFixed(2)),
           discountAmount: new Prisma.Decimal(pricing.discountAmount.toFixed(2)),
+          calcMode: pricing.calcMode,
+          materialItems: this.toJsonOrNull(dto.materialItems),
+          materialProfitRate: dto.materialProfitRate ?? null,
+          processingTime: dto.processingTime ?? null,
+          processingHourlyRate: dto.processingHourlyRate ?? null,
+          processingProfitRate: dto.processingProfitRate ?? null,
+          grossWeight: dto.grossWeight ?? null,
+          packageLength: dto.packageLength ?? null,
+          packageWidth: dto.packageWidth ?? null,
+          packageHeight: dto.packageHeight ?? null,
+          volumeDivisor: dto.volumeDivisor ?? null,
+          shippingUnitPrice: dto.shippingUnitPrice ?? null,
+          vatRate: dto.vatRate ?? null,
           validUntil: dto.validUntil ? new Date(dto.validUntil) : undefined,
           fileAssetId: dto.fileAssetId,
           notes: dto.notes,
@@ -273,6 +299,19 @@ export class CommercialService {
     const quoteStatusPatch = dto.status ? this.resolveQuoteStatusPatch(quote, dto.status, user.id) : {};
     const actorName = await this.resolveActorName(user);
     const mergedPricing = calculateQuotePricing({
+      calcMode: (dto.calcMode as "formula" | "direct" | undefined) ?? (quote.calcMode as "formula" | "direct" | undefined),
+      materialItems: dto.materialItems ?? this.normalizeQuoteMaterialItems(quote.materialItems),
+      materialProfitRate: dto.materialProfitRate ?? Number(quote.materialProfitRate ?? 0),
+      processingTime: dto.processingTime ?? Number(quote.processingTime ?? 0),
+      processingHourlyRate: dto.processingHourlyRate ?? Number(quote.processingHourlyRate ?? 0),
+      processingProfitRate: dto.processingProfitRate ?? Number(quote.processingProfitRate ?? 0),
+      grossWeight: dto.grossWeight ?? Number(quote.grossWeight ?? 0),
+      packageLength: dto.packageLength ?? Number(quote.packageLength ?? 0),
+      packageWidth: dto.packageWidth ?? Number(quote.packageWidth ?? 0),
+      packageHeight: dto.packageHeight ?? Number(quote.packageHeight ?? 0),
+      volumeDivisor: dto.volumeDivisor ?? Number(quote.volumeDivisor ?? 0),
+      shippingUnitPrice: dto.shippingUnitPrice ?? Number(quote.shippingUnitPrice ?? 0),
+      vatRate: dto.vatRate ?? Number(quote.vatRate ?? 0),
       materialCost: dto.materialCost ?? Number(quote.materialCost),
       processingCost: dto.processingCost ?? Number(quote.processingCost),
       taxCost: dto.taxCost ?? Number(quote.taxCost),
@@ -301,6 +340,19 @@ export class CommercialService {
           taxCost: new Prisma.Decimal(mergedPricing.taxCost.toFixed(2)),
           shippingCost: new Prisma.Decimal(mergedPricing.shippingCost.toFixed(2)),
           discountAmount: new Prisma.Decimal(mergedPricing.discountAmount.toFixed(2)),
+          calcMode: mergedPricing.calcMode,
+          ...(dto.materialItems !== undefined ? { materialItems: this.toJsonOrNull(dto.materialItems) } : {}),
+          ...(dto.materialProfitRate !== undefined ? { materialProfitRate: dto.materialProfitRate } : {}),
+          ...(dto.processingTime !== undefined ? { processingTime: dto.processingTime } : {}),
+          ...(dto.processingHourlyRate !== undefined ? { processingHourlyRate: dto.processingHourlyRate } : {}),
+          ...(dto.processingProfitRate !== undefined ? { processingProfitRate: dto.processingProfitRate } : {}),
+          ...(dto.grossWeight !== undefined ? { grossWeight: dto.grossWeight } : {}),
+          ...(dto.packageLength !== undefined ? { packageLength: dto.packageLength } : {}),
+          ...(dto.packageWidth !== undefined ? { packageWidth: dto.packageWidth } : {}),
+          ...(dto.packageHeight !== undefined ? { packageHeight: dto.packageHeight } : {}),
+          ...(dto.volumeDivisor !== undefined ? { volumeDivisor: dto.volumeDivisor } : {}),
+          ...(dto.shippingUnitPrice !== undefined ? { shippingUnitPrice: dto.shippingUnitPrice } : {}),
+          ...(dto.vatRate !== undefined ? { vatRate: dto.vatRate } : {}),
           ...(dto.notes !== undefined ? { notes: dto.notes } : {}),
           ...(dto.validUntil !== undefined ? { validUntil: dto.validUntil ? new Date(dto.validUntil) : null } : {}),
           ...quoteStatusPatch
@@ -1266,6 +1318,19 @@ export class CommercialService {
     taxCost: { toString(): string } | string;
     shippingCost: { toString(): string } | string;
     discountAmount: { toString(): string } | string;
+    calcMode: string;
+    materialItems: unknown;
+    materialProfitRate: { toString(): string } | string | null;
+    processingTime: { toString(): string } | string | null;
+    processingHourlyRate: { toString(): string } | string | null;
+    processingProfitRate: { toString(): string } | string | null;
+    grossWeight: { toString(): string } | string | null;
+    packageLength: { toString(): string } | string | null;
+    packageWidth: { toString(): string } | string | null;
+    packageHeight: { toString(): string } | string | null;
+    volumeDivisor: { toString(): string } | string | null;
+    shippingUnitPrice: { toString(): string } | string | null;
+    vatRate: { toString(): string } | string | null;
     validUntil: Date | null;
     fileAssetId: string | null;
     notes: string | null;
@@ -1295,6 +1360,20 @@ export class CommercialService {
       taxCost: quote.taxCost.toString(),
       shippingCost: quote.shippingCost.toString(),
       discountAmount: quote.discountAmount.toString(),
+      calcMode: quote.calcMode,
+      materialItems: this.normalizeQuoteMaterialItems(quote.materialItems),
+      materialProfitRate: quote.materialProfitRate?.toString() ?? null,
+      processingTime: quote.processingTime?.toString() ?? null,
+      processingHourlyRate: quote.processingHourlyRate?.toString() ?? null,
+      processingProfitRate: quote.processingProfitRate?.toString() ?? null,
+      grossWeight: quote.grossWeight?.toString() ?? null,
+      packageLength: quote.packageLength?.toString() ?? null,
+      packageWidth: quote.packageWidth?.toString() ?? null,
+      packageHeight: quote.packageHeight?.toString() ?? null,
+      volumeDivisor: quote.volumeDivisor?.toString() ?? null,
+      volumeWeight: this.calculateVolumeWeightFromQuote(quote).toFixed(2),
+      shippingUnitPrice: quote.shippingUnitPrice?.toString() ?? null,
+      vatRate: quote.vatRate?.toString() ?? null,
       validUntil: quote.validUntil ? quote.validUntil.toISOString() : null,
       fileAssetId: quote.fileAssetId,
       notes: quote.notes,
@@ -1325,6 +1404,52 @@ export class CommercialService {
     return Math.round((value + Number.EPSILON) * 100) / 100;
   }
 
+  private calculateVolumeWeightFromQuote(quote: {
+    packageLength?: { toString(): string } | string | null;
+    packageWidth?: { toString(): string } | string | null;
+    packageHeight?: { toString(): string } | string | null;
+    volumeDivisor?: { toString(): string } | string | null;
+  }) {
+    const packageLength = Number(quote.packageLength?.toString() ?? 0);
+    const packageWidth = Number(quote.packageWidth?.toString() ?? 0);
+    const packageHeight = Number(quote.packageHeight?.toString() ?? 0);
+    const volumeDivisor = Number(quote.volumeDivisor?.toString() ?? 0);
+    if (!Number.isFinite(packageLength) || !Number.isFinite(packageWidth) || !Number.isFinite(packageHeight) || !Number.isFinite(volumeDivisor) || volumeDivisor <= 0) {
+      return 0;
+    }
+    return this.roundMoney((packageLength * packageWidth * packageHeight) / volumeDivisor);
+  }
+
+  private toJsonOrNull(value: unknown) {
+    return value === undefined || value === null ? Prisma.JsonNull : value as Prisma.InputJsonValue;
+  }
+
+  private normalizeQuoteMaterialItems(value: unknown) {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    return value.map((item, index) => {
+      const record = item && typeof item === "object" ? item as Record<string, unknown> : {};
+      return {
+        name: typeof record.name === "string" && record.name.trim() ? record.name.trim() : `物料${index + 1}`,
+        usage: this.normalizeJsonNumber(record.usage),
+        unitPrice: this.normalizeJsonNumber(record.unitPrice),
+        lossRate: this.normalizeJsonNumber(record.lossRate)
+      };
+    }).filter((item) => item.usage > 0 || item.unitPrice > 0);
+  }
+
+  private normalizeJsonNumber(value: unknown) {
+    const normalized = Number(value ?? 0);
+    return Number.isFinite(normalized) ? normalized : 0;
+  }
+
+  private formatMaterialItemsForCsv(value: unknown) {
+    return this.normalizeQuoteMaterialItems(value)
+      .map((item) => `${item.name}: ${item.usage} × ${item.unitPrice}, 损耗率 ${item.lossRate}`)
+      .join("; ");
+  }
+
   private buildQuoteCsv(quote: {
     quoteNo: string;
     productName: string;
@@ -1341,6 +1466,19 @@ export class CommercialService {
     taxCost: { toString(): string };
     shippingCost: { toString(): string };
     discountAmount: { toString(): string };
+    calcMode: string;
+    materialItems: unknown;
+    materialProfitRate: { toString(): string } | null;
+    processingTime: { toString(): string } | null;
+    processingHourlyRate: { toString(): string } | null;
+    processingProfitRate: { toString(): string } | null;
+    grossWeight: { toString(): string } | null;
+    packageLength: { toString(): string } | null;
+    packageWidth: { toString(): string } | null;
+    packageHeight: { toString(): string } | null;
+    volumeDivisor: { toString(): string } | null;
+    shippingUnitPrice: { toString(): string } | null;
+    vatRate: { toString(): string } | null;
     validUntil: Date | null;
     notes: string | null;
     approvalComment: string | null;
@@ -1367,6 +1505,20 @@ export class CommercialService {
       "运费",
       "优惠金额",
       "报价总额",
+      "计算模式",
+      "物料明细(含损耗率)",
+      "物料利润率",
+      "加工时间",
+      "加工工时费率",
+      "加工利润率",
+      "毛重",
+      "长",
+      "宽",
+      "高",
+      "体积系数",
+      "体积重量",
+      "运输单位价格",
+      "增值税率",
       "有效期",
       "审批备注",
       "创建时间",
@@ -1392,6 +1544,20 @@ export class CommercialService {
         quote.shippingCost.toString(),
         quote.discountAmount.toString(),
         quote.amount.toString(),
+        quote.calcMode,
+        this.formatMaterialItemsForCsv(quote.materialItems),
+        quote.materialProfitRate?.toString() ?? "",
+        quote.processingTime?.toString() ?? "",
+        quote.processingHourlyRate?.toString() ?? "",
+        quote.processingProfitRate?.toString() ?? "",
+        quote.grossWeight?.toString() ?? "",
+        quote.packageLength?.toString() ?? "",
+        quote.packageWidth?.toString() ?? "",
+        quote.packageHeight?.toString() ?? "",
+        quote.volumeDivisor?.toString() ?? "",
+        this.calculateVolumeWeightFromQuote(quote).toFixed(2),
+        quote.shippingUnitPrice?.toString() ?? "",
+        quote.vatRate?.toString() ?? "",
         quote.validUntil ? quote.validUntil.toISOString().slice(0, 10) : "",
         quote.approvalComment ?? "",
         quote.createdAt.toISOString(),
@@ -1505,6 +1671,19 @@ export class CommercialService {
       taxCost: { toString(): string };
       shippingCost: { toString(): string };
       discountAmount: { toString(): string };
+      calcMode: string;
+      materialItems: unknown;
+      materialProfitRate: { toString(): string } | null;
+      processingTime: { toString(): string } | null;
+      processingHourlyRate: { toString(): string } | null;
+      processingProfitRate: { toString(): string } | null;
+      grossWeight: { toString(): string } | null;
+      packageLength: { toString(): string } | null;
+      packageWidth: { toString(): string } | null;
+      packageHeight: { toString(): string } | null;
+      volumeDivisor: { toString(): string } | null;
+      shippingUnitPrice: { toString(): string } | null;
+      vatRate: { toString(): string } | null;
       validUntil: Date | null;
       notes: string | null;
       approvalComment: string | null;
@@ -1532,6 +1711,20 @@ export class CommercialService {
       "运费",
       "优惠金额",
       "报价总额",
+      "计算模式",
+      "物料明细(含损耗率)",
+      "物料利润率",
+      "加工时间",
+      "加工工时费率",
+      "加工利润率",
+      "毛重",
+      "长",
+      "宽",
+      "高",
+      "体积系数",
+      "体积重量",
+      "运输单位价格",
+      "增值税率",
       "有效期",
       "审批备注",
       "创建时间",
@@ -1557,6 +1750,20 @@ export class CommercialService {
         quote.shippingCost.toString(),
         quote.discountAmount.toString(),
         quote.amount.toString(),
+        quote.calcMode,
+        this.formatMaterialItemsForCsv(quote.materialItems),
+        quote.materialProfitRate?.toString() ?? "",
+        quote.processingTime?.toString() ?? "",
+        quote.processingHourlyRate?.toString() ?? "",
+        quote.processingProfitRate?.toString() ?? "",
+        quote.grossWeight?.toString() ?? "",
+        quote.packageLength?.toString() ?? "",
+        quote.packageWidth?.toString() ?? "",
+        quote.packageHeight?.toString() ?? "",
+        quote.volumeDivisor?.toString() ?? "",
+        this.calculateVolumeWeightFromQuote(quote).toFixed(2),
+        quote.shippingUnitPrice?.toString() ?? "",
+        quote.vatRate?.toString() ?? "",
         quote.validUntil ? quote.validUntil.toISOString().slice(0, 10) : "",
         quote.approvalComment ?? "",
         quote.createdAt.toISOString(),

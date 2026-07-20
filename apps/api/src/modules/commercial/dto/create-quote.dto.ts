@@ -1,4 +1,21 @@
-import { IsDateString, IsInt, IsNumber, IsOptional, IsString, Min } from "class-validator";
+import { Type } from "class-transformer";
+import { IsArray, IsDateString, IsIn, IsInt, IsNumber, IsOptional, IsString, Min, ValidateNested } from "class-validator";
+
+export class QuoteMaterialItemDto {
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @IsNumber()
+  usage!: number;
+
+  @IsNumber()
+  unitPrice!: number;
+
+  @IsOptional()
+  @IsNumber()
+  lossRate?: number;
+}
 
 export class CreateQuoteDto {
   @IsString()
@@ -25,6 +42,61 @@ export class CreateQuoteDto {
 
   @IsString()
   currency!: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(["formula", "direct"])
+  calcMode?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => QuoteMaterialItemDto)
+  materialItems?: QuoteMaterialItemDto[];
+
+  @IsOptional()
+  @IsNumber()
+  materialProfitRate?: number;
+
+  @IsOptional()
+  @IsNumber()
+  processingTime?: number;
+
+  @IsOptional()
+  @IsNumber()
+  processingHourlyRate?: number;
+
+  @IsOptional()
+  @IsNumber()
+  processingProfitRate?: number;
+
+  @IsOptional()
+  @IsNumber()
+  grossWeight?: number;
+
+  @IsOptional()
+  @IsNumber()
+  packageLength?: number;
+
+  @IsOptional()
+  @IsNumber()
+  packageWidth?: number;
+
+  @IsOptional()
+  @IsNumber()
+  packageHeight?: number;
+
+  @IsOptional()
+  @IsNumber()
+  volumeDivisor?: number;
+
+  @IsOptional()
+  @IsNumber()
+  shippingUnitPrice?: number;
+
+  @IsOptional()
+  @IsNumber()
+  vatRate?: number;
 
   @IsOptional()
   @IsNumber()
@@ -58,4 +130,3 @@ export class CreateQuoteDto {
   @IsString()
   notes?: string;
 }
-

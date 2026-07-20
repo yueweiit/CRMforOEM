@@ -303,6 +303,51 @@ async function main() {
     assert.equal(pricing.unitPrice, 4.93);
     assert.equal(pricing.moqValid, true);
 
+    // 公式模式：物料A 6×2×(1+0.05) + 物料B 4×2×(1+0.05) = 21，21×(1+0.10利润)=23.10 物料报价
+    // 工时2×费率5×(1+0.10利润)=11.00 加工费报价
+    // 体积重=10×10×10÷200=5，Max(毛重3,体积重5)×2单价=10.00 运费
+    // (23.10+11.00+10.00)×0.13增值税率=5.73 税费
+    // subtotal=49.83 total=49.83-1.00=48.83 unitPrice=48.83/3=16.28
+    const formulaPricing = calculateQuotePricing({
+      calcMode: "formula",
+      materialItems: [
+        { name: "物料A", usage: 6, unitPrice: 2, lossRate: 0.05 },
+        { name: "物料B", usage: 4, unitPrice: 2, lossRate: 0.05 }
+      ],
+      materialProfitRate: 0.10,
+      processingTime: 2,
+      processingHourlyRate: 5,
+      processingProfitRate: 0.10,
+      grossWeight: 3,
+      packageLength: 10,
+      packageWidth: 10,
+      packageHeight: 10,
+      volumeDivisor: 200,
+      shippingUnitPrice: 2,
+      vatRate: 0.13,
+      discountAmount: 1,
+      quantity: 3,
+      moq: 1
+    });
+    assert.equal(formulaPricing.materialCost, 23.10);
+    assert.equal(formulaPricing.processingCost, 11.00);
+    assert.equal(formulaPricing.shippingCost, 10.00);
+    assert.equal(formulaPricing.taxCost, 5.73);
+    assert.equal(formulaPricing.subtotal, 49.83);
+    assert.equal(formulaPricing.total, 48.83);
+    assert.equal(formulaPricing.unitPrice, 16.28);
+    assert.equal(formulaPricing.calcMode, "formula");
+    assert.equal(formulaPricing.breakdown?.materialBaseCost, 20.00);
+    assert.equal(formulaPricing.breakdown?.materialCost, 21.00);
+    assert.equal(formulaPricing.breakdown?.materialQuote, 23.10);
+    assert.equal(formulaPricing.breakdown?.materialItems.length, 2);
+    assert.equal(formulaPricing.breakdown?.materialItems[0]?.lossRate, 0.05);
+    assert.equal(formulaPricing.breakdown?.materialItems[0]?.baseCost, 12.00);
+    assert.equal(formulaPricing.breakdown?.materialItems[0]?.cost, 12.60);
+    assert.equal(formulaPricing.breakdown?.volumeWeight, 5);
+    assert.equal(formulaPricing.breakdown?.chargeableWeight, 5);
+    assert.equal(formulaPricing.breakdown?.taxBase, 44.10);
+
     // MOQ大于数量时应报错（边界情况：quantity=0）
     const edgeCase = calculateQuotePricing({ quantity: "0", moq: "60" });
     assert.equal(edgeCase.moqValid, false);
