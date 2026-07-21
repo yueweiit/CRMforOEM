@@ -302,6 +302,7 @@ async function main() {
     assert.equal(pricing.total, 14.79);
     assert.equal(pricing.unitPrice, 4.93);
     assert.equal(pricing.moqValid, true);
+    assert.equal(pricing.totalValid, true);
 
     // 公式模式：物料A 6×2×(1+0.05) + 物料B 4×2×(1+0.05) = 21，21×(1+0.10利润)=23.10 物料报价
     // 工时2×费率5×(1+0.10利润)=11.00 加工费报价
@@ -336,6 +337,7 @@ async function main() {
     assert.equal(formulaPricing.subtotal, 49.83);
     assert.equal(formulaPricing.total, 48.83);
     assert.equal(formulaPricing.unitPrice, 16.28);
+    assert.equal(formulaPricing.totalValid, true);
     assert.equal(formulaPricing.calcMode, "formula");
     assert.equal(formulaPricing.breakdown?.materialBaseCost, 20.00);
     assert.equal(formulaPricing.breakdown?.materialCost, 21.00);
@@ -355,6 +357,18 @@ async function main() {
     // MOQ大于数量时应报错（正常情况）
     const moqExceedsQty = calculateQuotePricing({ quantity: "50", moq: "60" });
     assert.equal(moqExceedsQty.moqValid, false);
+
+    const negativeTotal = calculateQuotePricing({
+      materialCost: 1,
+      processingCost: 1,
+      taxCost: 1,
+      shippingCost: 1,
+      discountAmount: 5,
+      quantity: 1,
+      moq: 1
+    });
+    assert.equal(negativeTotal.total, -1);
+    assert.equal(negativeTotal.totalValid, false);
 
     await service.createQuote(user, {
       customerId: "customer-1",
@@ -390,6 +404,37 @@ async function main() {
           quantity: 5,
           currency: "USD"
         }),
+      BadRequestException
+    );
+  }
+
+  {
+    const { service } = buildService();
+
+    await assert.rejects(
+      () =>
+        service.createQuote(user, {
+          customerId: "customer-1",
+          quoteNo: "Q-NEGATIVE",
+          productName: "Negative quote",
+          moq: 1,
+          quantity: 1,
+          currency: "USD",
+          materialCost: 1,
+          processingCost: 1,
+          taxCost: 1,
+          shippingCost: 1,
+          discountAmount: 5
+        }),
+      BadRequestException
+    );
+  }
+
+  {
+    const { service } = buildService("PREPARING", { status: "DRAFT", approvalStatus: "DRAFT" });
+
+    await assert.rejects(
+      () => service.updateQuote(user, "quote-1", { discountAmount: 200 }),
       BadRequestException
     );
   }

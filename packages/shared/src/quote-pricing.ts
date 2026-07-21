@@ -78,6 +78,7 @@ export type QuotePricingResult = {
   moq: number;
   unitPrice: number;
   moqValid: boolean;
+  totalValid: boolean;
   calcMode: QuotePricingCalcMode;
   breakdown?: QuotePricingBreakdown;
 };
@@ -180,6 +181,7 @@ export function calculateQuotePricing(input: QuotePricingInput): QuotePricingRes
     moq,
     unitPrice,
     moqValid: moq === 0 ? true : quantity >= moq,
+    totalValid: total >= 0,
     calcMode,
     breakdown
   };

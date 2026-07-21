@@ -435,8 +435,8 @@ export function QuotePanel({ customerId }: { customerId: string }) {
 
   const create = useMutation({
     mutationFn: () => {
-      if (!createSummary.moqValid) {
-        throw new Error("报价数量不能小于 MOQ，请先调整数量或起订量。");
+      if (createValidationMessage) {
+        throw new Error(createValidationMessage);
       }
       return createQuote({ ...buildQuotePayload(form), customerId, quoteNo: form.quoteNo, currency: form.currency, notes: form.notes });
     },
@@ -595,8 +595,8 @@ export function QuotePanel({ customerId }: { customerId: string }) {
 
   const update = useMutation({
     mutationFn: async (payload: { basePayload: Record<string, unknown> }) => {
-      if (!editSummary.moqValid) {
-        throw new Error("报价数量不能小于 MOQ，请先调整数量或起订量。");
+      if (editValidationMessage) {
+        throw new Error(editValidationMessage);
       }
       const quoteId = editing?.id ?? "";
       await updateQuote(quoteId, payload.basePayload, { toast: false });
@@ -768,6 +768,16 @@ export function QuotePanel({ customerId }: { customerId: string }) {
   const statusDisplay = quoteDisplayStatus(statusQuote);
   const createSummary = calculateQuotePricing(form);
   const editSummary = calculateQuotePricing(editForm);
+  const createValidationMessage = !createSummary.moqValid
+    ? "报价数量不能小于 MOQ，请先调整数量或起订量。"
+    : !createSummary.totalValid
+      ? "报价总价不能小于 0，请调整优惠金额或成本项。"
+      : "";
+  const editValidationMessage = !editSummary.moqValid
+    ? "报价数量不能小于 MOQ，请先调整数量或起订量。"
+    : !editSummary.totalValid
+      ? "报价总价不能小于 0，请调整优惠金额或成本项。"
+      : "";
   const detailSnapshot = useMemo(() => {
     const input = quoteToPricingInput(detailQuote);
     return input ? calculateQuotePricing(input) : null;
@@ -1129,8 +1139,8 @@ export function QuotePanel({ customerId }: { customerId: string }) {
           </div>
         </div>
         <Field label="备注" value={form.notes} onChange={(value) => setForm({ ...form, notes: value })} />
-        {!createSummary.moqValid ? <div className="error-state">报价数量不能小于 MOQ，请先调整数量或起订量。</div> : null}
-        <div className="wide-field"><AddIconButton disabled={create.isPending || !createSummary.moqValid} label={create.isPending ? "提交中..." : "新增报价"} onClick={() => create.mutate()} /></div>
+        {createValidationMessage ? <div className="error-state">{createValidationMessage}</div> : null}
+        <div className="wide-field"><AddIconButton disabled={create.isPending || Boolean(createValidationMessage)} label={create.isPending ? "提交中..." : "新增报价"} onClick={() => create.mutate()} /></div>
       </div>
 
       <Dialog
@@ -1342,7 +1352,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
             <button className="secondary-button" onClick={() => setEditOpen(false)} type="button">取消</button>
                 <button
                   className="primary-button"
-                  disabled={update.isPending || !editSummary.moqValid}
+                  disabled={update.isPending || Boolean(editValidationMessage)}
                   onClick={() => update.mutate({ basePayload: buildQuoteEditPayload(editForm) })}
                   type="button"
               >
@@ -1552,7 +1562,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
               <input readOnly value={editSummary.total.toFixed(2)} />
             </label>
           </div>
-          {!editSummary.moqValid ? <div className="error-state">报价数量不能小于 MOQ，请先调整数量或起订量。</div> : null}
+          {editValidationMessage ? <div className="error-state">{editValidationMessage}</div> : null}
         </div>
       </Dialog>
 
