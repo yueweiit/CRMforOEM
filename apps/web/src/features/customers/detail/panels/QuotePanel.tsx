@@ -770,14 +770,18 @@ export function QuotePanel({ customerId }: { customerId: string }) {
   const editSummary = calculateQuotePricing(editForm);
   const createValidationMessage = !createSummary.moqValid
     ? "报价数量不能小于 MOQ，请先调整数量或起订量。"
-    : !createSummary.totalValid
-      ? "报价总价不能小于 0，请调整优惠金额或成本项。"
-      : "";
+    : !createSummary.nonNegativeItemValid
+      ? "报价金额项不能为负数，请检查成本、运费或优惠金额。"
+      : !createSummary.totalValid
+        ? "报价总价不能小于 0，请调整优惠金额或成本项。"
+        : "";
   const editValidationMessage = !editSummary.moqValid
     ? "报价数量不能小于 MOQ，请先调整数量或起订量。"
-    : !editSummary.totalValid
-      ? "报价总价不能小于 0，请调整优惠金额或成本项。"
-      : "";
+    : !editSummary.nonNegativeItemValid
+      ? "报价金额项不能为负数，请检查成本、运费或优惠金额。"
+      : !editSummary.totalValid
+        ? "报价总价不能小于 0，请调整优惠金额或成本项。"
+        : "";
   const detailSnapshot = useMemo(() => {
     const input = quoteToPricingInput(detailQuote);
     return input ? calculateQuotePricing(input) : null;

@@ -7,9 +7,11 @@ export class QuoteMaterialItemDto {
   name?: string;
 
   @IsNumber()
+  @Min(0)
   usage!: number;
 
   @IsNumber()
+  @Min(0)
   unitPrice!: number;
 
   @IsOptional()
@@ -60,10 +62,12 @@ export class CreateQuoteDto {
 
   @IsOptional()
   @IsNumber()
+  @Min(0)
   processingTime?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(0)
   processingHourlyRate?: number;
 
   @IsOptional()
@@ -72,50 +76,62 @@ export class CreateQuoteDto {
 
   @IsOptional()
   @IsNumber()
+  @Min(0)
   grossWeight?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(0)
   packageLength?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(0)
   packageWidth?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(0)
   packageHeight?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(0)
   volumeDivisor?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(0)
   shippingUnitPrice?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(0)
   vatRate?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(0)
   materialCost?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(0)
   processingCost?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(0)
   taxCost?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(0)
   shippingCost?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(0)
   discountAmount?: number;
 
   @IsOptional()

@@ -59,6 +59,9 @@ export class CommercialService {
     if (!pricing.moqValid) {
       throw new BadRequestException(`Quote quantity must be greater than or equal to MOQ (${pricing.moq})`);
     }
+    if (!pricing.nonNegativeItemValid) {
+      throw new BadRequestException("Quote cost and discount values must not be negative");
+    }
     if (!pricing.totalValid) {
       throw new BadRequestException("Quote total must be greater than or equal to 0");
     }
@@ -325,6 +328,9 @@ export class CommercialService {
     });
     if (!mergedPricing.moqValid) {
       throw new BadRequestException(`Quote quantity must be greater than or equal to MOQ (${mergedPricing.moq})`);
+    }
+    if (!mergedPricing.nonNegativeItemValid) {
+      throw new BadRequestException("Quote cost and discount values must not be negative");
     }
     if (!mergedPricing.totalValid) {
       throw new BadRequestException("Quote total must be greater than or equal to 0");

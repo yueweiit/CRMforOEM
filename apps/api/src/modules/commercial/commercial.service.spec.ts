@@ -370,6 +370,106 @@ async function main() {
     assert.equal(negativeTotal.total, -1);
     assert.equal(negativeTotal.totalValid, false);
 
+    // 单项负数但总价仍 ≥0：优惠金额为负（优惠变加价），应被 nonNegativeItemValid 拦截
+    const negativeDiscount = calculateQuotePricing({
+      materialCost: 100,
+      processingCost: 50,
+      taxCost: 10,
+      shippingCost: 10,
+      discountAmount: -50,
+      quantity: 1,
+      moq: 1
+    });
+    assert.equal(negativeDiscount.total, 220);
+    assert.equal(negativeDiscount.totalValid, true);
+    assert.equal(negativeDiscount.nonNegativeItemValid, false);
+
+    // 单项负数但总价仍 ≥0：加工费为负，应被 nonNegativeItemValid 拦截
+    const negativeProcessing = calculateQuotePricing({
+      materialCost: 100,
+      processingCost: -50,
+      taxCost: 10,
+      shippingCost: 10,
+      discountAmount: 0,
+      quantity: 1,
+      moq: 1
+    });
+    assert.equal(negativeProcessing.totalValid, true);
+    assert.equal(negativeProcessing.nonNegativeItemValid, false);
+
+    // 公式模式：物料单价为负，应被 nonNegativeItemValid 拦截
+    const negativeFormulaMaterial = calculateQuotePricing({
+      calcMode: "formula",
+      materialItems: [{ name: "A", usage: 1, unitPrice: -10, lossRate: 0 }],
+      processingTime: 0,
+      processingHourlyRate: 0,
+      grossWeight: 0,
+      packageLength: 0,
+      packageWidth: 0,
+      packageHeight: 0,
+      volumeDivisor: 1,
+      shippingUnitPrice: 0,
+      vatRate: 0,
+      discountAmount: 0,
+      quantity: 1,
+      moq: 1
+    });
+    assert.equal(negativeFormulaMaterial.nonNegativeItemValid, false);
+
+    // 利润率/损耗率允许为负（让利/亏损），不应触发 nonNegativeItemValid；增值税率不在此列
+    const negativeRate = calculateQuotePricing({
+      calcMode: "formula",
+      materialItems: [{ name: "A", usage: 1, unitPrice: 10, lossRate: 0 }],
+      materialProfitRate: -0.2,
+      processingTime: 1,
+      processingHourlyRate: 10,
+      processingProfitRate: -0.1,
+      grossWeight: 0,
+      packageLength: 0,
+      packageWidth: 0,
+      packageHeight: 0,
+      volumeDivisor: 1,
+      shippingUnitPrice: 0,
+      vatRate: 0,
+      discountAmount: 0,
+      quantity: 1,
+      moq: 1
+    });
+    assert.equal(negativeRate.nonNegativeItemValid, true);
+
+    // 增值税率不允许为负，应被 nonNegativeItemValid 拦截
+    const negativeVatRate = calculateQuotePricing({
+      calcMode: "formula",
+      materialItems: [{ name: "A", usage: 1, unitPrice: 10, lossRate: 0 }],
+      materialProfitRate: 0,
+      processingTime: 1,
+      processingHourlyRate: 10,
+      processingProfitRate: 0,
+      grossWeight: 0,
+      packageLength: 0,
+      packageWidth: 0,
+      packageHeight: 0,
+      volumeDivisor: 1,
+      shippingUnitPrice: 0,
+      vatRate: -0.13,
+      discountAmount: 0,
+      quantity: 1,
+      moq: 1
+    });
+    assert.equal(negativeVatRate.nonNegativeItemValid, false);
+
+    // 正常输入：nonNegativeItemValid 应为 true
+    const validPricing = calculateQuotePricing({
+      materialCost: 100,
+      processingCost: 50,
+      taxCost: 10,
+      shippingCost: 10,
+      discountAmount: 20,
+      quantity: 1,
+      moq: 1
+    });
+    assert.equal(validPricing.nonNegativeItemValid, true);
+
     await service.createQuote(user, {
       customerId: "customer-1",
       quoteNo: "Q-NEW",
@@ -435,6 +535,60 @@ async function main() {
 
     await assert.rejects(
       () => service.updateQuote(user, "quote-1", { discountAmount: 200 }),
+      BadRequestException
+    );
+  }
+
+  // 单项负数但总价仍 ≥0：应被 nonNegativeItemValid 拦截（禁止负数报价意图）
+  {
+    const { service } = buildService();
+
+    await assert.rejects(
+      () =>
+        service.createQuote(user, {
+          customerId: "customer-1",
+          quoteNo: "Q-NEGATIVE-DISCOUNT",
+          productName: "Negative discount quote",
+          moq: 1,
+          quantity: 1,
+          currency: "USD",
+          materialCost: 100,
+          processingCost: 50,
+          taxCost: 10,
+          shippingCost: 10,
+          discountAmount: -50
+        }),
+      BadRequestException
+    );
+  }
+
+  {
+    const { service } = buildService("PREPARING", { status: "DRAFT", approvalStatus: "DRAFT" });
+
+    await assert.rejects(
+      () => service.updateQuote(user, "quote-1", { processingCost: -50 }),
+      BadRequestException
+    );
+  }
+
+  {
+    const { service } = buildService();
+
+    await assert.rejects(
+      () =>
+        service.createQuote(user, {
+          customerId: "customer-1",
+          quoteNo: "Q-NEGATIVE-PROCESSING",
+          productName: "Negative processing quote",
+          moq: 1,
+          quantity: 1,
+          currency: "USD",
+          materialCost: 100,
+          processingCost: -50,
+          taxCost: 10,
+          shippingCost: 10,
+          discountAmount: 0
+        }),
       BadRequestException
     );
   }

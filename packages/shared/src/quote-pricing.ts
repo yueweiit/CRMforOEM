@@ -79,6 +79,7 @@ export type QuotePricingResult = {
   unitPrice: number;
   moqValid: boolean;
   totalValid: boolean;
+  nonNegativeItemValid: boolean;
   calcMode: QuotePricingCalcMode;
   breakdown?: QuotePricingBreakdown;
 };
@@ -169,6 +170,31 @@ export function calculateQuotePricing(input: QuotePricingInput): QuotePricingRes
   const total = roundMoney(subtotal - discountAmount);
   const unitPrice = quantity > 0 ? roundMoney(total / quantity) : 0;
 
+  // 金额类输入非负校验：禁止单项负数报价（如负的优惠金额把优惠变成加价、负的成本项）。
+  // 比率类输入（利润率、损耗率）业务上允许为负（让利/亏损），不参与该校验；
+  // 增值税率不允许为负，参与该校验。
+  const directAmountInputs = [
+    input.materialCost,
+    input.processingCost,
+    input.taxCost,
+    input.shippingCost
+  ];
+  const formulaAmountInputs = [
+    input.processingTime,
+    input.processingHourlyRate,
+    input.grossWeight,
+    input.packageLength,
+    input.packageWidth,
+    input.packageHeight,
+    input.volumeDivisor,
+    input.shippingUnitPrice,
+    input.vatRate,
+    ...(input.materialItems ?? []).flatMap((item) => [item?.usage, item?.unitPrice])
+  ];
+  const nonNegativeItemValid = calcMode === "formula"
+    ? [input.discountAmount, ...formulaAmountInputs].every((value) => normalizeMoney(value) >= 0)
+    : [input.discountAmount, ...directAmountInputs].every((value) => normalizeMoney(value) >= 0);
+
   return {
     materialCost,
     processingCost,
@@ -182,6 +208,7 @@ export function calculateQuotePricing(input: QuotePricingInput): QuotePricingRes
     unitPrice,
     moqValid: moq === 0 ? true : quantity >= moq,
     totalValid: total >= 0,
+    nonNegativeItemValid,
     calcMode,
     breakdown
   };
