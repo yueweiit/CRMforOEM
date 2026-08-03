@@ -108,6 +108,33 @@ export function taskTypeLabel(type: string, locale: Locale = DEFAULT_LOCALE) {
   return LOCALIZED_TASK_TYPE_LABELS[locale]?.[type] ?? LOCALIZED_TASK_TYPE_LABELS[DEFAULT_LOCALE]?.[type] ?? type;
 }
 
+const LOCALIZED_FOLLOW_UP_TASK_STATUS_LABELS: Record<Locale, Record<string, string>> = {
+  "zh-CN": {
+    OPEN: "待处理",
+    COMPLETED: "已完成",
+    CANCELLED: "已取消",
+    OVERDUE: "已逾期"
+  },
+  "en-US": {
+    OPEN: "Open",
+    COMPLETED: "Completed",
+    CANCELLED: "Cancelled",
+    OVERDUE: "Overdue"
+  },
+  "es-ES": {
+    OPEN: "Abierta",
+    COMPLETED: "Completada",
+    CANCELLED: "Cancelada",
+    OVERDUE: "Vencida"
+  }
+};
+
+export const FOLLOW_UP_TASK_STATUS_LABELS = LOCALIZED_FOLLOW_UP_TASK_STATUS_LABELS[DEFAULT_LOCALE];
+
+export function followUpTaskStatusLabel(status: string, locale: Locale = DEFAULT_LOCALE) {
+  return LOCALIZED_FOLLOW_UP_TASK_STATUS_LABELS[locale]?.[status] ?? LOCALIZED_FOLLOW_UP_TASK_STATUS_LABELS[DEFAULT_LOCALE]?.[status] ?? status;
+}
+
 const LOCALIZED_QUOTE_FLOW_STATUS_LABELS: Record<Locale, Record<string, string>> = {
   "zh-CN": {
     DRAFT: "新建",

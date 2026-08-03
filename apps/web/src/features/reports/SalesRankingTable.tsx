@@ -1,3 +1,5 @@
+import { useI18n } from "../../i18n";
+
 export type SalesRankingRow = {
   owner_id: string;
   owner_name: string;
@@ -13,20 +15,21 @@ export type SalesRankingRow = {
 };
 
 export function SalesRankingTable({ rows }: { rows: SalesRankingRow[] }) {
-  if (!rows.length) return <div className="empty-state">暂无业务员绩效数据。</div>;
+  const { t } = useI18n();
+  if (!rows.length) return <div className="empty-state">{t("reports.salesEmpty")}</div>;
   return (
     <table>
       <thead>
         <tr>
-          <th>业务员</th>
-          <th>客户</th>
-          <th>新增</th>
-          <th>背调</th>
-          <th>发送</th>
-          <th>回复</th>
-          <th>报价</th>
-          <th>样品</th>
-          <th>成交</th>
+          <th>{t("reports.salesRep")}</th>
+          <th>{t("reports.customers")}</th>
+          <th>{t("reports.newCustomers")}</th>
+          <th>{t("reports.research")}</th>
+          <th>{t("reports.sent")}</th>
+          <th>{t("reports.replied")}</th>
+          <th>{t("reports.quotes")}</th>
+          <th>{t("reports.samples")}</th>
+          <th>{t("reports.won")}</th>
         </tr>
       </thead>
       <tbody>

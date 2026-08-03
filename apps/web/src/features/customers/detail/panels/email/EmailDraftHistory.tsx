@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { EMAIL_DRAFT_PURPOSES, EmailDraftStatus, emailDraftPurposeLabel } from "@oem-crm/shared";
+import { EMAIL_DRAFT_PURPOSES, EmailDraftStatus, emailDraftPurposeLabel, emailDraftStatusLabel } from "@oem-crm/shared";
 import { getCustomerEmailDrafts } from "../../../../../api/customers";
 import { AppSelect } from "../../../../../components/AppSelect";
+import { useI18n } from "../../../../../i18n";
 import type { EmailDraftListItem, EmailDraftPage } from "../../shared/types";
 import { EmailDraftCard } from "./EmailDraftCard";
 import {
@@ -12,15 +13,6 @@ import {
   shouldPollEmailDraftPages,
   type EmailDraftFilters
 } from "./email-draft-history-state";
-
-const STATUS_OPTIONS = [
-  { value: "", label: "全部状态" },
-  { value: EmailDraftStatus.Draft, label: "草稿" },
-  { value: EmailDraftStatus.PendingReview, label: "待审核" },
-  { value: EmailDraftStatus.Approved, label: "已审核" },
-  { value: EmailDraftStatus.Rejected, label: "已驳回" },
-  { value: EmailDraftStatus.Sent, label: "已发送" }
-];
 
 const DEFAULT_FILTERS: EmailDraftFilters = {
   purpose: "",
@@ -35,6 +27,7 @@ export function EmailDraftHistory({
   customerId: string;
   onChanged: () => void;
 }) {
+  const { locale, t } = useI18n();
   const [expanded, setExpanded] = useState(false);
   const [filters, setFilters] = useState<EmailDraftFilters>(DEFAULT_FILTERS);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
@@ -66,55 +59,58 @@ export function EmailDraftHistory({
       <div className="panel-title">
         <button className="email-draft-history-toggle" type="button" onClick={() => setExpanded((current) => !current)}>
           {expanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-          <h2>邮件</h2>
+          <h2>{t("emailCenter.emailTitle")}</h2>
         </button>
-        <span>{expanded ? `${drafts.length} 封已加载` : null}</span>
+        <span>{expanded ? `${drafts.length} ${t("emailCenter.loadedDraftsSuffix")}` : null}</span>
       </div>
 
       {expanded ? (
         <div className="email-draft-history-window">
           <div className="email-draft-filter-bar">
             <label>
-              <span>邮件类型</span>
+              <span>{t("emailCenter.draftPurpose")}</span>
               <AppSelect
                 variant="toolbar"
                 value={filters.purpose}
                 onChange={(purpose) => setFilters((current) => ({ ...current, purpose }))}
                 options={[
-                  { value: "", label: "全部类型" },
-                  ...EMAIL_DRAFT_PURPOSES.map((purpose) => ({ value: purpose, label: emailDraftPurposeLabel(purpose) }))
+                  { value: "", label: t("common.allTypes") },
+                  ...EMAIL_DRAFT_PURPOSES.map((purpose) => ({ value: purpose, label: emailDraftPurposeLabel(purpose, locale) }))
                 ]}
               />
             </label>
             <label>
-              <span>邮件状态</span>
+              <span>{t("common.status")}</span>
               <AppSelect
                 variant="toolbar"
                 value={filters.status}
                 onChange={(status) => setFilters((current) => ({ ...current, status }))}
-                options={STATUS_OPTIONS}
+                options={[
+                  { value: "", label: t("emailCenter.allStatuses") },
+                  ...Object.values(EmailDraftStatus).map((status) => ({ value: status, label: emailDraftStatusLabel(status, locale) }))
+                ]}
               />
             </label>
             <label>
-              <span>收件人</span>
+              <span>{t("emailCenter.recipient")}</span>
               <input
                 value={filters.recipient}
-                placeholder="姓名或邮箱"
+                placeholder={t("emailCenter.recipientPlaceholder")}
                 onChange={(event) => setFilters((current) => ({ ...current, recipient: event.target.value }))}
               />
             </label>
           </div>
 
-          {query.isLoading ? <div className="loading-state">邮件草稿加载中...</div> : null}
-          {query.isError ? <div className="empty-state">邮件草稿加载失败，请稍后重试。</div> : null}
-          {!query.isLoading && !query.isError && !drafts.length ? <div className="empty-state">当前筛选条件下暂无邮件草稿。</div> : null}
+          {query.isLoading ? <div className="loading-state">{t("emailCenter.loadingDrafts")}</div> : null}
+          {query.isError ? <div className="empty-state">{t("emailCenter.loadDraftsError")}</div> : null}
+          {!query.isLoading && !query.isError && !drafts.length ? <div className="empty-state">{t("emailCenter.emptyFilteredDrafts")}</div> : null}
           {drafts.length ? (
             <div className="email-draft-list">
               {drafts.map((draft) => (
                 <EmailDraftCard customerId={customerId} draft={draft} onChanged={onChanged} key={draft.id} />
               ))}
               <div className="email-draft-load-sentinel" ref={loadMoreRef}>
-                {query.isFetchingNextPage ? "加载更多邮件..." : query.hasNextPage ? "继续向下滚动加载更多" : "已加载当前筛选下的全部草稿"}
+                {query.isFetchingNextPage ? t("emailCenter.loadMoreDrafts") : query.hasNextPage ? t("emailCenter.scrollMoreDrafts") : t("emailCenter.allDraftsLoaded")}
               </div>
             </div>
           ) : null}

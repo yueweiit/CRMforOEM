@@ -17,24 +17,24 @@ export function CustomerFilterBar({
   onStageChange: (stage: string) => void;
   options?: CustomerOptions;
 }) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   return (
     <div className="toolbar">
       <div className="search-box">
         <Search size={16} />
-        <input placeholder="搜索公司、官网" value={q} onChange={(event) => onQChange(event.target.value)} />
+        <input placeholder={t("customers.searchPlaceholder")} value={q} onChange={(event) => onQChange(event.target.value)} />
       </div>
       <AppSelect
         variant="toolbar"
         value={stage}
         onChange={onStageChange}
-        title="筛选阶段"
+        title={t("customers.filterStage")}
         options={[
-          { value: "", label: "全部阶段" },
+          { value: "", label: t("common.allStages") },
           ...((options?.stages ?? Object.keys(STAGE_LABELS)).map((item) => ({ value: item, label: stageLabel(item, locale) })))
         ]}
       />
-      <button className="icon-button" title="筛选">
+      <button className="icon-button" title={t("customers.filterStage")}>
         <Filter size={17} />
       </button>
     </div>

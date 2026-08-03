@@ -5,6 +5,7 @@ import { createCustomer, getCustomerFilterOptions, getCustomers } from "../../..
 import { getCurrentUser, hasPermission } from "../../../auth/permissions";
 import plusIconUrl from "../../../components/icons/加号.svg";
 import { notifyMutationStep } from "../../../components/Toast";
+import { useI18n } from "../../../i18n";
 import type { CustomerOptions } from "../../../shared/types/customer";
 import { splitList } from "../../../shared/utils/string";
 import { CustomerCreateForm } from "./CustomerCreateForm";
@@ -18,6 +19,7 @@ import { CustomerListTable, type Customer } from "./CustomerListTable";
 export function CustomersPage({ mode }: { mode?: "create" }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const { t } = useI18n();
   const currentUser = getCurrentUser();
   const canManageDictionaries = hasPermission(currentUser, "settings.customer_dictionaries.manage");
 
@@ -76,7 +78,7 @@ export function CustomersPage({ mode }: { mode?: "create" }) {
         <header className="page-header">
           <div>
             <p className="eyebrow">Customer Development</p>
-            <h1>新增目标客户</h1>
+            <h1>{t("customers.newTitle")}</h1>
           </div>
         </header>
         <CustomerCreateForm
@@ -98,11 +100,11 @@ export function CustomersPage({ mode }: { mode?: "create" }) {
       <header className="page-header">
         <div>
           <p className="eyebrow">Customer Development</p>
-          <h1>客户开发池</h1>
+          <h1>{t("customers.poolTitle")}</h1>
         </div>
         <Link to="/customers/new" className="primary-button">
           <img alt="" aria-hidden="true" className="button-svg-icon" src={plusIconUrl} />
-          新增客户
+          {t("customers.addCustomer")}
         </Link>
       </header>
 

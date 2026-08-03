@@ -3,27 +3,29 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createCustomerSource, createCustomerType, getCustomerSources, getCustomerTypes, updateCustomerSource, updateCustomerType } from "../../../api/settings";
 import { Field } from "../../../components/ui/Field";
 import { Switch } from "../../../components/Switch";
+import { useI18n } from "../../../i18n";
 import { Table } from "../shared/Table";
 import type { DictionaryRow } from "../shared/types";
 
 export function CustomerDictionaries() {
+  const { t } = useI18n();
   return (
     <div className="content-grid">
       <DictionaryPanel
-        title="客户来源"
+        title={t("settings.customerSource")}
         queryKey="customer-sources"
         fetchFn={getCustomerSources}
         createFn={createCustomerSource}
         updateFn={updateCustomerSource}
-        placeholder="如 Google搜索、展会、LinkedIn"
+        placeholder={t("settings.sourcePlaceholder")}
       />
       <DictionaryPanel
-        title="客户类型"
+        title={t("settings.customerType")}
         queryKey="customer-types"
         fetchFn={getCustomerTypes}
         createFn={createCustomerType}
         updateFn={updateCustomerType}
-        placeholder="如 品牌商、批发商、分销商"
+        placeholder={t("settings.typePlaceholder")}
       />
     </div>
   );
@@ -38,6 +40,7 @@ function DictionaryPanel(props: {
   placeholder: string;
 }) {
   const queryClient = useQueryClient();
+  const { t } = useI18n();
   const [form, setForm] = useState({ name: "", description: "" });
   const [drafts, setDrafts] = useState<Record<string, { name: string; description: string }>>({});
   const { data = [] } = useQuery({ queryKey: [props.queryKey], queryFn: () => props.fetchFn<DictionaryRow[]>() });
@@ -68,15 +71,15 @@ function DictionaryPanel(props: {
   });
   return (
     <section className="panel">
-      <div className="panel-title"><h2>{props.title}</h2><span>{data.length} 项</span></div>
+      <div className="panel-title"><h2>{props.title}</h2><span>{data.length} {t("common.itemCount")}</span></div>
       <div className="form-grid compact-form">
-        <Field label="名称" value={form.name} onChange={(name) => setForm({ ...form, name })} />
-        <Field label="说明" value={form.description} onChange={(description) => setForm({ ...form, description })} />
-        <div className="wide-field"><button className="primary-button" disabled={!form.name || create.isPending} onClick={() => create.mutate()}>新增{props.title}</button></div>
+        <Field label={t("common.name")} value={form.name} onChange={(name) => setForm({ ...form, name })} />
+        <Field label={t("common.description")} value={form.description} onChange={(description) => setForm({ ...form, description })} />
+        <div className="wide-field"><button className="primary-button" disabled={!form.name || create.isPending} onClick={() => create.mutate()}>{t("settings.addPrefix")}{props.title}</button></div>
       </div>
       <div className="empty-state">{props.placeholder}</div>
       <Table
-        headers={["名称", "说明", "状态", "操作"]}
+        headers={[t("common.name"), t("common.description"), t("common.status"), t("common.operation")]}
         rows={data.map((row) => {
           const draft = drafts[row.id] ?? { name: row.name, description: row.description ?? "" };
           return [
@@ -84,7 +87,7 @@ function DictionaryPanel(props: {
             <input className="table-input" value={draft.description} onChange={(event) => setDrafts({ ...drafts, [row.id]: { ...draft, description: event.target.value } })} />,
             <Switch checked={row.isActive} onChange={() => toggle.mutate(row)} loading={toggle.isPending} />,
             <div className="toolbar">
-              <button className="secondary-button" disabled={!draft.name || save.isPending} onClick={() => save.mutate(row)}>保存</button>
+              <button className="secondary-button" disabled={!draft.name || save.isPending} onClick={() => save.mutate(row)}>{t("common.save")}</button>
             </div>
           ];
         })}

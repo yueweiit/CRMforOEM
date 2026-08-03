@@ -4,17 +4,17 @@ import { useI18n } from "../../i18n";
 import type { ReportCustomerRow } from "../../shared/types/customer";
 
 export function CustomerTable({ rows, mode }: { rows: ReportCustomerRow[]; mode: "value" | "risk" }) {
-  const { locale } = useI18n();
-  if (!rows.length) return <EmptyState message="暂无客户数据。" />;
+  const { locale, t } = useI18n();
+  if (!rows.length) return <EmptyState message={t("common.noData")} />;
   return (
     <table>
       <thead>
         <tr>
-          <th>客户</th>
-          <th>国家</th>
-          <th>阶段</th>
-          <th>{mode === "value" ? "评分/金额" : "风险/逾期"}</th>
-          <th>负责人</th>
+          <th>{t("common.customer")}</th>
+          <th>{t("common.country")}</th>
+          <th>{t("common.stage")}</th>
+          <th>{mode === "value" ? t("reports.scoreAmount") : t("reports.riskOverdue")}</th>
+          <th>{t("common.owner")}</th>
         </tr>
       </thead>
       <tbody>

@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getOemScoringWeights, updateOemScoringWeights } from "../../../api/settings";
 import { getCurrentUser, hasPermission } from "../../../auth/permissions";
 import { notifyMutationStep } from "../../../components/Toast";
+import { useI18n } from "../../../i18n";
+import type { TranslationKey } from "../../../i18n/resources";
 import type { OemScoringWeights } from "../shared/types";
 
 const DEFAULT_WEIGHTS: OemScoringWeights = {
@@ -17,19 +19,24 @@ const DEFAULT_WEIGHTS: OemScoringWeights = {
 };
 
 const SCORING_FIELDS = [
-  { key: "productLineFit" as const, label: "产品线匹配度", description: "客户产品线与我方 OEM/ODM 能力匹配程度" },
-  { key: "marketFit" as const, label: "市场匹配度", description: "国家、区域、渠道、目标市场匹配程度" },
-  { key: "priceBandFit" as const, label: "价格带匹配度", description: "客户定位与我方价格能力匹配程度" },
-  { key: "brandMaturity" as const, label: "品牌成熟度", description: "品牌可信度、公司规模、业务稳定性" },
-  { key: "websiteCompleteness" as const, label: "官网完整度", description: "官网分析、背调数据完整度和可信度" },
-  { key: "contactQuality" as const, label: "联系人质量", description: "联系人有效性、职位、决策人程度" },
-  { key: "cooperationOpportunity" as const, label: "合作机会", description: "OEM/ODM、定制、补货、扩品机会" }
-] as const;
+  { key: "productLineFit", labelKey: "scoringFields.productLineFit", descriptionKey: "scoringFields.productLineFitDescription" },
+  { key: "marketFit", labelKey: "scoringFields.marketFit", descriptionKey: "scoringFields.marketFitDescription" },
+  { key: "priceBandFit", labelKey: "scoringFields.priceBandFit", descriptionKey: "scoringFields.priceBandFitDescription" },
+  { key: "brandMaturity", labelKey: "scoringFields.brandMaturity", descriptionKey: "scoringFields.brandMaturityDescription" },
+  { key: "websiteCompleteness", labelKey: "scoringFields.websiteCompleteness", descriptionKey: "scoringFields.websiteCompletenessDescription" },
+  { key: "contactQuality", labelKey: "scoringFields.contactQuality", descriptionKey: "scoringFields.contactQualityDescription" },
+  { key: "cooperationOpportunity", labelKey: "scoringFields.cooperationOpportunity", descriptionKey: "scoringFields.cooperationOpportunityDescription" }
+] as const satisfies ReadonlyArray<{
+  key: Exclude<keyof OemScoringWeights, "riskPenaltyMax">;
+  labelKey: TranslationKey;
+  descriptionKey: TranslationKey;
+}>;
 
 const BONUS_KEYS = SCORING_FIELDS.map((f) => f.key);
 
 export function ScoringWeights() {
   const queryClient = useQueryClient();
+  const { t } = useI18n();
   const currentUser = getCurrentUser();
   const canEdit = hasPermission(currentUser, "settings.scoring_weights.manage");
 
@@ -83,7 +90,7 @@ export function ScoringWeights() {
     setForm({ ...DEFAULT_WEIGHTS });
   }
 
-  if (isLoading) return <div className="empty-state">正在加载评分权重配置...</div>;
+  if (isLoading) return <div className="empty-state">{t("settings.scoringLoading")}</div>;
 
   return (
     <div className="page-stack">
@@ -98,20 +105,20 @@ export function ScoringWeights() {
       </div>
 
       <section className="panel">
-        <div className="panel-title"><h2>加分项权重</h2><span>总和必须等于 100</span></div>
+        <div className="panel-title"><h2>{t("settings.bonusWeights")}</h2><span>{t("settings.totalMust100")}</span></div>
         <table>
           <thead>
             <tr>
-              <th>评分项</th>
-              <th>说明</th>
-              <th style={{ width: 100 }}>权重</th>
+              <th>{t("settings.scoringItem")}</th>
+              <th>{t("common.description")}</th>
+              <th style={{ width: 100 }}>{t("settings.weight")}</th>
             </tr>
           </thead>
           <tbody>
             {SCORING_FIELDS.map((field) => (
               <tr key={field.key}>
-                <td><strong>{field.label}</strong></td>
-                <td><small>{field.description}</small></td>
+                <td><strong>{t(field.labelKey)}</strong></td>
+                <td><small>{t(field.descriptionKey)}</small></td>
                 <td>
                   <input
                     type="number"
@@ -135,19 +142,19 @@ export function ScoringWeights() {
       </section>
 
       <section className="panel">
-        <div className="panel-title"><h2>风险扣分</h2><span>范围 0-10</span></div>
+        <div className="panel-title"><h2>{t("settings.riskPenalty")}</h2><span>{t("settings.range010")}</span></div>
         <table>
           <thead>
             <tr>
-              <th>配置项</th>
-              <th>说明</th>
-              <th style={{ width: 100 }}>数值</th>
+              <th>{t("settings.configItem")}</th>
+              <th>{t("common.description")}</th>
+              <th style={{ width: 100 }}>{t("settings.numberValue")}</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td><strong>风险最大扣分</strong></td>
-              <td><small>黑名单、信息异常、低可信度等风险最多可扣分数</small></td>
+              <td><strong>{t("settings.riskPenaltyMax")}</strong></td>
+              <td><small>{t("settings.riskPenaltyDescription")}</small></td>
               <td>
                 <input
                   type="number"
@@ -174,10 +181,10 @@ export function ScoringWeights() {
       {canEdit ? (
         <div className="toolbar" style={{ gap: 8 }}>
           <button className="primary-button" disabled={!canSave || save.isPending} onClick={() => save.mutate()}>
-            {save.isPending ? "保存中..." : "保存配置"}
+            {save.isPending ? t("common.saving") : t("settings.saveConfig")}
           </button>
           <button className="secondary-button" disabled={save.isPending} onClick={resetToDefaults}>
-            恢复默认
+            {t("settings.resetDefault")}
           </button>
         </div>
       ) : null}

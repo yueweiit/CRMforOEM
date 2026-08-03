@@ -5,6 +5,7 @@ import { getEmailAccounts } from "../../../../../api/email";
 import { generateEmailDraft } from "../../../../../api/customers";
 import { AppSelect } from "../../../../../components/AppSelect";
 import { showClientToast } from "../../../../../components/Toast";
+import { useI18n } from "../../../../../i18n";
 import { sameEmailAddress } from "../../../../../shared/utils/email-format";
 import type { AcceptedResponse, Contact, EmailAccount } from "../../shared/types";
 import { cleanPayload, invalidateEmailData } from "./email-panel-utils";
@@ -26,6 +27,7 @@ export function EmailDraftGenerationForm({
   onChanged: () => void;
 }) {
   const queryClient = useQueryClient();
+  const { locale, t } = useI18n();
   const contactOptions = contacts.filter((contact) => Boolean(contact.email));
   const [draftForm, setDraftForm] = useState<DraftForm>({
     purpose: "FIRST_OUTREACH",
@@ -56,8 +58,8 @@ export function EmailDraftGenerationForm({
       if (response.accepted === false) {
         showClientToast({
           type: "warning",
-          title: "邮件草稿生成中",
-          message: "已有邮件草稿正在后台生成中，请稍后刷新查看。"
+          title: t("emailCenter.draftGeneratingTitle"),
+          message: t("emailCenter.draftGeneratingMessage")
         });
       }
       invalidateEmailData(queryClient, customerId, onChanged);
@@ -68,25 +70,25 @@ export function EmailDraftGenerationForm({
   return (
     <section className="panel">
       <div className="panel-title">
-        <h2>AI邮件生成</h2>
-        <span>只生成草稿，人工审核后发送</span>
+        <h2>{t("emailCenter.aiGenerateTitle")}</h2>
+        <span>{t("emailCenter.aiGenerateHint")}</span>
       </div>
       <div className="form-grid">
         <label>
-          <span>邮件类型</span>
+          <span>{t("emailCenter.draftPurpose")}</span>
           <AppSelect
             value={draftForm.purpose}
             onChange={(purpose) => setDraftForm({ ...draftForm, purpose })}
-            options={EMAIL_DRAFT_PURPOSES.map((purpose) => ({ value: purpose, label: emailDraftPurposeLabel(purpose) }))}
+            options={EMAIL_DRAFT_PURPOSES.map((purpose) => ({ value: purpose, label: emailDraftPurposeLabel(purpose, locale) }))}
           />
         </label>
         <label>
-          <span>收件人</span>
+          <span>{t("emailCenter.recipient")}</span>
           <AppSelect
             value={draftForm.toEmail}
             onChange={(toEmail) => setDraftForm({ ...draftForm, toEmail })}
             options={[
-              { value: "", label: "选择联系人邮箱" },
+              { value: "", label: t("emailCenter.selectContactEmail") },
               ...contactOptions.map((contact) => ({
                 value: contact.email ?? "",
                 label: `${contact.name || contact.email} · ${contact.email}`
@@ -95,21 +97,21 @@ export function EmailDraftGenerationForm({
           />
         </label>
         <label>
-          <span>发件邮箱</span>
+          <span>{t("emailCenter.senderAccount")}</span>
           <AppSelect
             value={draftForm.emailAccountId}
             onChange={(emailAccountId) => setDraftForm({ ...draftForm, emailAccountId })}
             options={[
-              { value: "", label: "发送时自动选择" },
+              { value: "", label: t("emailCenter.autoSelectSender") },
               ...selectableAccounts.map((account) => ({
                 value: account.id,
-                label: `${account.name} · ${account.email} ${account.scope === "SHARED" ? "(共享)" : ""}`
+                label: `${account.name} · ${account.email} ${account.scope === "SHARED" ? `(${t("emailCenter.sharedSuffix")})` : ""}`
               }))
             ]}
           />
         </label>
         <label className="wide-field">
-          <span>补充要求</span>
+          <span>{t("emailCenter.additionalRequirements")}</span>
           <textarea
             value={draftForm.userInstructions}
             onChange={(event) => setDraftForm({ ...draftForm, userInstructions: event.target.value })}
@@ -121,12 +123,12 @@ export function EmailDraftGenerationForm({
             disabled={!draftForm.toEmail || !selectableAccounts.length || generate.isPending}
             onClick={() => generate.mutate()}
           >
-            {generate.isPending ? "生成中..." : "生成AI草稿"}
+            {generate.isPending ? t("emailCenter.generating") : t("emailCenter.generateAiDraft")}
           </button>
         </div>
         {!selectableAccounts.length && draftForm.toEmail ? (
           <div className="wide-field empty-state">
-            当前没有可用发件邮箱，或可用发件邮箱与收件人邮箱相同。
+            {t("emailCenter.noAvailableSender")}
           </div>
         ) : null}
       </div>

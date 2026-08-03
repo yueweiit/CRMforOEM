@@ -41,7 +41,7 @@ function customerToForm(customer: CustomerDetail) {
 
 export function OverviewPanel({ customer, customerId, onChanged }: { customer: CustomerDetail; customerId: string; onChanged: () => void }) {
   const queryClient = useQueryClient();
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState(customerToForm(customer));
   const [contact, setContact] = useState(defaultContactForm());
@@ -151,28 +151,28 @@ export function OverviewPanel({ customer, customerId, onChanged }: { customer: C
       <Dialog
         v2
         className="crm-action-dialog contact-dialog"
-        title={contactDialogMode === "edit" ? "编辑联系人" : "新增联系人"}
+        title={contactDialogMode === "edit" ? t("customerDetail.editContact") : t("customerDetail.addContact")}
         visible={Boolean(contactDialogMode)}
         footer={(
           <div className="toolbar crm-dialog-footer">
             <button className="secondary-button" disabled={isContactSaving} onClick={closeContactDialog} type="button">
-              取消
+              {t("common.cancel")}
             </button>
             <button className="primary-button" disabled={isContactSaving} onClick={submitContact} type="button">
-              {isContactSaving ? "保存中..." : contactDialogMode === "edit" ? "保存修改" : "新增联系人"}
+              {isContactSaving ? t("common.saving") : contactDialogMode === "edit" ? t("common.saveChanges") : t("customerDetail.saveContact")}
             </button>
           </div>
         )}
         onClose={closeContactDialog}
       >
         <div className="form-grid compact-form contact-dialog-form">
-          <Field label="姓名" value={contact.name} onChange={(name) => setContact({ ...contact, name })} />
-          <Field label="职位" value={contact.title} onChange={(title) => setContact({ ...contact, title })} />
-          <Field label="邮箱" value={contact.email} onChange={(email) => setContact({ ...contact, email })} />
-          <Field label="电话" value={contact.phone} onChange={(phone) => setContact({ ...contact, phone })} />
+          <Field label={t("common.name")} value={contact.name} onChange={(name) => setContact({ ...contact, name })} />
+          <Field label={t("common.title")} value={contact.title} onChange={(title) => setContact({ ...contact, title })} />
+          <Field label={t("common.email")} value={contact.email} onChange={(email) => setContact({ ...contact, email })} />
+          <Field label={t("common.phone")} value={contact.phone} onChange={(phone) => setContact({ ...contact, phone })} />
           <div className="contact-meta-row">
             <label className="contact-inline-field contact-score-field">
-              <span>质量分</span>
+              <span>{t("common.qualityScore")}</span>
               <input
                 inputMode="numeric"
                 value={contact.qualityScore}
@@ -180,7 +180,7 @@ export function OverviewPanel({ customer, customerId, onChanged }: { customer: C
               />
             </label>
             <label className="contact-inline-field contact-checkbox-field">
-              <span>关键决策人</span>
+              <span>{t("common.keyDecisionMaker")}</span>
               <input
                 checked={contact.isDecisionMaker}
                 type="checkbox"
@@ -189,21 +189,21 @@ export function OverviewPanel({ customer, customerId, onChanged }: { customer: C
             </label>
           </div>
         </div>
-        {createContact.isError || updateContact.isError ? <div className="error-state">联系人保存失败，请检查邮箱或分数字段。</div> : null}
+        {createContact.isError || updateContact.isError ? <div className="error-state">{t("customerDetail.contactSaveFailed")}</div> : null}
       </Dialog>
 
       <Dialog
         v2
         className="crm-delete-dialog"
-        title="确认删除联系人"
+        title={t("customerDetail.deleteContactTitle")}
         visible={Boolean(pendingDeleteContactId)}
         footer={(
           <div className="toolbar crm-dialog-footer">
             <button className="secondary-button" disabled={deleteContact.isPending} onClick={closeDeleteContactDialog} type="button">
-              取消
+              {t("common.cancel")}
             </button>
             {deleteContact.isPending ? (
-              <button className="primary-button" disabled type="button">处理中...</button>
+              <button className="primary-button" disabled type="button">{t("toast.processing")}...</button>
             ) : (
               <DeleteIconButton className="primary-button" onClick={confirmDeleteContact} />
             )}
@@ -211,101 +211,101 @@ export function OverviewPanel({ customer, customerId, onChanged }: { customer: C
         )}
         onClose={closeDeleteContactDialog}
       >
-        确认删除这个联系人吗？删除后将无法恢复。
+        {t("customerDetail.deleteContactConfirm")}
       </Dialog>
 
       <section className="panel">
         <div className="panel-title">
-          <h2>客户概览</h2>
+          <h2>{t("customerDetail.overview")}</h2>
           <div className="toolbar">
             {isEditing ? (
               <>
-                <button className="secondary-button" onClick={() => { setEditForm(customerToForm(customer)); setIsEditing(false); }}>取消</button>
+                <button className="secondary-button" onClick={() => { setEditForm(customerToForm(customer)); setIsEditing(false); }}>{t("common.cancel")}</button>
                 <button className="primary-button" disabled={!editForm.name || saveCustomer.isPending} onClick={() => saveCustomer.mutate()}>
-                  {saveCustomer.isPending ? "保存中..." : "保存客户资料"}
+                  {saveCustomer.isPending ? t("common.saving") : t("customerDetail.saveCustomer")}
                 </button>
               </>
             ) : (
-              <EditIconButton label="编辑资料" onClick={() => setIsEditing(true)} />
+              <EditIconButton label={t("customerDetail.editProfile")} onClick={() => setIsEditing(true)} />
             )}
           </div>
         </div>
-        {saveCustomer.isError ? <div className="error-state">保存失败，请检查字段格式。</div> : null}
+        {saveCustomer.isError ? <div className="error-state">{t("customerDetail.saveFailed")}</div> : null}
         {isEditing ? (
           <div className="form-grid">
-            <Field label="公司名称 *" value={editForm.name} onChange={(name) => setEditForm({ ...editForm, name })} />
-            <Field label="官网URL" value={editForm.websiteUrl} onChange={(websiteUrl) => setEditForm({ ...editForm, websiteUrl })} />
-            <Field label="国家/地区" value={editForm.country} onChange={(country) => setEditForm({ ...editForm, country })} />
-            <Field label="语言" value={editForm.language} onChange={(language) => setEditForm({ ...editForm, language })} />
-            <Field label="时区" value={editForm.timezone} onChange={(timezone) => setEditForm({ ...editForm, timezone })} />
-            <Field label="币种" value={editForm.currency} onChange={(currency) => setEditForm({ ...editForm, currency })} />
+            <Field label={t("customers.companyName")} value={editForm.name} onChange={(name) => setEditForm({ ...editForm, name })} />
+            <Field label={t("customers.websiteUrl")} value={editForm.websiteUrl} onChange={(websiteUrl) => setEditForm({ ...editForm, websiteUrl })} />
+            <Field label={t("customers.countryRegion")} value={editForm.country} onChange={(country) => setEditForm({ ...editForm, country })} />
+            <Field label={t("customers.customerLanguage")} value={editForm.language} onChange={(language) => setEditForm({ ...editForm, language })} />
+            <Field label={t("customers.timezone")} value={editForm.timezone} onChange={(timezone) => setEditForm({ ...editForm, timezone })} />
+            <Field label={t("customers.currency")} value={editForm.currency} onChange={(currency) => setEditForm({ ...editForm, currency })} />
             <label>
-              <span>客户来源</span>
+              <span>{t("customerDetail.customerSource")}</span>
               <AppSelect
                 value={editForm.sourceId}
                 onChange={(sourceId) => setEditForm({ ...editForm, sourceId })}
                 options={[
-                  { value: "", label: "未选择" },
+                  { value: "", label: t("common.notSelected") },
                   ...(options?.sources.map((item) => ({ value: item.id, label: item.name })) ?? [])
                 ]}
               />
             </label>
             <label>
-              <span>客户类型</span>
+              <span>{t("customerDetail.customerType")}</span>
               <AppSelect
                 value={editForm.typeId}
                 onChange={(typeId) => setEditForm({ ...editForm, typeId })}
                 options={[
-                  { value: "", label: "未选择" },
+                  { value: "", label: t("common.notSelected") },
                   ...(options?.types.map((item) => ({ value: item.id, label: item.name })) ?? [])
                 ]}
               />
             </label>
             <label>
-              <span>负责人</span>
+              <span>{t("common.owner")}</span>
               <AppSelect
                 value={editForm.ownerId}
                 onChange={(ownerId) => setEditForm({ ...editForm, ownerId })}
                 options={[
-                  { value: "", label: "未选择" },
+                  { value: "", label: t("common.notSelected") },
                   ...(options?.users.map((item) => ({ value: item.id, label: item.name })) ?? [])
                 ]}
               />
             </label>
             <label>
-              <span>客户阶段</span>
+              <span>{t("customerDetail.customerStage")}</span>
               <AppSelect
                 value={editForm.stage}
                 onChange={(stage) => setEditForm({ ...editForm, stage })}
                 options={(options?.stages ?? Object.keys(STAGE_LABELS)).map((stage) => ({ value: stage, label: stageLabel(stage, locale) }))}
               />
             </label>
-            <Field label="标签" value={editForm.tags} onChange={(tags) => setEditForm({ ...editForm, tags })} />
+            <Field label={t("common.tags")} value={editForm.tags} onChange={(tags) => setEditForm({ ...editForm, tags })} />
             <label className="wide-field">
-              <span>备注</span>
+              <span>{t("common.notes")}</span>
               <textarea value={editForm.notes} onChange={(event) => setEditForm({ ...editForm, notes: event.target.value })} />
             </label>
           </div>
         ) : (
           <div className="detail-grid">
-            <Detail label="阶段" value={stageLabel(customer.stage, locale)} />
-            <Detail label="风险" value={customer.riskLevel} />
-            <Detail label="官网" value={customer.websiteUrl ?? "-"} />
-            <Detail label="国家/语言" value={`${customer.country ?? "-"} / ${customer.language ?? "-"}`} />
-            <Detail label="时区/币种" value={`${customer.timezone ?? "-"} / ${customer.currency ?? "-"}`} />
-            <Detail label="负责人" value={customer.owner?.name ?? "-"} />
-            <Detail label="客户来源" value={customer.source?.name ?? "-"} />
-            <Detail label="客户类型" value={customer.type?.name ?? "-"} />
-            <Detail label="标签" value={customer.tags?.join(", ") || "-"} />
-            <Detail label="备注" value={customer.notes ?? "-"} wide />
+            <Detail label={t("common.stage")} value={stageLabel(customer.stage, locale)} />
+            <Detail label={t("common.risk")} value={customer.riskLevel} />
+            <Detail label={t("common.website")} value={customer.websiteUrl ?? "-"} />
+            <Detail label={t("customerDetail.countryLanguage")} value={`${customer.country ?? "-"} / ${customer.language ?? "-"}`} />
+            <Detail label={t("customerDetail.timezoneCurrency")} value={`${customer.timezone ?? "-"} / ${customer.currency ?? "-"}`} />
+            <Detail label={t("common.owner")} value={customer.owner?.name ?? "-"} />
+            <Detail label={t("customerDetail.customerSource")} value={customer.source?.name ?? "-"} />
+            <Detail label={t("customerDetail.customerType")} value={customer.type?.name ?? "-"} />
+            <Detail label={t("common.tags")} value={customer.tags?.join(", ") || "-"} />
+            <Detail label={t("common.notes")} value={customer.notes ?? "-"} wide />
           </div>
         )}
       </section>
       <section className="panel">
         <div className="panel-title">
-          <h2>联系人</h2>
+          <h2>{t("customerDetail.contacts")}</h2>
           <div className="toolbar">
-            <AddIconButton label="新增联系人" onClick={openCreateContactDialog} />
+            <AddIconButton label={t("customerDetail.addContact")} onClick={openCreateContactDialog} />
           </div>
         </div>
         <div className="task-list">
@@ -314,8 +314,8 @@ export function OverviewPanel({ customer, customerId, onChanged }: { customer: C
               <NotebookTabs size={16} />
               <button className="contact-row-main" onClick={() => openEditContactDialog(item)} type="button">
                 <strong>
-                  {item.name || item.email || "未命名联系人"}
-                  {item.isDecisionMaker ? <span className="status-pill contact-role-pill">决策人</span> : null}
+                  {item.name || item.email || t("common.unnamedContact")}
+                  {item.isDecisionMaker ? <span className="status-pill contact-role-pill">{t("common.decisionMaker")}</span> : null}
                 </strong>
                 <span>{item.title ?? "-"} · {item.email ?? "-"}</span>
               </button>
@@ -325,7 +325,7 @@ export function OverviewPanel({ customer, customerId, onChanged }: { customer: C
               </div>
             </div>
           ))}
-          {!customer.contacts.length ? <div className="empty-state">暂无联系人。</div> : null}
+          {!customer.contacts.length ? <div className="empty-state">{t("customerDetail.noContacts")}</div> : null}
         </div>
       </section>
     </div>

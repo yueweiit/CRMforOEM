@@ -2,12 +2,14 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarClock, CheckCircle2 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { followUpTaskStatusLabel, taskTypeLabel } from "@oem-crm/shared";
 import { cancelFollowUpTask, completeFollowUpTask, createFollowUpTask, getFollowUpTasks } from "../../api/followUps";
 import { getCustomers } from "../../api/customers";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { LoadingState } from "../../components/ui/LoadingState";
 import { notifyMutationStep } from "../../components/Toast";
 import { useSse } from "../../hooks/useSse";
+import { useI18n } from "../../i18n";
 import { FollowUpFilterBar, type Customer, type FollowUpForm } from "./FollowUpFilterBar";
 
 type FollowUpTask = {
@@ -23,6 +25,7 @@ type FollowUpTask = {
 
 export function FollowUpsPage() {
   const queryClient = useQueryClient();
+  const { locale, t } = useI18n();
   const [status, setStatus] = useState("OPEN");
   const [form, setForm] = useState<FollowUpForm>(defaultForm());
   const { data = [], isLoading } = useQuery({
@@ -46,36 +49,36 @@ export function FollowUpsPage() {
 
   const complete = useMutation({
     mutationFn: (id: string) => completeFollowUpTask(id, { toast: false }),
-    onMutate: (id) => notifyMutationStep({ phase: "loading", title: "处理中", message: "正在完成跟进任务。", dedupeKey: `followup-complete:${id}` }),
+    onMutate: (id) => notifyMutationStep({ phase: "loading", title: t("toast.processing"), message: t("followUps.complete"), dedupeKey: `followup-complete:${id}` }),
     onSuccess: () => {
-      notifyMutationStep({ phase: "success", title: "跟进任务已完成", message: "任务状态已更新为已完成。" });
+      notifyMutationStep({ phase: "success", title: t("followUps.completed"), message: t("followUps.completed") });
       queryClient.invalidateQueries({ queryKey: ["follow-up-tasks"] });
       queryClient.invalidateQueries({ queryKey: ["nav-follow-up-overdue-count"] });
     },
-    onError: (error, id) => notifyMutationStep({ phase: "error", title: "完成失败", message: error instanceof Error ? error.message : "完成跟进任务失败。", dedupeKey: `followup-complete:${id}:error` })
+    onError: (error, id) => notifyMutationStep({ phase: "error", title: t("toast.errorUpdate"), message: error instanceof Error ? error.message : t("toast.errorUpdate"), dedupeKey: `followup-complete:${id}:error` })
   });
 
   const cancel = useMutation({
     mutationFn: (id: string) => cancelFollowUpTask(id, { toast: false }),
-    onMutate: (id) => notifyMutationStep({ phase: "loading", title: "处理中", message: "正在取消跟进任务。", dedupeKey: `followup-cancel:${id}` }),
+    onMutate: (id) => notifyMutationStep({ phase: "loading", title: t("toast.processing"), message: t("followUps.cancel"), dedupeKey: `followup-cancel:${id}` }),
     onSuccess: () => {
-      notifyMutationStep({ phase: "success", title: "跟进任务已取消", message: "任务状态已更新为已取消。" });
+      notifyMutationStep({ phase: "success", title: t("followUps.cancelled"), message: t("followUps.cancelled") });
       queryClient.invalidateQueries({ queryKey: ["follow-up-tasks"] });
       queryClient.invalidateQueries({ queryKey: ["nav-follow-up-overdue-count"] });
     },
-    onError: (error, id) => notifyMutationStep({ phase: "error", title: "取消失败", message: error instanceof Error ? error.message : "取消跟进任务失败。", dedupeKey: `followup-cancel:${id}:error` })
+    onError: (error, id) => notifyMutationStep({ phase: "error", title: t("toast.errorUpdate"), message: error instanceof Error ? error.message : t("toast.errorUpdate"), dedupeKey: `followup-cancel:${id}:error` })
   });
 
   const create = useMutation({
     mutationFn: () => createFollowUpTask({ ...form, dueAt: new Date(form.dueAt).toISOString() }, { toast: false }),
-    onMutate: () => notifyMutationStep({ phase: "loading", title: "处理中", message: "正在创建跟进任务。", dedupeKey: `followup-create:${form.customerId}:${form.title}` }),
+    onMutate: () => notifyMutationStep({ phase: "loading", title: t("toast.processing"), message: t("toast.loadingCreate"), dedupeKey: `followup-create:${form.customerId}:${form.title}` }),
     onSuccess: () => {
-      notifyMutationStep({ phase: "success", title: "跟进任务已创建", message: "新任务已加入跟进列表。" });
+      notifyMutationStep({ phase: "success", title: t("toast.successCreateTitle"), message: t("toast.successCreate") });
       setForm(defaultForm());
       queryClient.invalidateQueries({ queryKey: ["follow-up-tasks"] });
       queryClient.invalidateQueries({ queryKey: ["nav-follow-up-overdue-count"] });
     },
-    onError: (error) => notifyMutationStep({ phase: "error", title: "创建失败", message: error instanceof Error ? error.message : "创建跟进任务失败。", dedupeKey: `followup-create:${form.customerId}:${form.title}:error` })
+    onError: (error) => notifyMutationStep({ phase: "error", title: t("toast.errorCreate"), message: error instanceof Error ? error.message : t("toast.errorCreate"), dedupeKey: `followup-create:${form.customerId}:${form.title}:error` })
   });
 
   return (
@@ -83,11 +86,11 @@ export function FollowUpsPage() {
       <header className="page-header">
         <div>
           <p className="eyebrow">Follow-up Tasks</p>
-          <h1>跟进任务</h1>
+          <h1>{t("followUps.title")}</h1>
         </div>
         <button className="primary-button" disabled={!form.customerId || !form.title || create.isPending} onClick={() => create.mutate()}>
           <CheckCircle2 size={16} />
-          新增任务
+          {t("followUps.addTask")}
         </button>
       </header>
 
@@ -100,13 +103,13 @@ export function FollowUpsPage() {
       />
 
       <section className="table-panel">
-        <div className="panel-title"><h2>任务列表</h2><span>{data.length} 项</span></div>
-        {isLoading ? <LoadingState message="正在加载任务..." /> : null}
-        {!isLoading && !data.length ? <EmptyState message="暂无跟进任务。" /> : null}
+        <div className="panel-title"><h2>{t("followUps.listTitle")}</h2><span>{data.length} {t("common.itemCount")}</span></div>
+        {isLoading ? <LoadingState message={t("followUps.loading")} /> : null}
+        {!isLoading && !data.length ? <EmptyState message={t("followUps.empty")} /> : null}
         {data.length ? (
           <table>
-            <thead><tr><th>任务</th><th>客户</th><th>负责人</th><th>截止时间</th><th>状态</th><th>操作</th></tr></thead>
-            <tbody>{data.map((task) => <tr key={task.id}><td><strong>{task.title}</strong><small>{task.type}</small></td><td><Link className="table-link" to={`/customers/${task.customer.id}/follow-ups`}>{task.customer.name}</Link></td><td>{task.owner.name}</td><td>{new Date(task.dueAt).toLocaleString()}</td><td><span className="status-pill">{task.status}</span></td><td><button className="secondary-button" onClick={() => complete.mutate(task.id)}>完成</button><button className="secondary-button" onClick={() => cancel.mutate(task.id)}>取消</button></td></tr>)}</tbody>
+            <thead><tr><th>{t("followUps.task")}</th><th>{t("common.customer")}</th><th>{t("followUps.owner")}</th><th>{t("followUps.dueAt")}</th><th>{t("followUps.status")}</th><th>{t("common.operation")}</th></tr></thead>
+            <tbody>{data.map((task) => <tr key={task.id}><td><strong>{task.title}</strong><small>{taskTypeLabel(task.type, locale)}</small></td><td><Link className="table-link" to={`/customers/${task.customer.id}/follow-ups`}>{task.customer.name}</Link></td><td>{task.owner.name}</td><td>{new Date(task.dueAt).toLocaleString()}</td><td><span className="status-pill">{followUpTaskStatusLabel(task.status, locale)}</span></td><td><button className="secondary-button" onClick={() => complete.mutate(task.id)}>{t("followUps.complete")}</button><button className="secondary-button" onClick={() => cancel.mutate(task.id)}>{t("followUps.cancel")}</button></td></tr>)}</tbody>
           </table>
         ) : null}
       </section>
@@ -115,8 +118,8 @@ export function FollowUpsPage() {
         <div className="task-row">
           <CalendarClock size={18} />
           <div>
-            <strong>自动跟进规则</strong>
-            <span>首封邮件发送后 3 天未回复、报价后、样品寄出后，系统会自动生成提醒任务，协助业务员持续推进客户。</span>
+            <strong>{t("followUps.autoRuleTitle")}</strong>
+            <span>{t("followUps.autoRuleDescription")}</span>
           </div>
           <span className="status-pill">ACTIVE</span>
         </div>

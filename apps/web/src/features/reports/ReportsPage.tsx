@@ -59,7 +59,7 @@ const fallback: ManagementDashboard = {
 
 export function ReportsPage() {
   const { scope = "management" } = useParams();
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const [filters, setFilters] = useState(defaultReportFilters());
   const queryString = useMemo(() => toQueryString(filters), [filters]);
   const { data: filterOptions } = useQuery({
@@ -79,36 +79,36 @@ export function ReportsPage() {
       <header className="page-header">
         <div>
           <p className="eyebrow">Reports</p>
-          <h1>数据看板</h1>
+          <h1>{t("reports.title")}</h1>
         </div>
       </header>
 
       <ReportFilterBar filters={filters} options={filterOptions} onChange={setFilters} />
-      {isError ? <section className="panel"><ErrorState message="看板数据加载失败，请检查权限或稍后重试。" /></section> : null}
-      {isFetching ? <section className="panel"><LoadingState message="正在刷新看板数据..." /></section> : null}
+      {isError ? <section className="panel"><ErrorState message={t("reports.loadError")} /></section> : null}
+      {isFetching ? <section className="panel"><LoadingState message={t("reports.refreshing")} /></section> : null}
 
       <div className="metric-grid dashboard-kpis">
-        <Metric icon={<UsersRound size={18} />} label="客户总数" value={summary.team_customer_total} tone="teal" />
-        <Metric icon={<BarChart3 size={18} />} label="背调完成数量" value={summary.researched_customers} tone="amber" />
-        <Metric icon={<LineChart size={18} />} label="邮件发送数量" value={summary.sent_emails} tone="rose" />
-        <Metric icon={<PieChart size={18} />} label="邮件回复率" value={`${(summary.reply_rate * 100).toFixed(1)}%`} tone="neutral" />
-        <Metric icon={<Trophy size={18} />} label="报价转化率" value={`${(summary.quote_conversion_rate * 100).toFixed(1)}%`} tone="teal" />
-        <Metric icon={<Trophy size={18} />} label="样品转化率" value={`${(summary.sample_conversion_rate * 100).toFixed(1)}%`} tone="amber" />
-        <Metric icon={<Trophy size={18} />} label="成交转化率" value={`${(summary.won_conversion_rate * 100).toFixed(1)}%`} tone="rose" />
+        <Metric icon={<UsersRound size={18} />} label={t("reports.totalCustomers")} value={summary.team_customer_total} tone="teal" />
+        <Metric icon={<BarChart3 size={18} />} label={t("reports.researchDone")} value={summary.researched_customers} tone="amber" />
+        <Metric icon={<LineChart size={18} />} label={t("reports.sentEmails")} value={summary.sent_emails} tone="rose" />
+        <Metric icon={<PieChart size={18} />} label={t("reports.replyRate")} value={`${(summary.reply_rate * 100).toFixed(1)}%`} tone="neutral" />
+        <Metric icon={<Trophy size={18} />} label={t("reports.quoteConversionRate")} value={`${(summary.quote_conversion_rate * 100).toFixed(1)}%`} tone="teal" />
+        <Metric icon={<Trophy size={18} />} label={t("reports.sampleConversionRate")} value={`${(summary.sample_conversion_rate * 100).toFixed(1)}%`} tone="amber" />
+        <Metric icon={<Trophy size={18} />} label={t("reports.wonConversionRate")} value={`${(summary.won_conversion_rate * 100).toFixed(1)}%`} tone="rose" />
       </div>
 
       <div className="content-grid">
         <section className="panel">
           <div className="panel-title">
-            <h2>新增客户趋势</h2>
+            <h2>{t("reports.newCustomerTrend")}</h2>
             <span>{filters.group_by}</span>
           </div>
           <SingleTrend data={data.new_customer_trend} />
         </section>
         <section className="panel">
           <div className="panel-title">
-            <h2>客户开发阶段分布</h2>
-            <span>漏斗口径</span>
+            <h2>{t("reports.stageDistribution")}</h2>
+            <span>{t("reports.funnelScope")}</span>
           </div>
           <BarList data={data.stage_distribution.map((item) => ({ label: stageLabel(item.stage, locale), value: item.count }))} />
         </section>
@@ -117,15 +117,15 @@ export function ReportsPage() {
       <div className="content-grid">
         <section className="panel">
           <div className="panel-title">
-            <h2>客户国家分布</h2>
-            <span>Top countries</span>
+            <h2>{t("reports.countryDistribution")}</h2>
+            <span>{t("reports.topCountries")}</span>
           </div>
           <BarList data={data.country_distribution.map((item) => ({ label: item.country, value: item.count }))} />
         </section>
         <section className="panel">
           <div className="panel-title">
-            <h2>客户类型分布</h2>
-            <span>客户画像</span>
+            <h2>{t("reports.typeDistribution")}</h2>
+            <span>{t("reports.customerProfile")}</span>
           </div>
           <BarList data={data.type_distribution.map((item) => ({ label: item.customer_type, value: item.count }))} />
         </section>
@@ -133,8 +133,8 @@ export function ReportsPage() {
 
       <section className="table-panel">
         <div className="panel-title">
-          <h2>业务员绩效排行</h2>
-          <span>成交、回复、发送综合排序</span>
+          <h2>{t("reports.salesRanking")}</h2>
+          <span>{t("reports.salesRankingHint")}</span>
         </div>
         <SalesRankingTable rows={data.sales_ranking} />
       </section>
@@ -142,15 +142,15 @@ export function ReportsPage() {
       <div className="content-grid">
         <section className="table-panel">
           <div className="panel-title">
-            <h2>高价值客户</h2>
-            <span>A/B 评分、报价高或阶段靠后</span>
+            <h2>{t("reports.highValueCustomers")}</h2>
+            <span>{t("reports.highValueHint")}</span>
           </div>
           <CustomerTable rows={data.high_value_customers} mode="value" />
         </section>
         <section className="table-panel">
           <div className="panel-title">
-            <h2>风险客户</h2>
-            <span>高风险、低评分、逾期</span>
+            <h2>{t("reports.riskCustomers")}</h2>
+            <span>{t("reports.riskHint")}</span>
           </div>
           <CustomerTable rows={data.risk_customers} mode="risk" />
         </section>
@@ -158,8 +158,8 @@ export function ReportsPage() {
 
       <section className="panel">
         <div className="panel-title">
-          <h2>产品线反馈统计</h2>
-          <span>来自官网产品分析</span>
+          <h2>{t("reports.productLineFeedback")}</h2>
+          <span>{t("reports.productLineSource")}</span>
         </div>
         <BarList data={data.product_line_feedback.map((item) => ({ label: item.product_line, value: item.customer_count }))} />
       </section>
@@ -168,6 +168,7 @@ export function ReportsPage() {
 }
 
 function SingleTrend(props: { data: Array<{ bucket: string; value: number }> }) {
+  const { t } = useI18n();
   const max = Math.max(1, ...props.data.map((item) => item.value));
   return (
     <div className="trend-bars">
@@ -179,7 +180,7 @@ function SingleTrend(props: { data: Array<{ bucket: string; value: number }> }) 
           </div>
           <strong>{item.value}</strong>
         </div>
-      )) : <EmptyState message="暂无趋势数据。" />}
+      )) : <EmptyState message={t("reports.trendEmpty")} />}
     </div>
   );
 }

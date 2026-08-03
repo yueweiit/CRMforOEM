@@ -80,7 +80,7 @@ const fallback: PersonalDashboard = {
 
 export function DashboardPage() {
   const queryClient = useQueryClient();
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const isAdminWorkspace = getCurrentUser()?.dataScope === "ALL";
   const [filters, setFilters] = useState(defaultPersonalFilters());
   const queryString = useMemo(() => toQueryString(filters), [filters]);
@@ -113,30 +113,30 @@ export function DashboardPage() {
     <section className="page-stack">
       <header className="page-header">
         <div>
-          <p className="eyebrow">Personal Pipeline</p>
-          <h1>OEM 客户开发工作台</h1>
+          <p className="eyebrow">{t("dashboard.eyebrow")}</p>
+          <h1>{t("dashboard.title")}</h1>
         </div>
       </header>
 
       <DashboardFilterBar filters={filters} options={filterOptions} onChange={setFilters} />
-      {isError ? <section className="panel"><ErrorState message="看板数据加载失败，请稍后重试。" /></section> : null}
-      {isFetching ? <section className="panel"><LoadingState message="正在刷新看板数据..." /></section> : null}
+      {isError ? <section className="panel"><ErrorState message={t("dashboard.loadError")} /></section> : null}
+      {isFetching ? <section className="panel"><LoadingState message={t("dashboard.refreshing")} /></section> : null}
 
       <KpiGrid summary={summary} isAdminWorkspace={isAdminWorkspace} />
 
       <div className="content-grid">
         <section className="panel">
           <div className="panel-title">
-            <h2>客户开发阶段分布</h2>
-            <span>{isAdminWorkspace ? "全员客户池" : "个人客户池"}</span>
+            <h2>{t("dashboard.stageDistribution")}</h2>
+            <span>{isAdminWorkspace ? t("dashboard.allCustomerPool") : t("dashboard.personalCustomerPool")}</span>
           </div>
-          <BarList data={data.stage_distribution.map((item) => ({ label: stageLabel(item.stage, locale), value: item.count }))} emptyMessage="暂无分布数据。" />
+          <BarList data={data.stage_distribution.map((item) => ({ label: stageLabel(item.stage, locale), value: item.count }))} emptyMessage={t("dashboard.noDistribution")} />
         </section>
 
         <section className="panel">
           <div className="panel-title">
-            <h2>邮件发送/回复趋势</h2>
-            <span>按筛选时间聚合</span>
+            <h2>{t("dashboard.emailTrend")}</h2>
+            <span>{t("dashboard.byFilterTime")}</span>
           </div>
           <TrendBars data={data.email_trend} />
         </section>
@@ -145,16 +145,16 @@ export function DashboardPage() {
       <div className="content-grid">
         <section className="table-panel">
           <div className="panel-title">
-            <h2>高优先级客户</h2>
-            <span>A/B 评分或阶段靠后</span>
+            <h2>{t("dashboard.highPriorityCustomers")}</h2>
+            <span>{t("dashboard.highPriorityHint")}</span>
           </div>
           <PriorityCustomerTable rows={data.high_priority_customers} />
         </section>
 
         <section className="panel">
           <div className="panel-title">
-            <h2>今日跟进任务</h2>
-            <span>{data.followup_tasks.length} 项</span>
+            <h2>{t("dashboard.todayTasks")}</h2>
+            <span>{data.followup_tasks.length} {t("common.itemCount")}</span>
           </div>
           <div className="task-list">
             {data.followup_tasks.length ? (
@@ -175,7 +175,7 @@ export function DashboardPage() {
                 </div>
               ))
             ) : (
-              <EmptyState message="今天没有待跟进任务。" />
+              <EmptyState message={t("dashboard.todayTasksEmpty")} />
             )}
           </div>
         </section>
@@ -183,7 +183,7 @@ export function DashboardPage() {
 
       {data.summary.generated_at ? (
         <div className="data-timestamp">
-          数据更新于 {formatDateTime(data.summary.generated_at)}
+          {t("dashboard.dataUpdatedAt")} {formatDateTime(data.summary.generated_at)}
         </div>
       ) : null}
     </section>
@@ -199,6 +199,7 @@ function TrendBars(props: {
     replied_message_count?: number;
   }>;
 }) {
+  const { t } = useI18n();
   const resolved = props.data.map((item) => ({
     ...item,
     sentVal: item.sent_message_count ?? item.sent,
@@ -211,12 +212,12 @@ function TrendBars(props: {
         <div className="trend-row" key={item.bucket}>
           <span>{item.bucket}</span>
           <div className="trend-stack">
-            <i className="sent" style={{ width: `${Math.max(3, item.sentVal / max * 100)}%` }} title={`发送 ${item.sentVal}`} />
-            <i className="replied" style={{ width: `${Math.max(3, item.repliedVal / max * 100)}%` }} title={`回复 ${item.repliedVal}`} />
+            <i className="sent" style={{ width: `${Math.max(3, item.sentVal / max * 100)}%` }} title={`${t("dashboard.sentTitle")} ${item.sentVal}`} />
+            <i className="replied" style={{ width: `${Math.max(3, item.repliedVal / max * 100)}%` }} title={`${t("dashboard.repliedTitle")} ${item.repliedVal}`} />
           </div>
           <strong>{item.sentVal}/{item.repliedVal}</strong>
         </div>
-      )) : <EmptyState message="暂无邮件趋势数据。" />}
+      )) : <EmptyState message={t("dashboard.noTrend")} />}
     </div>
   );
 }

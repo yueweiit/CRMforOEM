@@ -1,6 +1,8 @@
 import { EmptyState } from "../../components/ui/EmptyState";
 import { EditIconButton } from "../../components/EditIconButton";
 import { Switch } from "../../components/Switch";
+import { useI18n, translate } from "../../i18n";
+import type { TranslationKey } from "../../i18n/resources";
 
 export type EmailAccount = {
   id: string;
@@ -42,7 +44,8 @@ export function AccountTable({
   onTest: (id: string) => void;
   onToggle: (account: EmailAccount) => void;
 }) {
-  if (!rows.length) return <EmptyState message="暂无邮箱账号。" />;
+  const { locale, t } = useI18n();
+  if (!rows.length) return <EmptyState message={t("emailCenter.noAccounts")} />;
 
   const statusByAccount = new Map(statuses.map((status) => [status.accountId, status]));
 
@@ -50,14 +53,14 @@ export function AccountTable({
     <table>
       <thead>
         <tr>
-          <th>名称</th>
-          <th>邮箱</th>
-          <th>范围</th>
+          <th>{t("common.name")}</th>
+          <th>{t("common.email")}</th>
+          <th>{t("emailCenter.accountScope")}</th>
           <th>SMTP/IMAP</th>
-          <th>上限</th>
-          <th>同步状态</th>
-          <th>启用</th>
-          <th>操作</th>
+          <th>{t("emailCenter.limits")}</th>
+          <th>{t("emailCenter.syncStatus")}</th>
+          <th>{t("common.enabled")}</th>
+          <th>{t("common.operation")}</th>
         </tr>
       </thead>
       <tbody>
@@ -67,17 +70,17 @@ export function AccountTable({
             <tr key={account.id}>
               <td>{account.name}</td>
               <td>{account.email}</td>
-              <td>{account.scope === "SHARED" ? "共享" : "个人"}</td>
+              <td>{account.scope === "SHARED" ? t("emailCenter.shared") : t("emailCenter.personal")}</td>
               <td>
                 {account.smtpHost}:{account.smtpPort} / {account.imapHost}:{account.imapPort}
               </td>
               <td>
-                {account.hourlySendLimit}/小时 / {account.dailySendLimit}/天
+                {account.hourlySendLimit}/{t("emailCenter.perHour")} / {account.dailySendLimit}/{t("emailCenter.perDay")}
               </td>
               <td>
                 <div className="stacked-cell">
-                  <span className="status-pill">{syncStatusLabel(status?.connectionStatus, account.isActive)}</span>
-                  <span>{formatSyncTime(status?.lastSyncAt ?? account.lastSyncAt)}</span>
+                  <span className="status-pill">{syncStatusLabel(status?.connectionStatus, account.isActive, locale)}</span>
+                  <span>{formatSyncTime(status?.lastSyncAt ?? account.lastSyncAt, locale)}</span>
                   {status?.lastError ? <small>{status.lastError}</small> : null}
                 </div>
               </td>
@@ -88,7 +91,7 @@ export function AccountTable({
                 <div className="toolbar">
                   <EditIconButton onClick={() => onEdit(account)} />
                   <button className="secondary-button" onClick={() => onTest(account.id)}>
-                    测试
+                    {t("emailCenter.test")}
                   </button>
                 </div>
               </td>
@@ -100,21 +103,21 @@ export function AccountTable({
   );
 }
 
-function syncStatusLabel(status?: EmailSyncAccountStatus["connectionStatus"], isActive?: boolean) {
-  if (!isActive) return "未启用";
+function syncStatusLabel(status: EmailSyncAccountStatus["connectionStatus"] | undefined, isActive: boolean | undefined, locale: Parameters<typeof translate>[0]) {
+  if (!isActive) return translate(locale, "emailCenter.disabled");
 
-  const labels: Record<EmailSyncAccountStatus["connectionStatus"], string> = {
-    idle: "监听中",
-    fetching: "同步中",
-    connecting: "连接中",
-    reconnecting: "重连中",
-    disconnected: "未连接",
-    auth_failed: "认证失败"
+  const labels: Record<EmailSyncAccountStatus["connectionStatus"], TranslationKey> = {
+    idle: "emailCenter.idle",
+    fetching: "emailCenter.fetching",
+    connecting: "emailCenter.connecting",
+    reconnecting: "emailCenter.reconnecting",
+    disconnected: "emailCenter.disconnected",
+    auth_failed: "emailCenter.authFailed"
   };
 
-  return status ? labels[status] : "未连接";
+  return status ? translate(locale, labels[status]) : translate(locale, "emailCenter.disconnected");
 }
 
-function formatSyncTime(value?: string | null) {
-  return value ? `最近同步 ${new Date(value).toLocaleString()}` : "尚未同步";
+function formatSyncTime(value: string | null | undefined, locale: Parameters<typeof translate>[0]) {
+  return value ? `${translate(locale, "emailCenter.lastSync")} ${new Date(value).toLocaleString()}` : translate(locale, "emailCenter.neverSynced");
 }

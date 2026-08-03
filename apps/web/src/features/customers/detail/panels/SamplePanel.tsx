@@ -401,7 +401,7 @@ function feeDisplayAmount(fee: SampleFee) {
 
 export function SamplePanel({ customerId }: { customerId: string }) {
   const queryClient = useQueryClient();
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const [createForm, setCreateForm] = useState({
     productSummary: "",
     specification: "",
@@ -947,16 +947,16 @@ export function SamplePanel({ customerId }: { customerId: string }) {
 
       <div className="analysis-edit-form">
         <div className="form-grid compact-form sample-create-grid">
-        <Field label="样品/产品" value={createForm.productSummary} onChange={(value) => setCreateForm({ ...createForm, productSummary: value })} />
-        <Field label="规格" value={createForm.specification} onChange={(value) => setCreateForm({ ...createForm, specification: value })} />
-        <Field label="材质" value={createForm.material} onChange={(value) => setCreateForm({ ...createForm, material: value })} />
-        <Field label="工艺" value={createForm.process} onChange={(value) => setCreateForm({ ...createForm, process: value })} />
+        <Field label={t("sampleFields.sampleProduct")} value={createForm.productSummary} onChange={(value) => setCreateForm({ ...createForm, productSummary: value })} />
+        <Field label={t("sampleFields.specification")} value={createForm.specification} onChange={(value) => setCreateForm({ ...createForm, specification: value })} />
+        <Field label={t("sampleFields.material")} value={createForm.material} onChange={(value) => setCreateForm({ ...createForm, material: value })} />
+        <Field label={t("sampleFields.process")} value={createForm.process} onChange={(value) => setCreateForm({ ...createForm, process: value })} />
         <label>
-          <span>样品数量</span>
+          <span>{t("sampleFields.sampleQuantity")}</span>
           <input type="number" min={1} value={createForm.sampleQuantity} onChange={(e) => setCreateForm({ ...createForm, sampleQuantity: e.target.value })} />
         </label>
         <label>
-          <span>样品用途</span>
+          <span>{t("sampleFields.samplePurpose")}</span>
           <select value={createForm.samplePurpose} onChange={(e) => setCreateForm({ ...createForm, samplePurpose: e.target.value })}>
             {SAMPLE_PURPOSES.map((item) => (
               <option key={item.value} value={item.value}>
@@ -966,13 +966,13 @@ export function SamplePanel({ customerId }: { customerId: string }) {
           </select>
         </label>
         <label>
-          <span>样品交付期限（可选）</span>
+          <span>{t("sampleFields.deliveryDeadlineOptional")}</span>
           <input type="date" value={createForm.deliveryDeadline} onChange={(e) => setCreateForm({ ...createForm, deliveryDeadline: e.target.value })} />
         </label>
         <label>
-          <span>关联报价</span>
+          <span>{t("sampleFields.relatedQuote")}</span>
           <select value={createForm.quoteId} onChange={(e) => setCreateForm({ ...createForm, quoteId: e.target.value })}>
-            <option value="">不关联</option>
+            <option value="">{t("sampleFields.noRelatedQuote")}</option>
             {quoteOptions.map((quote) => (
               <option key={quote.id} value={quote.id}>
                 {quote.quoteNo} · {quote.productName}
@@ -981,7 +981,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
           </select>
         </label>
         <div className="wide-field sample-upload-field">
-          <span>附件</span>
+          <span>{t("sampleFields.attachments")}</span>
           <FileUpload
             entityType="sample-request"
             fileIds={createForm.fileAssetIds}
@@ -991,15 +991,15 @@ export function SamplePanel({ customerId }: { customerId: string }) {
         </div>
         <div className="wide-field toolbar">
           <button className="secondary-button" onClick={() => setCreateFeeOpen(true)} type="button">
-            填写费用记录
+            {t("sampleFields.fillFees")}
           </button>
           <div className="empty-state" style={{ flex: 1, margin: 0 }}>
-            {createFeeMessage ? "费用记录未填写" : `已填写 ${createFeeForms.length} 条费用记录`}
+            {createFeeMessage ? t("sampleFields.feeMissing") : t("sampleFields.feeFilled").replace("{count}", String(createFeeForms.length))}
           </div>
         </div>
         {createMessage ? <div className="error-state wide-field">{createMessage}</div> : null}
         <div className="wide-field">
-          <AddIconButton disabled={create.isPending || !createReady} label={create.isPending ? "提交中..." : "新增样品"} onClick={() => create.mutate()} />
+          <AddIconButton disabled={create.isPending || !createReady} label={create.isPending ? t("quoteFields.submitting") : t("sampleFields.addSample")} onClick={() => create.mutate()} />
         </div>
         </div>
       </div>
@@ -1007,13 +1007,13 @@ export function SamplePanel({ customerId }: { customerId: string }) {
       <Dialog
         v2
         className="crm-action-dialog"
-        title="填写费用记录"
+        title={t("sampleFields.fillFees")}
         visible={createFeeOpen}
         onClose={() => setCreateFeeOpen(false)}
         footer={
           <div className="toolbar crm-dialog-footer">
             <button className="secondary-button" onClick={() => setCreateFeeOpen(false)} type="button">
-              取消
+              {t("common.cancel")}
             </button>
             <button
               className="primary-button"
@@ -1021,7 +1021,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
               onClick={() => setCreateFeeOpen(false)}
               type="button"
             >
-              保存
+              {t("common.save")}
             </button>
           </div>
         }
@@ -1037,7 +1037,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
               onClick={() => setCreateFeeForms([...createFeeForms, createEmptySampleFee()])}
               type="button"
             >
-              添加费用
+              {t("sampleFields.addFee")}
             </button>
           </div>
           <div className="analysis-edit-gap-list">
@@ -1056,12 +1056,12 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                     onClick={() => setCreateFeeForms(createFeeForms.filter((_, currentIndex) => currentIndex !== index))}
                     type="button"
                   >
-                    删除
+                    {t("common.delete")}
                   </button>
                 </div>
                 <div className="sample-fee-card__fields">
                   <div className="form-field">
-                    <label>费用类型</label>
+                    <label>{t("sampleFields.feeType")}</label>
                     <select value={feeItem.feeType} onChange={(e) => setCreateFeeForms(createFeeForms.map((item, currentIndex) => currentIndex === index ? { ...item, feeType: e.target.value } : item))}>
                       {FEE_TYPES.map((item) => (
                         <option key={item.value} value={item.value}>
@@ -1071,20 +1071,20 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                     </select>
                   </div>
                   <div className="form-field">
-                    <label>金额</label>
+                    <label>{t("common.amount")}</label>
                     <input type="number" min={0} value={feeItem.amount} onChange={(e) => setCreateFeeForms(createFeeForms.map((item, currentIndex) => currentIndex === index ? { ...item, amount: e.target.value } : item))} />
                   </div>
                   <div className="form-field">
-                    <label>币种</label>
+                    <label>{t("quoteFields.currency")}</label>
                     <input value={feeItem.currency} onChange={(e) => setCreateFeeForms(createFeeForms.map((item, currentIndex) => currentIndex === index ? { ...item, currency: e.target.value } : item))} />
                   </div>
                   <div className="form-field">
-                    <label>发生日期</label>
+                    <label>{t("sampleFields.incurredAt")}</label>
                     <input type="date" value={feeItem.incurredAt} onChange={(e) => setCreateFeeForms(createFeeForms.map((item, currentIndex) => currentIndex === index ? { ...item, incurredAt: e.target.value } : item))} />
                   </div>
                 </div>
                 <div className="form-field wide-field sample-fee-card__note">
-                  <label>备注</label>
+                  <label>{t("common.notes")}</label>
                   <textarea value={feeItem.note} onChange={(e) => setCreateFeeForms(createFeeForms.map((item, currentIndex) => currentIndex === index ? { ...item, note: e.target.value } : item))} rows={2} />
                 </div>
               </div>
@@ -1366,34 +1366,34 @@ export function SamplePanel({ customerId }: { customerId: string }) {
               onClick={() => update.mutate()}
               type="button"
             >
-              {update.isPending ? "保存中..." : "保存"}
+              {update.isPending ? t("common.saving") : t("common.save")}
             </button>
           </div>
         }
       >
         <div className="analysis-edit-form">
           <div className="form-field">
-            <label>样品/产品</label>
+            <label>{t("sampleFields.sampleProduct")}</label>
             <input value={editForm.productSummary} onChange={(e) => setEditForm({ ...editForm, productSummary: e.target.value })} />
           </div>
           <div className="form-field">
-            <label>规格</label>
+            <label>{t("sampleFields.specification")}</label>
             <input value={editForm.specification} onChange={(e) => setEditForm({ ...editForm, specification: e.target.value })} />
           </div>
           <div className="form-field">
-            <label>材质</label>
+            <label>{t("sampleFields.material")}</label>
             <input value={editForm.material} onChange={(e) => setEditForm({ ...editForm, material: e.target.value })} />
           </div>
           <div className="form-field">
-            <label>工艺</label>
+            <label>{t("sampleFields.process")}</label>
             <input value={editForm.process} onChange={(e) => setEditForm({ ...editForm, process: e.target.value })} />
           </div>
           <div className="form-field">
-            <label>样品数量</label>
+            <label>{t("sampleFields.sampleQuantity")}</label>
             <input type="number" min={1} value={editForm.sampleQuantity} onChange={(e) => setEditForm({ ...editForm, sampleQuantity: e.target.value })} />
           </div>
           <div className="form-field">
-            <label>样品用途</label>
+            <label>{t("sampleFields.samplePurpose")}</label>
             <select value={editForm.samplePurpose} onChange={(e) => setEditForm({ ...editForm, samplePurpose: e.target.value })}>
               {SAMPLE_PURPOSES.map((item) => (
                 <option key={item.value} value={item.value}>
@@ -1403,13 +1403,13 @@ export function SamplePanel({ customerId }: { customerId: string }) {
             </select>
           </div>
           <div className="form-field">
-            <label>交付期限</label>
+            <label>{t("sampleFields.deliveryDeadline")}</label>
             <input type="date" value={editForm.deliveryDeadline} onChange={(e) => setEditForm({ ...editForm, deliveryDeadline: e.target.value })} />
           </div>
           <div className="form-field">
-            <label>关联报价</label>
+            <label>{t("sampleFields.relatedQuote")}</label>
             <select value={editForm.quoteId} onChange={(e) => setEditForm({ ...editForm, quoteId: e.target.value })}>
-              <option value="">不关联</option>
+              <option value="">{t("sampleFields.noRelatedQuote")}</option>
               {quoteOptions.map((quote) => (
                 <option key={quote.id} value={quote.id}>
                   {quote.quoteNo} · {quote.productName}
@@ -1418,7 +1418,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
             </select>
           </div>
           <div className="form-field wide-field">
-            <label>附件</label>
+            <label>{t("sampleFields.attachments")}</label>
             <FileUpload
               entityId={editing?.id}
               entityType="sample-request"
@@ -1428,31 +1428,31 @@ export function SamplePanel({ customerId }: { customerId: string }) {
             />
           </div>
           <div className="form-field">
-            <label>物流商</label>
+            <label>{t("sampleFields.carrier")}</label>
             <input value={editForm.carrier} onChange={(e) => setEditForm({ ...editForm, carrier: e.target.value })} />
           </div>
           <div className="form-field">
-            <label>运单号</label>
+            <label>{t("sampleFields.trackingNo")}</label>
             <input value={editForm.trackingNo} onChange={(e) => setEditForm({ ...editForm, trackingNo: e.target.value })} />
           </div>
           {shippingMessage ? <div className="error-state">{shippingMessage}</div> : null}
           <div className="form-field">
-            <label>发货日期</label>
+            <label>{t("sampleFields.shippedAt")}</label>
             <input type="date" value={editForm.shippedAt} onChange={(e) => setEditForm({ ...editForm, shippedAt: e.target.value })} />
           </div>
           <div className="form-field">
-            <label>签收日期</label>
+            <label>{t("sampleFields.deliveredAt")}</label>
             <input type="date" value={editForm.deliveredAt} onChange={(e) => setEditForm({ ...editForm, deliveredAt: e.target.value })} />
           </div>
           <div className="form-field wide-field">
-            <label>反馈</label>
+            <label>{t("sampleFields.feedback")}</label>
             <textarea value={editForm.feedback} onChange={(e) => setEditForm({ ...editForm, feedback: e.target.value })} rows={3} />
           </div>
           <div className="analysis-edit-section wide-field">
             <div className="analysis-edit-section__title">
-              <h4>费用明细</h4>
+              <h4>{t("sampleFields.feeDetails")}</h4>
               <button className="secondary-button" onClick={() => currentEditingSample && openFee(currentEditingSample)} type="button">
-                新增费用
+                {t("sampleFields.addFee")}
               </button>
             </div>
             {currentEditingSample?.fees?.length ? (
@@ -1469,11 +1469,11 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                     </div>
                     <div className="sample-fee-list-item__actions">
                       <button className="secondary-button" onClick={() => currentEditingSample && openEditFee(currentEditingSample, fee)} type="button">
-                        编辑
+                        {t("common.edit")}
                       </button>
                       <DeleteIconButton
                         disabled={feeDeleteMutation.isPending}
-                        label="删除费用"
+                        label={t("sampleFields.deleteFee")}
                         onClick={() => currentEditingSample && openDeleteFee(currentEditingSample, fee)}
                       />
                     </div>
@@ -1481,7 +1481,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                 ))}
               </div>
             ) : (
-              <div className="empty-state">暂无费用记录。</div>
+              <div className="empty-state">{t("sampleFields.noFees")}</div>
             )}
           </div>
         </div>
@@ -1521,15 +1521,15 @@ export function SamplePanel({ customerId }: { customerId: string }) {
               <h4>物流信息</h4>
               <div className="analysis-edit-grid sample-status-shipping-grid">
                 <div className="form-field sample-status-field">
-                  <label>物流商</label>
+                  <label>{t("sampleFields.carrier")}</label>
                   <input value={statusForm.carrier} onChange={(e) => setStatusForm({ ...statusForm, carrier: e.target.value })} />
                 </div>
                 <div className="form-field sample-status-field">
-                  <label>运单号</label>
+                  <label>{t("sampleFields.trackingNo")}</label>
                   <input value={statusForm.trackingNo} onChange={(e) => setStatusForm({ ...statusForm, trackingNo: e.target.value })} />
                 </div>
                 <div className="form-field sample-status-field">
-                  <label>发货日期</label>
+                  <label>{t("sampleFields.shippedAt")}</label>
                   <input type="date" value={statusForm.shippedAt} onChange={(e) => setStatusForm({ ...statusForm, shippedAt: e.target.value })} />
                 </div>
               </div>
@@ -1542,7 +1542,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
             <section className="detail-section">
               <h4>签收信息</h4>
               <div className="form-field sample-status-field">
-                <label>签收日期（可选）</label>
+                <label>{t("sampleFields.deliveredAt")}</label>
                 <input
                   type="date"
                   value={statusForm.deliveredAt}
@@ -1559,7 +1559,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
               <h4>反馈 / 归还信息</h4>
               <div className="analysis-edit-form">
                 <div className="form-field wide-field">
-                  <label>反馈（可选）</label>
+                  <label>{t("sampleFields.feedback")}</label>
                   <textarea value={statusForm.feedback} onChange={(e) => setStatusForm({ ...statusForm, feedback: e.target.value })} rows={4} />
                 </div>
               </div>
@@ -1568,22 +1568,22 @@ export function SamplePanel({ customerId }: { customerId: string }) {
               </div>
               <div className="analysis-edit-form" style={{ marginTop: 16 }}>
                 <div className="form-field">
-                  <label>接收人</label>
+                  <label>{t("sampleFields.receiver")}</label>
                   <input
                     value={returnForm.receiverName}
                     onChange={(e) => setReturnForm({ ...returnForm, receiverName: e.target.value })}
                   />
                 </div>
                 <div className="form-field">
-                  <label>去向</label>
+                  <label>{t("sampleFields.destination")}</label>
                   <input value={returnForm.destination} onChange={(e) => setReturnForm({ ...returnForm, destination: e.target.value })} />
                 </div>
                 <div className="form-field">
-                  <label>记录日期</label>
+                  <label>{t("sampleFields.recordDate")}</label>
                   <input type="date" value={returnForm.recordedAt} onChange={(e) => setReturnForm({ ...returnForm, recordedAt: e.target.value })} />
                 </div>
                 <div className="form-field wide-field">
-                  <label>备注</label>
+                  <label>{t("common.notes")}</label>
                   <textarea value={returnForm.note} onChange={(e) => setReturnForm({ ...returnForm, note: e.target.value })} rows={3} />
                 </div>
               </div>
@@ -1670,7 +1670,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
         <div className="analysis-edit-form">
           <div className="detail-note">{approvalDialogDescription}</div>
           <div className="form-field wide-field">
-            <label>备注（可选）</label>
+            <label>{t("common.optionalNote")}</label>
             <textarea
               autoFocus
               value={approvalComment}
@@ -1742,7 +1742,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
             </div>
             <div className="sample-fee-card__fields">
               <div className="form-field">
-                <label>费用类型</label>
+                <label>{t("sampleFields.feeType")}</label>
                 <select value={feeForm.feeType} onChange={(e) => setFeeForm({ ...feeForm, feeType: e.target.value })}>
                   {FEE_TYPES.map((item) => (
                     <option key={item.value} value={item.value}>
@@ -1752,20 +1752,20 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                 </select>
               </div>
               <div className="form-field">
-                <label>金额</label>
+                <label>{t("common.amount")}</label>
                 <input type="number" value={feeForm.amount} onChange={(e) => setFeeForm({ ...feeForm, amount: e.target.value })} />
               </div>
               <div className="form-field">
-                <label>币种</label>
+                <label>{t("quoteFields.currency")}</label>
                 <input value={feeForm.currency} onChange={(e) => setFeeForm({ ...feeForm, currency: e.target.value })} />
               </div>
               <div className="form-field">
-                <label>发生日期</label>
+                <label>{t("sampleFields.incurredAt")}</label>
                 <input type="date" value={feeForm.incurredAt} onChange={(e) => setFeeForm({ ...feeForm, incurredAt: e.target.value })} />
               </div>
             </div>
             <div className="form-field wide-field sample-fee-card__note">
-              <label>备注</label>
+              <label>{t("common.notes")}</label>
               <textarea value={feeForm.note} onChange={(e) => setFeeForm({ ...feeForm, note: e.target.value })} rows={2} />
             </div>
           </div>

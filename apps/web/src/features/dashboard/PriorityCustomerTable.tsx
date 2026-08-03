@@ -5,21 +5,21 @@ import { formatDateTime } from "../../shared/utils/format";
 import type { PriorityCustomerRow } from "../../shared/types/customer";
 
 export function PriorityCustomerTable({ rows }: { rows: PriorityCustomerRow[] }) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   if (!rows.length) {
-    return <EmptyState message="暂无高优先级客户。" />;
+    return <EmptyState message={t("reports.priorityEmpty")} />;
   }
   return (
     <table>
       <thead>
         <tr>
-          <th>优先级</th>
-          <th>客户</th>
-          <th>国家</th>
-          <th>阶段</th>
-          <th>评分</th>
-          <th>负责人</th>
-          <th>下一任务</th>
+          <th>{t("reports.priority")}</th>
+          <th>{t("common.customer")}</th>
+          <th>{t("common.country")}</th>
+          <th>{t("common.stage")}</th>
+          <th>{t("common.score")}</th>
+          <th>{t("common.owner")}</th>
+          <th>{t("reports.nextTask")}</th>
         </tr>
       </thead>
       <tbody>

@@ -25,37 +25,37 @@ export function FollowUpFilterBar({
   onFormChange: (form: FollowUpForm) => void;
   customers: Customer[];
 }) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   return (
     <section className="filter-panel">
       <label>
-        <span>状态</span>
+          <span>{t("followUps.status")}</span>
         <AppSelect
           variant="filter"
           value={status}
           onChange={onStatusChange}
           options={[
-            { value: "", label: "全部" },
-            { value: "OPEN", label: "待处理" },
-            { value: "COMPLETED", label: "已完成" },
-            { value: "CANCELLED", label: "已取消" }
+            { value: "", label: t("common.all") },
+            { value: "OPEN", label: t("followUps.pending") },
+            { value: "COMPLETED", label: t("followUps.completed") },
+            { value: "CANCELLED", label: t("followUps.cancelled") }
           ]}
         />
       </label>
       <label>
-        <span>关联客户</span>
+        <span>{t("followUps.relatedCustomer")}</span>
         <AppSelect
           variant="filter"
           value={form.customerId}
           onChange={(customerId) => onFormChange({ ...form, customerId })}
           options={[
-            { value: "", label: "选择客户" },
+            { value: "", label: t("followUps.selectCustomer") },
             ...customers.map((customer) => ({ value: customer.id, label: customer.name }))
           ]}
         />
       </label>
       <label>
-        <span>任务类型</span>
+        <span>{t("followUps.taskType")}</span>
         <AppSelect
           variant="filter"
           value={form.type}
@@ -63,9 +63,9 @@ export function FollowUpFilterBar({
           options={Object.keys(TASK_TYPE_LABELS).map((value) => ({ value, label: taskTypeLabel(value, locale) }))}
         />
       </label>
-      <label><span>任务标题</span><input value={form.title} onChange={(event) => onFormChange({ ...form, title: event.target.value })} /></label>
-      <label><span>截止时间</span><input type="datetime-local" value={form.dueAt} onChange={(event) => onFormChange({ ...form, dueAt: event.target.value })} /></label>
-      <label className="wide-field"><span>任务说明</span><textarea value={form.description} onChange={(event) => onFormChange({ ...form, description: event.target.value })} /></label>
+      <label><span>{t("followUps.taskTitle")}</span><input value={form.title} onChange={(event) => onFormChange({ ...form, title: event.target.value })} /></label>
+      <label><span>{t("followUps.dueAt")}</span><input type="datetime-local" value={form.dueAt} onChange={(event) => onFormChange({ ...form, dueAt: event.target.value })} /></label>
+      <label className="wide-field"><span>{t("followUps.description")}</span><textarea value={form.description} onChange={(event) => onFormChange({ ...form, description: event.target.value })} /></label>
     </section>
   );
 }

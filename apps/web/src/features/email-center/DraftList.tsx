@@ -1,11 +1,13 @@
 import {
   EMAIL_DRAFT_PURPOSES,
   emailDraftPurposeLabel,
+  emailDraftStatusLabel,
   normalizeEmailDraftPurpose
 } from "@oem-crm/shared";
 import { Link } from "react-router-dom";
 import { AppSelect } from "../../components/AppSelect";
 import { EmptyState } from "../../components/ui/EmptyState";
+import { useI18n } from "../../i18n";
 import { formatDraftRecipient, formatDraftSender } from "../../shared/utils/email-format";
 
 export type EmailDraft = {
@@ -31,6 +33,7 @@ export function DraftList({
   purposeFilter: string;
   onPurposeFilterChange: (value: string) => void;
 }) {
+  const { locale, t } = useI18n();
   const filteredDrafts = purposeFilter
     ? drafts.filter((draft) => normalizeEmailDraftPurpose(draft.purpose) === purposeFilter)
     : drafts;
@@ -38,20 +41,20 @@ export function DraftList({
   return (
     <section className="table-panel">
       <div className="panel-title">
-        <h2>邮件草稿</h2>
-        <span>{filteredDrafts.length} 封</span>
+        <h2>{t("emailCenter.draftsTitle")}</h2>
+        <span>{filteredDrafts.length} {t("emailCenter.draftUnit")}</span>
       </div>
 
       <div className="toolbar" style={{ marginBottom: 16 }}>
         <label style={{ minWidth: 240 }}>
-          <span>邮件类型筛选：</span>
+          <span>{t("emailCenter.purposeFilter")}</span>
           <AppSelect
             variant="toolbar"
             value={purposeFilter}
             onChange={onPurposeFilterChange}
             options={[
-              { value: "", label: "全部类型" },
-              ...EMAIL_DRAFT_PURPOSES.map((purpose) => ({ value: purpose, label: emailDraftPurposeLabel(purpose) }))
+              { value: "", label: t("common.allTypes") },
+              ...EMAIL_DRAFT_PURPOSES.map((purpose) => ({ value: purpose, label: emailDraftPurposeLabel(purpose, locale) }))
             ]}
           />
         </label>
@@ -61,19 +64,19 @@ export function DraftList({
         <table>
           <thead>
             <tr>
-              <th>邮件类型</th>
-              <th>主题</th>
-              <th>客户</th>
-              <th>发件人</th>
-              <th>收件人</th>
-              <th>状态</th>
-              <th>更新时间</th>
+              <th>{t("emailCenter.draftPurpose")}</th>
+              <th>{t("emailCenter.subject")}</th>
+              <th>{t("common.customer")}</th>
+              <th>{t("emailCenter.sender")}</th>
+              <th>{t("emailCenter.recipient")}</th>
+              <th>{t("common.status")}</th>
+              <th>{t("common.updatedAt")}</th>
             </tr>
           </thead>
           <tbody>
             {filteredDrafts.map((draft) => (
               <tr key={draft.id}>
-                <td>{emailDraftPurposeLabel(draft.purpose)}</td>
+                <td>{emailDraftPurposeLabel(draft.purpose, locale)}</td>
                 <td>{draft.subject}</td>
                 <td>
                   {draft.customer ? (
@@ -87,7 +90,7 @@ export function DraftList({
                 <td>{formatDraftSender(draft)}</td>
                 <td>{formatDraftRecipient(draft)}</td>
                 <td>
-                  <span className="status-pill">{draft.status}</span>
+                  <span className="status-pill">{emailDraftStatusLabel(draft.status, locale)}</span>
                 </td>
                 <td>{new Date(draft.updatedAt).toLocaleString()}</td>
               </tr>
@@ -95,7 +98,7 @@ export function DraftList({
           </tbody>
         </table>
       ) : (
-        <EmptyState message={drafts.length ? "当前筛选条件下暂无邮件草稿。" : "暂无邮件草稿。"} />
+        <EmptyState message={drafts.length ? t("emailCenter.emptyFilteredDrafts") : t("emailCenter.emptyDrafts")} />
       )}
     </section>
   );

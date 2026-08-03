@@ -382,7 +382,7 @@ function CurrencyInput({
 
 export function QuotePanel({ customerId }: { customerId: string }) {
   const queryClient = useQueryClient();
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const [detailOpen, setDetailOpen] = useState(false);
   const [form, setForm] = useState({
     quoteNo: `Q-${Date.now()}`,
@@ -891,14 +891,14 @@ export function QuotePanel({ customerId }: { customerId: string }) {
       )}
 
       <div className="form-grid compact-form">
-        <Field label="报价编号" value={form.quoteNo} onChange={(value) => setForm({ ...form, quoteNo: value })} />
-        <Field label="产品名" value={form.productName} onChange={(value) => setForm({ ...form, productName: value })} />
-        <Field label="规格" value={form.specification} onChange={(value) => setForm({ ...form, specification: value })} />
-        <Field label="MOQ" value={form.moq} onChange={(value) => setForm({ ...form, moq: value })} />
-        <Field label="报价数量" value={form.quantity} onChange={(value) => setForm({ ...form, quantity: value })} />
+        <Field label={t("quoteFields.quoteNo")} value={form.quoteNo} onChange={(value) => setForm({ ...form, quoteNo: value })} />
+        <Field label={t("quoteFields.productName")} value={form.productName} onChange={(value) => setForm({ ...form, productName: value })} />
+        <Field label={t("quoteFields.specification")} value={form.specification} onChange={(value) => setForm({ ...form, specification: value })} />
+        <Field label={t("quoteFields.moq")} value={form.moq} onChange={(value) => setForm({ ...form, moq: value })} />
+        <Field label={t("quoteFields.quantity")} value={form.quantity} onChange={(value) => setForm({ ...form, quantity: value })} />
         <div className="form-field">
           <label>
-            <span>币种</span>
+            <span>{t("quoteFields.currency")}</span>
             <CurrencyInput
               id="quote-currency-create-options"
               value={form.currency}
@@ -908,14 +908,14 @@ export function QuotePanel({ customerId }: { customerId: string }) {
         </div>
         <div className="form-field">
           <label>
-            <span>计算模式</span>
+            <span>{t("quoteFields.calcMode")}</span>
             <select
               className="quote-calc-mode-select"
               value={form.calcMode}
               onChange={(e) => setForm({ ...form, calcMode: e.target.value as "formula" | "direct" })}
             >
-              <option value="direct">直接录入金额</option>
-              <option value="formula">成本公式计算</option>
+              <option value="direct">{t("quoteFields.directMode")}</option>
+              <option value="formula">{t("quoteFields.formulaMode")}</option>
             </select>
           </label>
         </div>
@@ -923,13 +923,13 @@ export function QuotePanel({ customerId }: { customerId: string }) {
           <>
             <div className="form-field wide-field quote-formula-section">
               <div className="quote-formula-section__header">
-                <strong>物料报价</strong>
+                <strong>{t("quoteFields.materialQuote")}</strong>
                 <span>Sum(用量 × 单价 × (1 + 损耗率)) × (1 + 物料利润率)</span>
               </div>
               {form.materialItems.map((material, index) => (
                 <div className="quote-material-row" key={`material-${index}`}>
                   <label>
-                    <span>{`物料${index + 1}名称`}</span>
+                    <span>{t("quoteFields.materialName").replace("{index}", String(index + 1))}</span>
                     <input
                       placeholder="如 ABS、包装盒"
                       value={material.name}
@@ -940,7 +940,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
                     />
                   </label>
                   <label>
-                    <span>用量</span>
+                    <span>{t("quoteFields.usage")}</span>
                     <input
                       placeholder="0"
                       type="number"
@@ -952,7 +952,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
                     />
                   </label>
                   <label>
-                    <span>单价</span>
+                    <span>{t("quoteFields.unitPrice")}</span>
                     <input
                       placeholder="0.00"
                       type="number"
@@ -964,7 +964,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
                     />
                   </label>
                   <label>
-                    <span>损耗率</span>
+                    <span>{t("quoteFields.lossRate")}</span>
                     <input
                       placeholder="0.05"
                       type="number"
@@ -981,49 +981,49 @@ export function QuotePanel({ customerId }: { customerId: string }) {
                     onClick={() => setForm({ ...form, materialItems: form.materialItems.filter((_, itemIndex) => itemIndex !== index) })}
                     type="button"
                   >
-                    删除
+                    {t("common.delete")}
                   </button>
                 </div>
               ))}
               <div className="quote-formula-grid quote-formula-grid--three">
                 <label>
-                  <span>物料利润率</span>
+                  <span>{t("quoteFields.materialProfitRate")}</span>
                   <input type="number" placeholder="0.10" value={form.materialProfitRate} onChange={(event) => setForm({ ...form, materialProfitRate: event.target.value })} />
                 </label>
                 <label>
-                  <span>物料损耗后成本</span>
+                  <span>{t("quoteFields.materialCostAfterLoss")}</span>
                   <input readOnly value={(createSummary.breakdown?.materialCost ?? 0).toFixed(2)} />
                 </label>
                 <label>
-                  <span>物料报价</span>
+                  <span>{t("quoteFields.materialQuote")}</span>
                   <input readOnly value={createSummary.materialCost.toFixed(2)} />
                 </label>
               </div>
               <button className="secondary-button quote-add-material-button" onClick={() => setForm({ ...form, materialItems: [...form.materialItems, { ...EMPTY_MATERIAL_ITEM }] })} type="button">
-                新增物料
+                {t("quoteFields.addMaterial")}
               </button>
             </div>
 
             <div className="form-field wide-field quote-formula-section">
               <div className="quote-formula-section__header">
-                <strong>加工费</strong>
+                <strong>{t("quoteFields.processingCost")}</strong>
                 <span>加工时间 × 工时费率 × (1 + 加工利润率)</span>
               </div>
               <div className="quote-formula-grid quote-formula-grid--four">
                 <label>
-                  <span>加工时间</span>
+                  <span>{t("quoteFields.processingTime")}</span>
                   <input type="number" value={form.processingTime} onChange={(event) => setForm({ ...form, processingTime: event.target.value })} />
                 </label>
                 <label>
-                  <span>工时费率</span>
+                  <span>{t("quoteFields.hourlyRate")}</span>
                   <input type="number" value={form.processingHourlyRate} onChange={(event) => setForm({ ...form, processingHourlyRate: event.target.value })} />
                 </label>
                 <label>
-                  <span>加工利润率</span>
+                  <span>{t("quoteFields.processingProfitRate")}</span>
                   <input type="number" placeholder="0.10" value={form.processingProfitRate} onChange={(event) => setForm({ ...form, processingProfitRate: event.target.value })} />
                 </label>
                 <label>
-                  <span>加工费报价</span>
+                  <span>{t("quoteFields.processingQuote")}</span>
                   <input readOnly value={createSummary.processingCost.toFixed(2)} />
                 </label>
               </div>
@@ -1031,44 +1031,44 @@ export function QuotePanel({ customerId }: { customerId: string }) {
 
             <div className="form-field wide-field quote-formula-section">
               <div className="quote-formula-section__header">
-                <strong>运费</strong>
+                <strong>{t("quoteFields.shipping")}</strong>
                 <span>Max(毛重, 长 × 宽 × 高 ÷ 体积系数) × 运输单位价格</span>
               </div>
               <div className="quote-formula-subtitle">体积重量 = 长 × 宽 × 高 ÷ 体积系数</div>
               <div className="quote-formula-grid quote-formula-grid--four">
                 <label>
-                  <span>长</span>
+                  <span>{t("quoteFields.length")}</span>
                   <input type="number" value={form.packageLength} onChange={(event) => setForm({ ...form, packageLength: event.target.value })} />
                 </label>
                 <label>
-                  <span>宽</span>
+                  <span>{t("quoteFields.width")}</span>
                   <input type="number" value={form.packageWidth} onChange={(event) => setForm({ ...form, packageWidth: event.target.value })} />
                 </label>
                 <label>
-                  <span>高</span>
+                  <span>{t("quoteFields.height")}</span>
                   <input type="number" value={form.packageHeight} onChange={(event) => setForm({ ...form, packageHeight: event.target.value })} />
                 </label>
                 <label>
-                  <span>体积系数</span>
+                  <span>{t("quoteFields.volumeDivisor")}</span>
                   <input type="number" value={form.volumeDivisor} onChange={(event) => setForm({ ...form, volumeDivisor: event.target.value })} />
                 </label>
               </div>
               <div className="quote-formula-subtitle">运费 = Max(毛重, 体积重量) × 运输单位价格</div>
               <div className="quote-formula-grid quote-formula-grid--four">
                 <label>
-                  <span>体积重量</span>
+                  <span>{t("quoteFields.volumeWeight")}</span>
                   <input readOnly value={(createSummary.breakdown?.volumeWeight ?? 0).toFixed(2)} />
                 </label>
                 <label>
-                  <span>毛重</span>
+                  <span>{t("quoteFields.grossWeight")}</span>
                   <input type="number" value={form.grossWeight} onChange={(event) => setForm({ ...form, grossWeight: event.target.value })} />
                 </label>
                 <label>
-                  <span>运输单位价格</span>
+                  <span>{t("quoteFields.shippingUnitPrice")}</span>
                   <input type="number" value={form.shippingUnitPrice} onChange={(event) => setForm({ ...form, shippingUnitPrice: event.target.value })} />
                 </label>
                 <label>
-                  <span>运费</span>
+                  <span>{t("quoteFields.shipping")}</span>
                   <input readOnly value={createSummary.shippingCost.toFixed(2)} />
                 </label>
               </div>
@@ -1076,20 +1076,20 @@ export function QuotePanel({ customerId }: { customerId: string }) {
 
             <div className="form-field wide-field quote-formula-section">
               <div className="quote-formula-section__header">
-                <strong>税费</strong>
+                <strong>{t("quoteFields.taxCost")}</strong>
                 <span>(物料报价 + 加工费报价 + 运费) × 增值税率</span>
               </div>
               <div className="quote-formula-grid quote-formula-grid--three">
                 <label>
-                  <span>税基</span>
+                  <span>{t("quoteFields.taxBase")}</span>
                   <input readOnly value={(createSummary.breakdown?.taxBase ?? 0).toFixed(2)} />
                 </label>
                 <label>
-                  <span>增值税率</span>
+                  <span>{t("quoteFields.vatRate")}</span>
                   <input type="number" placeholder="0.13" value={form.vatRate} onChange={(event) => setForm({ ...form, vatRate: event.target.value })} />
                 </label>
                 <label>
-                  <span>税费</span>
+                  <span>{t("quoteFields.taxCost")}</span>
                   <input readOnly value={createSummary.taxCost.toFixed(2)} />
                 </label>
               </div>
@@ -1099,24 +1099,24 @@ export function QuotePanel({ customerId }: { customerId: string }) {
           <>
             <div className="form-field wide-field quote-formula-section">
               <div className="quote-formula-section__header">
-                <strong>直接录入金额</strong>
+                <strong>{t("quoteFields.directMode")}</strong>
                 <span>总价 = 物料价 + 加工费 + 税费 + 运费 - 优惠金额</span>
               </div>
               <div className="quote-formula-grid quote-formula-grid--four">
                 <label>
-                  <span>物料价</span>
+                  <span>{t("quoteFields.materialCost")}</span>
                   <input type="number" value={form.materialCost} onChange={(event) => setForm({ ...form, materialCost: event.target.value })} />
                 </label>
                 <label>
-                  <span>加工费</span>
+                  <span>{t("quoteFields.processingCost")}</span>
                   <input type="number" value={form.processingCost} onChange={(event) => setForm({ ...form, processingCost: event.target.value })} />
                 </label>
                 <label>
-                  <span>税费</span>
+                  <span>{t("quoteFields.taxCost")}</span>
                   <input type="number" value={form.taxCost} onChange={(event) => setForm({ ...form, taxCost: event.target.value })} />
                 </label>
                 <label>
-                  <span>运费</span>
+                  <span>{t("quoteFields.shipping")}</span>
                   <input type="number" value={form.shippingCost} onChange={(event) => setForm({ ...form, shippingCost: event.target.value })} />
                 </label>
               </div>
@@ -1126,27 +1126,27 @@ export function QuotePanel({ customerId }: { customerId: string }) {
 
         <div className="form-field wide-field quote-formula-section">
           <div className="quote-formula-section__header">
-            <strong>汇总</strong>
+            <strong>{t("quoteFields.summary")}</strong>
             <span>总价 = 成本合计 - 优惠金额；单价 = 总价 ÷ 数量</span>
           </div>
           <div className="quote-formula-grid quote-formula-grid--three">
             <label>
-              <span>优惠金额</span>
+              <span>{t("quoteFields.discountAmount")}</span>
               <input type="number" value={form.discountAmount} onChange={(event) => setForm({ ...form, discountAmount: event.target.value })} />
             </label>
             <label>
-              <span>计算总价</span>
+              <span>{t("quoteFields.total")}</span>
               <input readOnly value={createSummary.total.toFixed(2)} />
             </label>
             <label>
-              <span>单价</span>
+              <span>{t("quoteFields.unitPrice")}</span>
               <input readOnly value={createSummary.unitPrice.toFixed(2)} />
             </label>
           </div>
         </div>
-        <Field label="备注" value={form.notes} onChange={(value) => setForm({ ...form, notes: value })} />
+        <Field label={t("common.notes")} value={form.notes} onChange={(value) => setForm({ ...form, notes: value })} />
         {createValidationMessage ? <div className="error-state">{createValidationMessage}</div> : null}
-        <div className="wide-field"><AddIconButton disabled={create.isPending || Boolean(createValidationMessage)} label={create.isPending ? "提交中..." : "新增报价"} onClick={() => create.mutate()} /></div>
+        <div className="wide-field"><AddIconButton disabled={create.isPending || Boolean(createValidationMessage)} label={create.isPending ? t("quoteFields.submitting") : t("quoteFields.createQuote")} onClick={() => create.mutate()} /></div>
       </div>
 
       <Dialog
@@ -1341,7 +1341,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
         <div className="analysis-edit-form">
           <div className="detail-note">{reviewDialogDescription}</div>
           <div className="form-field wide-field">
-            <label>备注（可选）</label>
+            <label>{t("common.optionalNote")}</label>
             <textarea
               autoFocus
               value={reviewComment}
@@ -1362,33 +1362,33 @@ export function QuotePanel({ customerId }: { customerId: string }) {
                   onClick={() => update.mutate({ basePayload: buildQuoteEditPayload(editForm) })}
                   type="button"
               >
-                {update.isPending ? "保存中..." : "保存"}
+                {update.isPending ? t("common.saving") : t("common.save")}
             </button>
           </div>
         }>
         <div className="analysis-edit-form">
           <div className="form-field">
-            <label>报价编号</label>
+            <label>{t("quoteFields.quoteNo")}</label>
             <input value={editForm.quoteNo} onChange={(e) => setEditForm({ ...editForm, quoteNo: e.target.value })} />
           </div>
           <div className="form-field">
-            <label>产品名</label>
+            <label>{t("quoteFields.productName")}</label>
             <input value={editForm.productName} onChange={(e) => setEditForm({ ...editForm, productName: e.target.value })} />
           </div>
           <div className="form-field">
-            <label>规格</label>
+            <label>{t("quoteFields.specification")}</label>
             <input value={editForm.specification} onChange={(e) => setEditForm({ ...editForm, specification: e.target.value })} />
           </div>
           <div className="form-field">
-            <label>MOQ</label>
+            <label>{t("quoteFields.moq")}</label>
             <input type="number" value={editForm.moq} onChange={(e) => setEditForm({ ...editForm, moq: e.target.value })} />
           </div>
           <div className="form-field">
-            <label>报价数量</label>
+            <label>{t("quoteFields.quantity")}</label>
             <input type="number" value={editForm.quantity} onChange={(e) => setEditForm({ ...editForm, quantity: e.target.value })} />
           </div>
           <div className="form-field">
-            <label>币种</label>
+            <label>{t("quoteFields.currency")}</label>
             <CurrencyInput
               id="quote-currency-edit-options"
               value={editForm.currency}
@@ -1396,14 +1396,14 @@ export function QuotePanel({ customerId }: { customerId: string }) {
             />
           </div>
           <div className="form-field">
-            <label>计算模式</label>
+            <label>{t("quoteFields.calcMode")}</label>
             <select
               className="quote-calc-mode-select"
               value={editForm.calcMode}
               onChange={(e) => setEditForm({ ...editForm, calcMode: e.target.value as "formula" | "direct" })}
             >
-              <option value="direct">直接录入金额</option>
-              <option value="formula">成本公式计算</option>
+              <option value="direct">{t("quoteFields.directMode")}</option>
+              <option value="formula">{t("quoteFields.formulaMode")}</option>
             </select>
           </div>
           {editForm.calcMode === "formula" ? (
@@ -1411,7 +1411,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
               {editForm.materialItems.map((material, index) => (
                 <div className="form-field wide-field quote-material-row" key={`edit-material-${index}`}>
                   <label>
-                    <span>{`物料${index + 1}名称`}</span>
+                    <span>{t("quoteFields.materialName").replace("{index}", String(index + 1))}</span>
                     <input
                       placeholder="如 ABS、包装盒"
                       value={material.name}
@@ -1422,7 +1422,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
                     />
                   </label>
                   <label>
-                    <span>用量</span>
+                    <span>{t("quoteFields.usage")}</span>
                     <input
                       placeholder="0"
                       type="number"
@@ -1434,7 +1434,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
                     />
                   </label>
                   <label>
-                    <span>单价</span>
+                    <span>{t("quoteFields.unitPrice")}</span>
                     <input
                       placeholder="0.00"
                       type="number"
@@ -1446,7 +1446,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
                     />
                   </label>
                   <label>
-                    <span>损耗率</span>
+                    <span>{t("quoteFields.lossRate")}</span>
                     <input
                       placeholder="0.05"
                       type="number"
@@ -1463,108 +1463,108 @@ export function QuotePanel({ customerId }: { customerId: string }) {
                     onClick={() => setEditForm({ ...editForm, materialItems: editForm.materialItems.filter((_, itemIndex) => itemIndex !== index) })}
                     type="button"
                   >
-                    删除
+                    {t("common.delete")}
                   </button>
                 </div>
               ))}
               <div className="form-field">
-                <label>物料行</label>
+                <label>{t("quoteFields.materialRows")}</label>
                 <button className="secondary-button" onClick={() => setEditForm({ ...editForm, materialItems: [...editForm.materialItems, { ...EMPTY_MATERIAL_ITEM }] })} type="button">
-                  新增物料
+                  {t("quoteFields.addMaterial")}
                 </button>
               </div>
               <div className="form-field">
-                <label>物料利润率(0.10=10%)</label>
+                <label>{t("quoteFields.materialProfitRateHint")}</label>
                 <input type="number" value={editForm.materialProfitRate} onChange={(e) => setEditForm({ ...editForm, materialProfitRate: e.target.value })} />
               </div>
               <div className="form-field">
-                <label>加工时间</label>
+                <label>{t("quoteFields.processingTime")}</label>
                 <input type="number" value={editForm.processingTime} onChange={(e) => setEditForm({ ...editForm, processingTime: e.target.value })} />
               </div>
               <div className="form-field">
-                <label>加工工时费率</label>
+                <label>{t("quoteFields.processingHourlyRate")}</label>
                 <input type="number" value={editForm.processingHourlyRate} onChange={(e) => setEditForm({ ...editForm, processingHourlyRate: e.target.value })} />
               </div>
               <div className="form-field">
-                <label>加工利润率(0.10=10%)</label>
+                <label>{t("quoteFields.processingProfitRateHint")}</label>
                 <input type="number" value={editForm.processingProfitRate} onChange={(e) => setEditForm({ ...editForm, processingProfitRate: e.target.value })} />
               </div>
               <div className="form-field">
-                <label>毛重</label>
+                <label>{t("quoteFields.grossWeight")}</label>
                 <input type="number" value={editForm.grossWeight} onChange={(e) => setEditForm({ ...editForm, grossWeight: e.target.value })} />
               </div>
               <div className="form-field wide-field quote-inline-grid quote-dimension-grid">
                 <label>
-                  <span>长</span>
+                  <span>{t("quoteFields.length")}</span>
                   <input type="number" value={editForm.packageLength} onChange={(event) => setEditForm({ ...editForm, packageLength: event.target.value })} />
                 </label>
                 <label>
-                  <span>宽</span>
+                  <span>{t("quoteFields.width")}</span>
                   <input type="number" value={editForm.packageWidth} onChange={(event) => setEditForm({ ...editForm, packageWidth: event.target.value })} />
                 </label>
                 <label>
-                  <span>高</span>
+                  <span>{t("quoteFields.height")}</span>
                   <input type="number" value={editForm.packageHeight} onChange={(event) => setEditForm({ ...editForm, packageHeight: event.target.value })} />
                 </label>
                 <label>
-                  <span>体积系数</span>
+                  <span>{t("quoteFields.volumeDivisor")}</span>
                   <input type="number" value={editForm.volumeDivisor} onChange={(event) => setEditForm({ ...editForm, volumeDivisor: event.target.value })} />
                 </label>
               </div>
               <div className="form-field">
-                <label>体积重量</label>
+                <label>{t("quoteFields.volumeWeight")}</label>
                 <input readOnly value={(editSummary.breakdown?.volumeWeight ?? 0).toFixed(2)} />
               </div>
               <div className="form-field">
-                <label>运输单位价格</label>
+                <label>{t("quoteFields.shippingUnitPrice")}</label>
                 <input type="number" value={editForm.shippingUnitPrice} onChange={(e) => setEditForm({ ...editForm, shippingUnitPrice: e.target.value })} />
               </div>
               <div className="form-field">
-                <label>增值税率(0.13=13%)</label>
+                <label>{t("quoteFields.vatRateHint")}</label>
                 <input type="number" value={editForm.vatRate} onChange={(e) => setEditForm({ ...editForm, vatRate: e.target.value })} />
               </div>
             </>
           ) : (
             <>
               <div className="form-field">
-                <label>物料价</label>
+                <label>{t("quoteFields.materialCost")}</label>
                 <input type="number" value={editForm.materialCost} onChange={(e) => setEditForm({ ...editForm, materialCost: e.target.value })} />
               </div>
               <div className="form-field">
-                <label>加工费</label>
+                <label>{t("quoteFields.processingCost")}</label>
                 <input type="number" value={editForm.processingCost} onChange={(e) => setEditForm({ ...editForm, processingCost: e.target.value })} />
               </div>
               <div className="form-field">
-                <label>税费</label>
+                <label>{t("quoteFields.taxCost")}</label>
                 <input type="number" value={editForm.taxCost} onChange={(e) => setEditForm({ ...editForm, taxCost: e.target.value })} />
               </div>
               <div className="form-field">
-                <label>运费</label>
+                <label>{t("quoteFields.shipping")}</label>
                 <input type="number" value={editForm.shippingCost} onChange={(e) => setEditForm({ ...editForm, shippingCost: e.target.value })} />
               </div>
             </>
           )}
           <div className="form-field">
-            <label>优惠金额</label>
+            <label>{t("quoteFields.discountAmount")}</label>
             <input type="number" value={editForm.discountAmount} onChange={(e) => setEditForm({ ...editForm, discountAmount: e.target.value })} />
           </div>
           <div className="form-field">
-            <label>有效期</label>
+            <label>{t("quoteFields.validUntil")}</label>
             <input type="date" value={editForm.validUntil} onChange={(e) => setEditForm({ ...editForm, validUntil: e.target.value })} />
           </div>
           <div className="form-field wide-field">
-            <label>备注</label>
+            <label>{t("common.notes")}</label>
             <textarea value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} rows={3} />
           </div>
           <div className="form-field">
             <label>
-              <span>单价</span>
+              <span>{t("quoteFields.unitPrice")}</span>
               <input readOnly value={editSummary.unitPrice.toFixed(2)} />
             </label>
           </div>
           <div className="form-field">
             <label>
-              <span>计算总价</span>
+              <span>{t("quoteFields.total")}</span>
               <input readOnly value={editSummary.total.toFixed(2)} />
             </label>
           </div>

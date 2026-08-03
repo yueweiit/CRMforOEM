@@ -7,6 +7,7 @@ import { DeleteIconButton } from "../../../../components/DeleteIconButton";
 import { EditIconButton } from "../../../../components/EditIconButton";
 import { deleteOemFitScore, getOemFitScore, getOemFitScoreHistory, updateOemFitScore } from "../../../../api/customers";
 import { MarkdownReport } from "../shared/Markdown";
+import { useI18n } from "../../../../i18n";
 import type { CustomerDetail, OemScore } from "../shared/types";
 import { AnalysisSection, asArray, asRecord, getText, getNumber, stringifyInsight, InsightList, AiVersions, scoreLabel, gradeText, formatAnalysisTime } from "../shared/ui";
 import { getAnalysisDetailLoadState, getDefaultAnalysisHistoryId, getNextAnalysisHistorySelection, sortAnalysisHistoryByCreatedAt } from "./analysis-history-state";
@@ -270,6 +271,7 @@ function RecommendedProductList({ items }: { items?: unknown }) {
 }
 
 function OemScoreEditDialog({ open, score, busy, onClose, onSave }: { open: boolean; score?: OemScore | null; busy: boolean; onClose: () => void; onSave: (payload: { manualScore?: number; manualGrade?: string; manualNotes?: string }) => void }) {
+  const { t } = useI18n();
   const aiScore = score?.aiScore ?? score?.score ?? 0;
   const aiGrade = score?.aiGrade ?? score?.grade ?? "";
   const [manualScore, setManualScore] = useState(String(score?.manualScore ?? ""));
@@ -283,32 +285,32 @@ function OemScoreEditDialog({ open, score, busy, onClose, onSave }: { open: bool
   }, [score?.id]);
 
   return (
-    <Dialog v2 className="crm-action-dialog" title="手动覆盖OEM评分" visible={open} onClose={onClose}
+    <Dialog v2 className="crm-action-dialog" title={t("scorePanel.manualOverrideTitle")} visible={open} onClose={onClose}
       footer={
         <div className="toolbar crm-dialog-footer">
-          <button className="secondary-button" onClick={onClose} type="button">取消</button>
+          <button className="secondary-button" onClick={onClose} type="button">{t("common.cancel")}</button>
           <button className="primary-button" disabled={busy} onClick={() => onSave({
             manualScore: manualScore ? Number(manualScore) : undefined,
             manualGrade: manualGrade || undefined,
             manualNotes: manualNotes || undefined
-          })} type="button">{busy ? "保存中..." : "保存"}</button>
+          })} type="button">{busy ? t("common.saving") : t("common.save")}</button>
         </div>
       }>
-      <p style={{ marginBottom: 12, color: "#6b7280", fontSize: 13 }}>手动覆盖后将以人工评分为准。留空的字段沿用AI评分。</p>
+      <p style={{ marginBottom: 12, color: "#6b7280", fontSize: 13 }}>{t("scorePanel.manualOverrideHint")}</p>
       <div className="analysis-edit-form" >
-        <div><label>AI评分</label><span>{aiScore}分 · {aiGrade}级</span></div>
+        <div><label>{t("scorePanel.aiScore")}</label><span>{aiScore} · {aiGrade}</span></div>
         <div className="form-field">
-          <label>人工评分 (0-100)</label>
+          <label>{t("scorePanel.manualScore")}</label>
           <input type="number" min={0} max={100} value={manualScore} onChange={(e) => setManualScore(e.target.value)} style={{ width: "100%" }} placeholder={`${aiScore}`} />
         </div>
         <div className="form-field">
-          <label>人工等级</label>
+          <label>{t("scorePanel.manualGrade")}</label>
           <input value={manualGrade} onChange={(e) => setManualGrade(e.target.value.toUpperCase())} style={{ width: "100%" }} placeholder={aiGrade} maxLength={2} />
         </div>
       </div>
       <div className="form-field" style={{ marginTop: 12 }}>
-        <label>人工备注</label>
-        <textarea value={manualNotes} onChange={(e) => setManualNotes(e.target.value)} rows={3} style={{ width: "100%", resize: "vertical" }} placeholder="填写人工复核/调整原因..." />
+        <label>{t("scorePanel.manualNotes")}</label>
+        <textarea value={manualNotes} onChange={(e) => setManualNotes(e.target.value)} rows={3} style={{ width: "100%", resize: "vertical" }} placeholder={t("scorePanel.manualNotesPlaceholder")} />
       </div>
     </Dialog>
   );

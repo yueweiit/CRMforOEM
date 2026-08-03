@@ -29,24 +29,24 @@ export function CustomerListTable({
   isLoading: boolean;
   isError: boolean;
 }) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   return (
     <section className="table-panel">
-      {isLoading ? <LoadingState message="正在加载客户..." /> : null}
-      {isError ? <ErrorState message="客户列表加载失败，请重新登录或稍后刷新。" /> : null}
-      {!isLoading && !isError && !data.length ? <EmptyState message="暂无客户，请先新增目标客户。" /> : null}
+      {isLoading ? <LoadingState message={t("customers.loadingList")} /> : null}
+      {isError ? <ErrorState message={t("customers.listError")} /> : null}
+      {!isLoading && !isError && !data.length ? <EmptyState message={t("customers.emptyList")} /> : null}
       {data.length ? (
         <table>
           <thead>
             <tr>
-              <th>客户</th>
-              <th>国家</th>
-              <th>阶段</th>
-              <th>评分</th>
-              <th>联系人</th>
-              <th>负责人</th>
-              <th>更新时间</th>
-              <th>操作</th>
+              <th>{t("customers.tableCustomer")}</th>
+              <th>{t("customers.tableCountry")}</th>
+              <th>{t("customers.tableStage")}</th>
+              <th>{t("customers.tableScore")}</th>
+              <th>{t("customers.tableContact")}</th>
+              <th>{t("customers.tableOwner")}</th>
+              <th>{t("customers.tableUpdatedAt")}</th>
+              <th>{t("customers.tableAction")}</th>
             </tr>
           </thead>
           <tbody>
@@ -65,7 +65,7 @@ export function CustomerListTable({
                 <td>{customer.owner?.name ?? "-"}</td>
                 <td>{new Date(customer.updatedAt).toLocaleDateString()}</td>
                 <td>
-                  <Link to={`/customers/${customer.id}/overview`} className="secondary-button icon-button edit-icon-button" aria-label="编辑" title="编辑">
+                  <Link to={`/customers/${customer.id}/overview`} className="secondary-button icon-button edit-icon-button" aria-label={t("common.edit")} title={t("common.edit")}>
                     <span
                       aria-hidden="true"
                       className="edit-icon-glyph"

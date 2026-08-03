@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { AppSelect } from "../../../components/AppSelect";
 import { Field } from "../../../components/ui/Field";
+import { useI18n } from "../../../i18n";
 import type { CustomerOptions } from "../../../shared/types/customer";
 
 export function CustomerCreateForm({
@@ -22,6 +23,7 @@ export function CustomerCreateForm({
   onSubmit: () => void;
   canManageDictionaries: boolean;
 }) {
+  const { t } = useI18n();
   const hasSources = Boolean(options?.sources.length);
   const hasTypes = Boolean(options?.types.length);
   const hasOwners = Boolean(options?.users.length);
@@ -29,67 +31,67 @@ export function CustomerCreateForm({
   return (
     <section className="panel">
       <div className="panel-title">
-        <h2>客户基础信息</h2>
-        <span>录入公司名和官网后即可进入智能背调流程</span>
+        <h2>{t("customers.basicInfo")}</h2>
+        <span>{t("customers.basicInfoHint")}</span>
       </div>
-      {isError ? <div className="error-state panel">创建失败：{String(error)}</div> : null}
+      {isError ? <div className="error-state panel">{t("customers.createFailed")}：{String(error)}</div> : null}
       {!hasSources || !hasTypes ? (
         <div className="panel loading-state">
-          客户来源或客户类型还没有可选项。
+          {t("customers.missingDictionary")}
           {canManageDictionaries ? (
-            <> 请到 <Link className="table-link" to="/settings/customer-dictionaries">系统设置 / 客户字典</Link> 配置；</>
+            <> {t("customers.configureDictionaryPrefix")} <Link className="table-link" to="/settings/customer-dictionaries">{t("customers.configureDictionaryLink")}</Link> {t("customers.configureDictionarySuffix")}</>
           ) : null}
-          也可以先不选直接创建客户。
+          {t("customers.createWithoutDictionary")}
         </div>
       ) : null}
       <div className="form-grid">
-        <Field label="公司名称 *" value={form.name} onChange={(name) => onFieldChange("name", name)} />
-        <Field label="官网URL" value={form.websiteUrl} onChange={(websiteUrl) => onFieldChange("websiteUrl", websiteUrl)} placeholder="https://example.com" />
-        <Field label="国家/地区" value={form.country} onChange={(country) => onFieldChange("country", country)} />
-        <Field label="语言" value={form.language} onChange={(language) => onFieldChange("language", language)} placeholder="en" />
-        <Field label="时区" value={form.timezone} onChange={(timezone) => onFieldChange("timezone", timezone)} placeholder="America/New_York" />
-        <Field label="币种" value={form.currency} onChange={(currency) => onFieldChange("currency", currency)} placeholder="USD" />
+        <Field label={t("customers.companyName")} value={form.name} onChange={(name) => onFieldChange("name", name)} />
+        <Field label={t("customers.websiteUrl")} value={form.websiteUrl} onChange={(websiteUrl) => onFieldChange("websiteUrl", websiteUrl)} placeholder="https://example.com" />
+        <Field label={t("customers.countryRegion")} value={form.country} onChange={(country) => onFieldChange("country", country)} />
+        <Field label={t("customers.customerLanguage")} value={form.language} onChange={(language) => onFieldChange("language", language)} placeholder="en" />
+        <Field label={t("customers.timezone")} value={form.timezone} onChange={(timezone) => onFieldChange("timezone", timezone)} placeholder="America/New_York" />
+        <Field label={t("customers.currency")} value={form.currency} onChange={(currency) => onFieldChange("currency", currency)} placeholder="USD" />
         <label>
-          <span>客户来源</span>
+          <span>{t("customers.customerSource")}</span>
           <AppSelect
             value={form.sourceId}
             onChange={(sourceId) => onFieldChange("sourceId", sourceId)}
             options={[
-              { value: "", label: hasSources ? "未选择" : "暂无来源，请先配置" },
+              { value: "", label: hasSources ? t("common.notSelected") : t("customers.noSource") },
               ...(options?.sources.map((item) => ({ value: item.id, label: item.name })) ?? [])
             ]}
           />
         </label>
         <label>
-          <span>客户类型</span>
+          <span>{t("customers.customerType")}</span>
           <AppSelect
             value={form.typeId}
             onChange={(typeId) => onFieldChange("typeId", typeId)}
             options={[
-              { value: "", label: hasTypes ? "未选择" : "暂无类型，请先配置" },
+              { value: "", label: hasTypes ? t("common.notSelected") : t("customers.noType") },
               ...(options?.types.map((item) => ({ value: item.id, label: item.name })) ?? [])
             ]}
           />
         </label>
         <label>
-          <span>负责人</span>
+          <span>{t("common.owner")}</span>
           <AppSelect
             value={form.ownerId}
             onChange={(ownerId) => onFieldChange("ownerId", ownerId)}
             options={[
-              { value: "", label: hasOwners ? "默认当前用户" : "暂无可选负责人" },
+              { value: "", label: hasOwners ? t("customers.defaultCurrentUser") : t("customers.noOwner") },
               ...(options?.users.map((item) => ({ value: item.id, label: item.name })) ?? [])
             ]}
           />
         </label>
-        <Field label="标签" value={form.tags} onChange={(tags) => onFieldChange("tags", tags)} placeholder="用逗号分隔" />
+        <Field label={t("customers.tags")} value={form.tags} onChange={(tags) => onFieldChange("tags", tags)} placeholder={t("customers.tagsPlaceholder")} />
         <label className="wide-field">
-          <span>备注</span>
+          <span>{t("common.note")}</span>
           <textarea value={form.notes} onChange={(event) => onFieldChange("notes", event.target.value)} />
         </label>
         <div className="wide-field">
           <button className="primary-button" disabled={!form.name || isPending} onClick={onSubmit}>
-            {isPending ? "创建中..." : "创建客户"}
+            {isPending ? t("customers.creating") : t("customers.createCustomer")}
           </button>
         </div>
       </div>

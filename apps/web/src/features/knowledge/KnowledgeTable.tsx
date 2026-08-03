@@ -1,6 +1,7 @@
 import { EmptyState } from "../../components/ui/EmptyState";
 import { DeleteIconButton } from "../../components/DeleteIconButton";
 import { EditIconButton } from "../../components/EditIconButton";
+import { useI18n } from "../../i18n";
 import type { Field } from "./KnowledgeForm";
 
 export type KnowledgeRecord = Record<string, unknown> & {
@@ -17,15 +18,16 @@ export function KnowledgeTable(props: {
   onEdit: (row: KnowledgeRecord) => void;
   onDelete: (id: string) => void;
 }) {
-  if (!props.rows.length) return <EmptyState message="暂无资料。" />;
+  const { t } = useI18n();
+  if (!props.rows.length) return <EmptyState message={t("knowledge.empty")} />;
   const visibleFields = props.fields.filter((field) => field.type !== "file").slice(0, 4);
   return (
     <table>
       <thead>
         <tr>
           {visibleFields.map((field) => <th key={field.key}>{field.label}</th>)}
-          <th>更新时间</th>
-          <th>操作</th>
+          <th>{t("common.updatedAt")}</th>
+          <th>{t("common.operation")}</th>
         </tr>
       </thead>
       <tbody>

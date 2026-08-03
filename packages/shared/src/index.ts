@@ -1,3 +1,5 @@
+import { DEFAULT_LOCALE, type Locale } from "./i18n";
+
 export enum CustomerStage {
   PendingResearch = "PENDING_RESEARCH",
   Researching = "RESEARCHING",
@@ -36,6 +38,36 @@ export enum EmailDraftStatus {
   Approved = "APPROVED",
   Rejected = "REJECTED",
   Sent = "SENT"
+}
+
+const LOCALIZED_EMAIL_DRAFT_STATUS_LABELS: Record<Locale, Record<EmailDraftStatus, string>> = {
+  "zh-CN": {
+    DRAFT: "草稿",
+    PENDING_REVIEW: "待审核",
+    APPROVED: "已审核",
+    REJECTED: "已驳回",
+    SENT: "已发送"
+  },
+  "en-US": {
+    DRAFT: "Draft",
+    PENDING_REVIEW: "Pending review",
+    APPROVED: "Approved",
+    REJECTED: "Rejected",
+    SENT: "Sent"
+  },
+  "es-ES": {
+    DRAFT: "Borrador",
+    PENDING_REVIEW: "Pendiente de revision",
+    APPROVED: "Aprobado",
+    REJECTED: "Rechazado",
+    SENT: "Enviado"
+  }
+};
+
+export const EMAIL_DRAFT_STATUS_LABELS = LOCALIZED_EMAIL_DRAFT_STATUS_LABELS[DEFAULT_LOCALE];
+
+export function emailDraftStatusLabel(status?: string | null, locale: Locale = DEFAULT_LOCALE) {
+  return LOCALIZED_EMAIL_DRAFT_STATUS_LABELS[locale]?.[status as EmailDraftStatus] ?? LOCALIZED_EMAIL_DRAFT_STATUS_LABELS[DEFAULT_LOCALE]?.[status as EmailDraftStatus] ?? status ?? "";
 }
 
 export enum EmailDirection {
@@ -83,17 +115,43 @@ export const EMAIL_DRAFT_ALLOWED_PURPOSES = [
   ...Object.keys(EMAIL_DRAFT_PURPOSE_ALIASES)
 ] as const;
 
-export const EMAIL_DRAFT_PURPOSE_LABELS: Record<EmailDraftPurpose, string> = {
-  FIRST_OUTREACH: "首封开发邮件",
-  NO_REPLY_FOLLOW_UP: "未回复跟进邮件",
-  PRODUCT_RECOMMENDATION: "产品推荐邮件",
-  REQUIREMENT_CONFIRMATION: "需求确认邮件",
-  QUOTATION: "报价邮件",
-  SAMPLE_FOLLOW_UP: "样品推进邮件",
-  TRADE_SHOW_INVITATION: "展会邀约邮件",
-  NEW_PRODUCT_LAUNCH: "新品推荐邮件",
-  REORDER_REACTIVATION: "老客户复购邮件"
+const LOCALIZED_EMAIL_DRAFT_PURPOSE_LABELS: Record<Locale, Record<EmailDraftPurpose, string>> = {
+  "zh-CN": {
+    FIRST_OUTREACH: "首封开发邮件",
+    NO_REPLY_FOLLOW_UP: "未回复跟进邮件",
+    PRODUCT_RECOMMENDATION: "产品推荐邮件",
+    REQUIREMENT_CONFIRMATION: "需求确认邮件",
+    QUOTATION: "报价邮件",
+    SAMPLE_FOLLOW_UP: "样品推进邮件",
+    TRADE_SHOW_INVITATION: "展会邀约邮件",
+    NEW_PRODUCT_LAUNCH: "新品推荐邮件",
+    REORDER_REACTIVATION: "老客户复购邮件"
+  },
+  "en-US": {
+    FIRST_OUTREACH: "First outreach email",
+    NO_REPLY_FOLLOW_UP: "No-reply follow-up email",
+    PRODUCT_RECOMMENDATION: "Product recommendation email",
+    REQUIREMENT_CONFIRMATION: "Requirement confirmation email",
+    QUOTATION: "Quotation email",
+    SAMPLE_FOLLOW_UP: "Sample follow-up email",
+    TRADE_SHOW_INVITATION: "Trade show invitation email",
+    NEW_PRODUCT_LAUNCH: "New product launch email",
+    REORDER_REACTIVATION: "Reorder reactivation email"
+  },
+  "es-ES": {
+    FIRST_OUTREACH: "Primer email de contacto",
+    NO_REPLY_FOLLOW_UP: "Email de seguimiento sin respuesta",
+    PRODUCT_RECOMMENDATION: "Email de recomendacion de producto",
+    REQUIREMENT_CONFIRMATION: "Email de confirmacion de requisitos",
+    QUOTATION: "Email de cotizacion",
+    SAMPLE_FOLLOW_UP: "Email de seguimiento de muestra",
+    TRADE_SHOW_INVITATION: "Email de invitacion a feria",
+    NEW_PRODUCT_LAUNCH: "Email de nuevo producto",
+    REORDER_REACTIVATION: "Email de reactivacion de recompra"
+  }
 };
+
+export const EMAIL_DRAFT_PURPOSE_LABELS = LOCALIZED_EMAIL_DRAFT_PURPOSE_LABELS[DEFAULT_LOCALE];
 
 export function normalizeEmailDraftPurpose(purpose?: string | null): EmailDraftPurpose {
   if (!purpose) return "FIRST_OUTREACH";
@@ -105,11 +163,12 @@ export function normalizeEmailDraftPurpose(purpose?: string | null): EmailDraftP
     : "FIRST_OUTREACH";
 }
 
-export function emailDraftPurposeLabel(purpose?: string | null) {
-  return EMAIL_DRAFT_PURPOSE_LABELS[normalizeEmailDraftPurpose(purpose)];
+export function emailDraftPurposeLabel(purpose?: string | null, locale: Locale = DEFAULT_LOCALE) {
+  const normalized = normalizeEmailDraftPurpose(purpose);
+  return LOCALIZED_EMAIL_DRAFT_PURPOSE_LABELS[locale]?.[normalized] ?? LOCALIZED_EMAIL_DRAFT_PURPOSE_LABELS[DEFAULT_LOCALE][normalized];
 }
 
-export { QUOTE_FLOW_STATUS_LABELS, STAGE_LABELS, stageLabel, TASK_TYPE_LABELS, taskTypeLabel, quoteFlowStatusLabel } from "./labels";
+export { FOLLOW_UP_TASK_STATUS_LABELS, followUpTaskStatusLabel, QUOTE_FLOW_STATUS_LABELS, STAGE_LABELS, stageLabel, TASK_TYPE_LABELS, taskTypeLabel, quoteFlowStatusLabel } from "./labels";
 export { DEFAULT_LOCALE, SUPPORTED_LOCALES, normalizeLocale } from "./i18n";
 export type { Locale } from "./i18n";
 export {
