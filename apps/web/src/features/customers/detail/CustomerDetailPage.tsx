@@ -16,23 +16,26 @@ import { EmailPanel } from "./panels/EmailPanel";
 import { FollowUpPanel } from "./panels/FollowUpPanel";
 import { QuotePanel } from "./panels/QuotePanel";
 import { SamplePanel } from "./panels/SamplePanel";
+import { useI18n } from "../../../i18n";
+import type { TranslationKey } from "../../../i18n/resources";
 import { getActiveTaskSignature, getCompletedActiveTaskTypes, getGenerationDialogBusy } from "./customer-task-state";
 import type { GenerationAction } from "./customer-task-state";
 
-const tabs = [
-  { to: "overview", label: "概览", icon: NotebookTabs },
-  { to: "website-analysis", label: "官网分析", icon: Globe2 },
-  { to: "research", label: "背调报告", icon: Bot },
-  { to: "oem-score", label: "OEM评分", icon: Star },
-  { to: "email", label: "开发邮件", icon: MailPlus },
-  { to: "follow-ups", label: "跟进", icon: NotebookTabs },
-  { to: "quotes", label: "报价", icon: NotebookTabs },
-  { to: "samples", label: "样品", icon: NotebookTabs }
+const tabs: Array<{ to: string; labelKey: TranslationKey; icon: typeof NotebookTabs }> = [
+  { to: "overview", labelKey: "customerDetail.tabOverview", icon: NotebookTabs },
+  { to: "website-analysis", labelKey: "customerDetail.tabWebsiteAnalysis", icon: Globe2 },
+  { to: "research", labelKey: "customerDetail.tabResearch", icon: Bot },
+  { to: "oem-score", labelKey: "customerDetail.tabOemScore", icon: Star },
+  { to: "email", labelKey: "customerDetail.tabEmail", icon: MailPlus },
+  { to: "follow-ups", labelKey: "customerDetail.tabFollowUps", icon: NotebookTabs },
+  { to: "quotes", labelKey: "customerDetail.tabQuotes", icon: NotebookTabs },
+  { to: "samples", labelKey: "customerDetail.tabSamples", icon: NotebookTabs }
 ];
 
 export function CustomerDetailPage() {
   const { id = "", tab = "overview" } = useParams();
   const queryClient = useQueryClient();
+  const { t } = useI18n();
   const [message, setMessage] = useState("");
   const [pendingAction, setPendingAction] = useState<GenerationAction | null>(null);
 
@@ -93,7 +96,7 @@ export function CustomerDetailPage() {
       refreshTasks();
       queryClient.invalidateQueries({ queryKey: ["customer", id, "website-analysis-history"] });
     },
-    onError: () => setMessage("官网分析提交失败，请先确认已保存有效官网 URL。")
+    onError: () => setMessage(t("customerDetail.websiteSubmitError"))
   });
   const researchMutation = useMutation({
     mutationFn: () => createResearchReport<AcceptedResponse<{ report: ResearchReport }>>(id),
@@ -103,7 +106,7 @@ export function CustomerDetailPage() {
       refreshTasks();
       queryClient.invalidateQueries({ queryKey: ["customer", id, "research-report-history"] });
     },
-    onError: () => setMessage("背调任务提交失败，请刷新后重试。")
+    onError: () => setMessage(t("customerDetail.researchSubmitError"))
   });
   const scoreMutation = useMutation({
     mutationFn: () => createOemFitScore(id),
@@ -116,7 +119,7 @@ export function CustomerDetailPage() {
       refreshTasks();
       queryClient.invalidateQueries({ queryKey: ["customer", id, "oem-score-history"] });
     },
-    onError: () => setMessage("OEM评分生成失败，请稍后重试。")
+    onError: () => setMessage(t("customerDetail.oemSubmitError"))
   });
   const isOemScoreGenerating = scoreMutation.isPending || hasActiveTask("OEM_FIT_SCORE");
   const generationDialogBusy = getGenerationDialogBusy(pendingAction, {
@@ -144,36 +147,36 @@ export function CustomerDetailPage() {
     <section className="page-stack">
       <DetailPageHeader
         backTo="/customers"
-        backLabel="返回客户开发池"
+        backLabel={t("customerDetail.backToPool")}
         eyebrow={customer?.websiteDomain ?? `Customer #${id}`}
-        title={customer?.name ?? "客户详情"}
+        title={customer?.name ?? t("customerDetail.detailFallbackTitle")}
         breadcrumbs={[
-          { label: "客户开发", to: "/customers" },
-          { label: customer?.name ?? "客户详情" }
+          { label: t("customerDetail.breadcrumbCustomers"), to: "/customers" },
+          { label: customer?.name ?? t("customerDetail.detailFallbackTitle") }
         ]}
         actions={(
           <>
             <button
               className={`secondary-button${hasActiveTask("WEBSITE_ANALYSIS") ? " active-task" : ""}`}
-              title={customer?.websiteUrl ? "抓取并分析客户官网" : "请先在概览中编辑并保存官网URL"}
+              title={customer?.websiteUrl ? t("customerDetail.analyzeWebsiteTitle") : t("customerDetail.fillWebsiteTitle")}
               onClick={() => openGenerationConfirm("website")}
               disabled={!customer?.websiteUrl || analyzeMutation.isPending || hasActiveTask("WEBSITE_ANALYSIS")}
             >
-              {hasActiveTask("WEBSITE_ANALYSIS") ? <ProcessingButtonLabel /> : customer?.websiteUrl ? "官网分析" : "先填写官网"}
+              {hasActiveTask("WEBSITE_ANALYSIS") ? <ProcessingButtonLabel /> : customer?.websiteUrl ? t("customerDetail.analyzeWebsite") : t("customerDetail.fillWebsiteFirst")}
             </button>
             <button
               className={`secondary-button${hasActiveTask("RESEARCH_REPORT") ? " active-task" : ""}`}
               onClick={() => openGenerationConfirm("research")}
               disabled={researchMutation.isPending || hasActiveTask("RESEARCH_REPORT")}
             >
-              {hasActiveTask("RESEARCH_REPORT") ? <ProcessingButtonLabel /> : "生成背调"}
+              {hasActiveTask("RESEARCH_REPORT") ? <ProcessingButtonLabel /> : t("customerDetail.generateResearch")}
             </button>
             <button
               className={`secondary-button${isOemScoreGenerating ? " active-task" : ""}`}
               onClick={() => openGenerationConfirm("oem")}
               disabled={isOemScoreGenerating}
             >
-              {isOemScoreGenerating ? <ProcessingButtonLabel /> : "OEM评分"}
+              {isOemScoreGenerating ? <ProcessingButtonLabel /> : t("customerDetail.generateOemScore")}
             </button>
           </>
         )}
@@ -192,7 +195,7 @@ export function CustomerDetailPage() {
           return (
             <NavLink key={item.to} to={`/customers/${id}/${item.to}`} className={({ isActive }) => `tab-link ${isActive ? "active" : ""}`}>
               <Icon size={15} />
-              {item.label}
+              {t(item.labelKey)}
             </NavLink>
           );
         })}
@@ -200,9 +203,9 @@ export function CustomerDetailPage() {
 
       <CustomerTaskStrip tasks={activeTasks} />
       {message ? <section className="panel error-state">{message}</section> : null}
-      {customerQuery.isLoading ? <section className="panel empty-state">正在加载客户详情...</section> : null}
-      {customerQuery.isError && !customer ? <section className="panel error-state">客户详情加载失败，请重新登录或刷新页面。</section> : null}
-      {customerQuery.isError && customer ? <section className="panel error-state">客户详情刷新失败，当前显示的是上一次加载的数据。</section> : null}
+      {customerQuery.isLoading ? <section className="panel empty-state">{t("customerDetail.loadingDetail")}</section> : null}
+      {customerQuery.isError && !customer ? <section className="panel error-state">{t("customerDetail.loadDetailError")}</section> : null}
+      {customerQuery.isError && customer ? <section className="panel error-state">{t("customerDetail.refreshDetailError")}</section> : null}
       {customer ? (
         <CustomerTab
           tab={tab}
@@ -224,7 +227,8 @@ function GenerationConfirmDialog(props: {
   onCancel: () => void;
   onConfirm: () => void;
 }) {
-  const config = props.action ? generationActionConfig[props.action] : undefined;
+  const { t } = useI18n();
+  const config = props.action ? generationActionConfig(props.action, t) : undefined;
   return (
     <Dialog
       v2
@@ -234,10 +238,10 @@ function GenerationConfirmDialog(props: {
       footer={(
         <div className="toolbar crm-dialog-footer">
           <button className="secondary-button" onClick={props.onCancel} type="button">
-            取消
+            {t("common.cancel")}
           </button>
           <button className="primary-button" disabled={props.busy} onClick={props.onConfirm} type="button">
-            {props.busy ? "提交中..." : config?.confirmText ?? "确认"}
+            {props.busy ? t("customerDetail.submitting") : config?.confirmText ?? t("customerDetail.confirmDefault")}
           </button>
         </div>
       )}
@@ -248,29 +252,33 @@ function GenerationConfirmDialog(props: {
   );
 }
 
-const generationActionConfig: Record<GenerationAction, { title: string; description: string; confirmText: string }> = {
-  website: {
-    title: "确认发起官网分析",
-    description: "系统会重新抓取客户官网并生成分析。当前已有报告会继续保留，可在历史记录中查看。",
-    confirmText: "开始分析"
-  },
-  research: {
-    title: "确认生成背调报告",
-    description: "系统会整理客户资料、官网分析、公开搜索和企业资料库，生成新的背调报告。当前报告会继续保留。",
-    confirmText: "生成背调"
-  },
-  oem: {
-    title: "确认生成OEM评分",
-    description: "系统会基于客户资料、官网分析、背调报告和我方资料重新计算 OEM 适配评分。当前评分会继续保留。",
-    confirmText: "生成评分"
-  }
-};
+function generationActionConfig(action: GenerationAction, t: ReturnType<typeof useI18n>["t"]) {
+  const configs: Record<GenerationAction, { title: string; description: string; confirmText: string }> = {
+    website: {
+      title: t("customerDetail.confirmWebsiteTitle"),
+      description: t("customerDetail.confirmWebsiteDescription"),
+      confirmText: t("customerDetail.confirmWebsiteAction")
+    },
+    research: {
+      title: t("customerDetail.confirmResearchTitle"),
+      description: t("customerDetail.confirmResearchDescription"),
+      confirmText: t("customerDetail.confirmResearchAction")
+    },
+    oem: {
+      title: t("customerDetail.confirmOemTitle"),
+      description: t("customerDetail.confirmOemDescription"),
+      confirmText: t("customerDetail.confirmOemAction")
+    }
+  };
+  return configs[action];
+}
 
 function ProcessingButtonLabel() {
+  const { t } = useI18n();
   return (
     <span className="button-loading">
       <Loading className="button-loading-icon" inline visible size="medium" color="#0f766e" />
-      <span className="button-loading-text">{"处理中..."}</span>
+      <span className="button-loading-text">{t("customerDetail.processing")}</span>
     </span>
   );
 }
@@ -295,13 +303,14 @@ function CustomerTab(props: {
 }
 
 function CustomerTaskStrip({ tasks }: { tasks: CustomerBackgroundTaskView[] }) {
+  const { t } = useI18n();
   if (!tasks.length) return null;
 
   return (
     <section className="panel">
       <div className="panel-title">
-        <h2>后台处理中</h2>
-        <span>{tasks.length} 个任务</span>
+        <h2>{t("customerDetail.backgroundProcessing")}</h2>
+        <span>{t("customerDetail.taskCount").replace("{count}", String(tasks.length))}</span>
       </div>
       <div className="task-list">
         {tasks.map((task) => (
@@ -309,10 +318,10 @@ function CustomerTaskStrip({ tasks }: { tasks: CustomerBackgroundTaskView[] }) {
             <div />
             <div>
               <strong>{task.title}</strong>
-              <span>{backgroundTaskStatusText(task.status)}</span>
+              <span>{backgroundTaskStatusText(task.status, t)}</span>
               {task.errorMessage ? <span>{task.errorMessage}</span> : null}
             </div>
-            <span className="status-pill">{backgroundTaskTypeText(task.type)}</span>
+            <span className="status-pill">{backgroundTaskTypeText(task.type, t)}</span>
           </div>
         ))}
       </div>
@@ -320,23 +329,23 @@ function CustomerTaskStrip({ tasks }: { tasks: CustomerBackgroundTaskView[] }) {
   );
 }
 
-function backgroundTaskStatusText(status: CustomerBackgroundTaskView["status"]) {
+function backgroundTaskStatusText(status: CustomerBackgroundTaskView["status"], t: ReturnType<typeof useI18n>["t"]) {
   switch (status) {
-    case "QUEUED": return "排队中";
-    case "RUNNING": return "处理中";
-    case "SUCCEEDED": return "已完成";
-    case "FAILED": return "失败";
-    case "CANCELLED": return "已取消";
+    case "QUEUED": return t("customerDetail.statusQueued");
+    case "RUNNING": return t("customerDetail.statusRunning");
+    case "SUCCEEDED": return t("customerDetail.statusSucceeded");
+    case "FAILED": return t("customerDetail.statusFailed");
+    case "CANCELLED": return t("customerDetail.statusCancelled");
     default: return status;
   }
 }
 
-function backgroundTaskTypeText(type: CustomerBackgroundTaskView["type"]) {
+function backgroundTaskTypeText(type: CustomerBackgroundTaskView["type"], t: ReturnType<typeof useI18n>["t"]) {
   switch (type) {
-    case "WEBSITE_ANALYSIS": return "官网分析";
-    case "RESEARCH_REPORT": return "背调报告";
-    case "OEM_FIT_SCORE": return "OEM评分";
-    case "EMAIL_DRAFT": return "邮件草稿";
+    case "WEBSITE_ANALYSIS": return t("customerDetail.taskWebsiteAnalysis");
+    case "RESEARCH_REPORT": return t("customerDetail.taskResearchReport");
+    case "OEM_FIT_SCORE": return t("customerDetail.taskOemScore");
+    case "EMAIL_DRAFT": return t("customerDetail.taskEmailDraft");
     default: return type;
   }
 }
