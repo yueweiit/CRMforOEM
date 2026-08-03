@@ -415,6 +415,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   });
   const [createFeeOpen, setCreateFeeOpen] = useState(false);
   const [createFeeForms, setCreateFeeForms] = useState<ReturnType<typeof createEmptySampleFee>[]>([]);
+  const [createValidationRequested, setCreateValidationRequested] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailMode, setDetailMode] = useState<"sample" | "quote">("sample");
   const [detailSample, setDetailSample] = useState<Sample | null>(null);
@@ -526,6 +527,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
       });
       setCreateFeeOpen(false);
       setCreateFeeForms([]);
+      setCreateValidationRequested(false);
       showClientToast({ type: "success", title: "新增样品成功", message: "样品申请已创建。" });
     },
     onError: (error) => {
@@ -850,6 +852,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   const createMessage = createSampleValidationMessage(createForm);
   const createFeeMessage = createFeeValidationMessage(createFeeForms);
   const createReady = createMessage === "" && createFeeMessage === "";
+  const visibleCreateMessage = createValidationRequested ? createMessage || createFeeMessage : "";
   const shippingMessage = shippingValidationMessage(editForm, editing?.status ?? "");
   const approvalDialogTitle = approvalMode === "approve" ? "审核通过" : "审核驳回";
   const approvalDialogConfirmLabel = approvalMode === "approve" ? "通过" : "驳回";
@@ -858,6 +861,14 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   const approvalPending = approvalMode === "approve" ? approve.isPending : reject.isPending;
   const currentStatus = currentStatusSample?.status ?? "";
   const detailQuote = detailSample?.quoteId ? quoteOptions.find((quote) => quote.id === detailSample.quoteId) ?? null : null;
+
+  const handleCreateSample = () => {
+    setCreateValidationRequested(true);
+    if (createMessage || createFeeMessage) {
+      return;
+    }
+    create.mutate();
+  };
 
   return (
     <section className="panel">
@@ -997,9 +1008,9 @@ export function SamplePanel({ customerId }: { customerId: string }) {
             {createFeeMessage ? t("sampleFields.feeMissing") : t("sampleFields.feeFilled").replace("{count}", String(createFeeForms.length))}
           </div>
         </div>
-        {createMessage ? <div className="error-state wide-field">{createMessage}</div> : null}
+        {visibleCreateMessage ? <div className="error-state wide-field">{visibleCreateMessage}</div> : null}
         <div className="wide-field">
-          <AddIconButton disabled={create.isPending || !createReady} label={create.isPending ? t("quoteFields.submitting") : t("sampleFields.addSample")} onClick={() => create.mutate()} />
+          <AddIconButton disabled={create.isPending} label={create.isPending ? t("quoteFields.submitting") : t("sampleFields.addSample")} onClick={handleCreateSample} />
         </div>
         </div>
       </div>
