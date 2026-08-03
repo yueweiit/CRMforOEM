@@ -1,5 +1,7 @@
 import { showClientToast, showLoadingToast } from "../components/Toast";
 import { apiBasePath, appBasePath } from "../config/runtime";
+import { readCurrentLocale } from "../i18n/locale";
+import { translate } from "../i18n";
 
 const API_BASE = apiBasePath;
 
@@ -241,36 +243,41 @@ function shouldAutoToast(path: string) {
 }
 
 function mutationToastTitle(kind: "create" | "update" | "delete" | "upload") {
-  if (kind === "create") return "处理中";
-  if (kind === "update") return "处理中";
-  if (kind === "delete") return "处理中";
-  return "上传中";
+  const locale = readCurrentLocale();
+  if (kind === "create") return translate(locale, "toast.processing");
+  if (kind === "update") return translate(locale, "toast.processing");
+  if (kind === "delete") return translate(locale, "toast.processing");
+  return translate(locale, "toast.uploading");
 }
 
 function mutationLoadingMessage(kind: "create" | "update" | "delete" | "upload") {
-  if (kind === "create") return "正在提交数据，请稍候。";
-  if (kind === "update") return "正在保存修改，请稍候。";
-  if (kind === "delete") return "正在删除数据，请稍候。";
-  return "正在上传文件，请稍候。";
+  const locale = readCurrentLocale();
+  if (kind === "create") return translate(locale, "toast.loadingCreate");
+  if (kind === "update") return translate(locale, "toast.loadingUpdate");
+  if (kind === "delete") return translate(locale, "toast.loadingDelete");
+  return translate(locale, "toast.loadingUpload");
 }
 
 function mutationSuccessMessage(kind: "create" | "update" | "delete" | "upload") {
-  if (kind === "create") return "操作成功。";
-  if (kind === "update") return "保存成功。";
-  if (kind === "delete") return "删除成功。";
-  return "上传成功。";
+  const locale = readCurrentLocale();
+  if (kind === "create") return translate(locale, "toast.successCreate");
+  if (kind === "update") return translate(locale, "toast.successUpdate");
+  if (kind === "delete") return translate(locale, "toast.successDelete");
+  return translate(locale, "toast.successUpload");
 }
 
 function mutationSuccessTitle(kind: "create" | "update" | "delete" | "upload") {
-  if (kind === "create") return "操作成功";
-  if (kind === "update") return "保存成功";
-  if (kind === "delete") return "删除成功";
-  return "上传成功";
+  const locale = readCurrentLocale();
+  if (kind === "create") return translate(locale, "toast.successCreateTitle");
+  if (kind === "update") return translate(locale, "toast.successUpdateTitle");
+  if (kind === "delete") return translate(locale, "toast.successDeleteTitle");
+  return translate(locale, "toast.successUploadTitle");
 }
 
 function mutationErrorMessage(kind: "create" | "update" | "delete" | "upload") {
-  if (kind === "create") return "提交失败。";
-  if (kind === "update") return "保存失败。";
-  if (kind === "delete") return "删除失败。";
-  return "上传失败。";
+  const locale = readCurrentLocale();
+  if (kind === "create") return translate(locale, "toast.errorCreate");
+  if (kind === "update") return translate(locale, "toast.errorUpdate");
+  if (kind === "delete") return translate(locale, "toast.errorDelete");
+  return translate(locale, "toast.errorUpload");
 }

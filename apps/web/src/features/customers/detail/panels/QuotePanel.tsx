@@ -27,6 +27,7 @@ import { AddIconButton } from "../../../../components/AddIconButton";
 import { DeleteIconButton } from "../../../../components/DeleteIconButton";
 import { EditIconButton } from "../../../../components/EditIconButton";
 import { Field } from "../../../../components/ui/Field";
+import { useI18n } from "../../../../i18n";
 import { formatDateInput } from "../../../../shared/utils/format";
 import type { Quote, QuoteHistoryItem } from "../shared/types";
 
@@ -56,8 +57,8 @@ const EMPTY_FORMULA_FIELDS = {
   vatRate: ""
 };
 
-function statusLabel(status: string) {
-  return quoteFlowStatusLabel(status);
+function statusLabel(status: string, locale: Parameters<typeof quoteFlowStatusLabel>[1] = "zh-CN") {
+  return quoteFlowStatusLabel(status, locale);
 }
 
 function quoteDisplayStatus(quote: Pick<Quote, "status" | "approvalStatus"> | null | undefined) {
@@ -381,6 +382,7 @@ function CurrencyInput({
 
 export function QuotePanel({ customerId }: { customerId: string }) {
   const queryClient = useQueryClient();
+  const { locale } = useI18n();
   const [detailOpen, setDetailOpen] = useState(false);
   const [form, setForm] = useState({
     quoteNo: `Q-${Date.now()}`,
@@ -828,7 +830,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
                   </button>
                   {` · ${item.productName || "未命名产品"} · ${item.currency} ${item.amount}`}
                 </strong>
-                <span>{statusLabel(quoteDisplayStatus(item))} · {new Date(item.createdAt).toLocaleDateString()}   |   </span>
+                <span>{statusLabel(quoteDisplayStatus(item), locale)} · {new Date(item.createdAt).toLocaleDateString()}   |   </span>
                 <span>规格 {item.specification || "未填写"} · MOQ {item.moq} · 数量 {item.quantity} · 单价 {item.unitPrice}   |   </span>
                 <span>物料 {item.materialCost} + 加工 {item.processingCost} + 税费 {item.taxCost} + 运费 {item.shippingCost} - 优惠 {item.discountAmount}=总价{item.amount}</span>
               </div>
@@ -1166,7 +1168,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
                 <p className="detail-eyebrow">报价单</p>
                 <h3>{detailValue(detailQuote?.quoteNo)}</h3>
               </div>
-              <span className="status-pill">{statusLabel(quoteDisplayStatus(detailQuote))}</span>
+              <span className="status-pill">{statusLabel(quoteDisplayStatus(detailQuote), locale)}</span>
             </div>
             <div className="detail-grid">
               <div className="detail-card">
@@ -1179,7 +1181,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
               </div>
               <div className="detail-card">
                 <span>当前状态</span>
-                <strong>{statusLabel(quoteDisplayStatus(detailQuote))}</strong>
+                <strong>{statusLabel(quoteDisplayStatus(detailQuote), locale)}</strong>
               </div>
               <div className="detail-card">
                 <span>报价金额</span>
@@ -1597,7 +1599,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
         <div className="detail-window">
           <section className="detail-section">
             <h4>当前状态</h4>
-            <div className="detail-note">{statusQuote ? statusLabel(quoteDisplayStatus(statusQuote)) : "-"}</div>
+            <div className="detail-note">{statusQuote ? statusLabel(quoteDisplayStatus(statusQuote), locale) : "-"}</div>
           </section>
           {statusDisplay === "APPROVED" ? (
             <section className="detail-section">

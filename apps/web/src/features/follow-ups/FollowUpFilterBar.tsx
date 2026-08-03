@@ -1,5 +1,6 @@
-import { TASK_TYPE_LABELS } from "@oem-crm/shared";
+import { TASK_TYPE_LABELS, taskTypeLabel } from "@oem-crm/shared";
 import { AppSelect } from "../../components/AppSelect";
+import { useI18n } from "../../i18n";
 
 export type Customer = { id: string; name: string };
 
@@ -24,6 +25,7 @@ export function FollowUpFilterBar({
   onFormChange: (form: FollowUpForm) => void;
   customers: Customer[];
 }) {
+  const { locale } = useI18n();
   return (
     <section className="filter-panel">
       <label>
@@ -58,7 +60,7 @@ export function FollowUpFilterBar({
           variant="filter"
           value={form.type}
           onChange={(type) => onFormChange({ ...form, type })}
-          options={Object.entries(TASK_TYPE_LABELS).map(([value, label]) => ({ value, label }))}
+          options={Object.keys(TASK_TYPE_LABELS).map((value) => ({ value, label: taskTypeLabel(value, locale) }))}
         />
       </label>
       <label><span>任务标题</span><input value={form.title} onChange={(event) => onFormChange({ ...form, title: event.target.value })} /></label>

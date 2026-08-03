@@ -5,6 +5,7 @@ import editIconUrl from "../../../components/icons/编辑.svg";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { ErrorState } from "../../../components/ui/ErrorState";
 import { LoadingState } from "../../../components/ui/LoadingState";
+import { useI18n } from "../../../i18n";
 
 export type Customer = {
   id: string;
@@ -28,6 +29,7 @@ export function CustomerListTable({
   isLoading: boolean;
   isError: boolean;
 }) {
+  const { locale } = useI18n();
   return (
     <section className="table-panel">
       {isLoading ? <LoadingState message="正在加载客户..." /> : null}
@@ -57,7 +59,7 @@ export function CustomerListTable({
                   <small>{customer.websiteDomain ?? customer.websiteUrl ?? "-"}</small>
                 </td>
                 <td>{customer.country ?? "-"}</td>
-                <td><span className="status-pill">{stageLabel(customer.stage)}</span></td>
+                <td><span className="status-pill">{stageLabel(customer.stage, locale)}</span></td>
                 <td>{customer.oemFitScores?.[0] ? `${customer.oemFitScores[0].score} / ${customer.oemFitScores[0].grade}` : "-"}</td>
                 <td>{customer.contacts?.[0]?.email ?? customer.contacts?.[0]?.name ?? "-"}</td>
                 <td>{customer.owner?.name ?? "-"}</td>

@@ -9,6 +9,7 @@ import { EmptyState } from "../../components/ui/EmptyState";
 import { ErrorState } from "../../components/ui/ErrorState";
 import { LoadingState } from "../../components/ui/LoadingState";
 import { useSse } from "../../hooks/useSse";
+import { useI18n } from "../../i18n";
 import type { PriorityCustomerRow } from "../../shared/types/customer";
 import { formatDateInput, formatDateTime } from "../../shared/utils/format";
 import { toQueryString } from "../../shared/utils/string";
@@ -79,6 +80,7 @@ const fallback: PersonalDashboard = {
 
 export function DashboardPage() {
   const queryClient = useQueryClient();
+  const { locale } = useI18n();
   const isAdminWorkspace = getCurrentUser()?.dataScope === "ALL";
   const [filters, setFilters] = useState(defaultPersonalFilters());
   const queryString = useMemo(() => toQueryString(filters), [filters]);
@@ -128,7 +130,7 @@ export function DashboardPage() {
             <h2>客户开发阶段分布</h2>
             <span>{isAdminWorkspace ? "全员客户池" : "个人客户池"}</span>
           </div>
-          <BarList data={data.stage_distribution.map((item) => ({ label: stageLabel(item.stage), value: item.count }))} emptyMessage="暂无分布数据。" />
+          <BarList data={data.stage_distribution.map((item) => ({ label: stageLabel(item.stage, locale), value: item.count }))} emptyMessage="暂无分布数据。" />
         </section>
 
         <section className="panel">
@@ -166,10 +168,10 @@ export function DashboardPage() {
                     <strong>{task.title}</strong>
                     <span>
                       {task.customer.name} · {formatDateTime(task.dueAt)}
-                      {task.task_type ? ` · ${taskTypeLabel(task.task_type)}` : ""}
+                      {task.task_type ? ` · ${taskTypeLabel(task.task_type, locale)}` : ""}
                     </span>
                   </div>
-                  <span className="status-pill">{stageLabel(task.customer.stage)}</span>
+                  <span className="status-pill">{stageLabel(task.customer.stage, locale)}</span>
                 </div>
               ))
             ) : (

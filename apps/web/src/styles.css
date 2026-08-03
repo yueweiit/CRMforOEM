@@ -39,6 +39,8 @@ a {
 }
 
 .sidebar {
+  display: flex;
+  flex-direction: column;
   border-right: 1px solid #dfe3dc;
   background: #fbfbf8;
   padding: 22px 16px;
@@ -79,6 +81,24 @@ a {
   display: grid;
   gap: 6px;
   margin-top: 26px;
+}
+
+.language-select {
+  display: grid;
+  gap: 7px;
+  color: #52616b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.language-select .app-select--toolbar.next-select {
+  width: 100%;
+  min-width: 0;
+}
+
+.sidebar-language-select {
+  margin-top: auto;
+  padding-top: 20px;
 }
 
 .nav-item,
@@ -2065,6 +2085,10 @@ td small {
   margin-bottom: 8px;
 }
 
+.login-language-select {
+  margin-bottom: 2px;
+}
+
 .login-panel label {
   display: grid;
   gap: 7px;
@@ -2093,6 +2117,12 @@ td small {
     display: flex;
     overflow-x: auto;
     margin-top: 14px;
+  }
+
+  .sidebar-language-select {
+    max-width: 220px;
+    margin-top: 12px;
+    padding-top: 0;
   }
 
   .nav-item {

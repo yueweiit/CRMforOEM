@@ -1,6 +1,7 @@
 import { Filter, Search } from "lucide-react";
 import { STAGE_LABELS, stageLabel } from "@oem-crm/shared";
 import { AppSelect } from "../../../components/AppSelect";
+import { useI18n } from "../../../i18n";
 import type { CustomerOptions } from "../../../shared/types/customer";
 
 export function CustomerFilterBar({
@@ -16,6 +17,7 @@ export function CustomerFilterBar({
   onStageChange: (stage: string) => void;
   options?: CustomerOptions;
 }) {
+  const { locale } = useI18n();
   return (
     <div className="toolbar">
       <div className="search-box">
@@ -29,7 +31,7 @@ export function CustomerFilterBar({
         title="筛选阶段"
         options={[
           { value: "", label: "全部阶段" },
-          ...((options?.stages ?? Object.keys(STAGE_LABELS)).map((item) => ({ value: item, label: stageLabel(item) })))
+          ...((options?.stages ?? Object.keys(STAGE_LABELS)).map((item) => ({ value: item, label: stageLabel(item, locale) })))
         ]}
       />
       <button className="icon-button" title="筛选">

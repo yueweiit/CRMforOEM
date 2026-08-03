@@ -110,6 +110,8 @@ export function emailDraftPurposeLabel(purpose?: string | null) {
 }
 
 export { QUOTE_FLOW_STATUS_LABELS, STAGE_LABELS, stageLabel, TASK_TYPE_LABELS, taskTypeLabel, quoteFlowStatusLabel } from "./labels";
+export { DEFAULT_LOCALE, SUPPORTED_LOCALES, normalizeLocale } from "./i18n";
+export type { Locale } from "./i18n";
 export {
   QUOTE_PRICING_FORMULA_TEXT,
   QUOTE_UNIT_PRICE_FORMULA_TEXT,

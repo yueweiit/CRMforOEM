@@ -11,6 +11,7 @@ import { toQueryString } from "../../shared/utils/string";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { ErrorState } from "../../components/ui/ErrorState";
 import { LoadingState } from "../../components/ui/LoadingState";
+import { useI18n } from "../../i18n";
 import type { ReportCustomerRow } from "../../shared/types/customer";
 import { ReportFilterBar, type DashboardFilterOptions } from "./ReportFilterBar";
 import { SalesRankingTable, type SalesRankingRow } from "./SalesRankingTable";
@@ -58,6 +59,7 @@ const fallback: ManagementDashboard = {
 
 export function ReportsPage() {
   const { scope = "management" } = useParams();
+  const { locale } = useI18n();
   const [filters, setFilters] = useState(defaultReportFilters());
   const queryString = useMemo(() => toQueryString(filters), [filters]);
   const { data: filterOptions } = useQuery({
@@ -108,7 +110,7 @@ export function ReportsPage() {
             <h2>客户开发阶段分布</h2>
             <span>漏斗口径</span>
           </div>
-          <BarList data={data.stage_distribution.map((item) => ({ label: stageLabel(item.stage), value: item.count }))} />
+          <BarList data={data.stage_distribution.map((item) => ({ label: stageLabel(item.stage, locale), value: item.count }))} />
         </section>
       </div>
 

@@ -1,4 +1,5 @@
 import type { ToastType } from "../components/Toast";
+import type { TranslationKey } from "../i18n/resources";
 
 export type EmailToastEvent = "inbound-mail.received";
 
@@ -18,13 +19,17 @@ export type EmailToastConfig = {
   actionLabel?: string;
 };
 
-export const EMAIL_EVENT_TOAST_CONFIG: Record<EmailToastEvent, EmailToastConfig> = {
-  "inbound-mail.received": {
-    type: "notice",
-    title: "收到客户回复",
-    message: (context) => `${context.customerName} · ${context.subject}`,
-    dedupeKey: (context) => `mail:${context.customerId}:${context.subject}`,
-    actionHref: (context) => `/customers/${context.customerId}/email`,
-    actionLabel: "查看邮件"
-  }
-};
+type T = (key: TranslationKey) => string;
+
+export function getEmailEventToastConfig(t: T): Record<EmailToastEvent, EmailToastConfig> {
+  return {
+    "inbound-mail.received": {
+      type: "notice",
+      title: t("events.inboundMailReceived"),
+      message: (context) => `${context.customerName} · ${context.subject}`,
+      dedupeKey: (context) => `mail:${context.customerId}:${context.subject}`,
+      actionHref: (context) => `/customers/${context.customerId}/email`,
+      actionLabel: t("common.viewEmail")
+    }
+  };
+}

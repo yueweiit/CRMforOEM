@@ -3,6 +3,8 @@ import { Message, Notification } from "@alifd/next";
 import "@alifd/next/lib/message/style.js";
 import "@alifd/next/lib/notification/style.js";
 import { appBasePath } from "../config/runtime";
+import { translate } from "../i18n";
+import { readCurrentLocale } from "../i18n/locale";
 
 export type ToastType = "success" | "info" | "warning" | "error" | "notice" | "help";
 
@@ -193,7 +195,7 @@ function mapNotificationType(type: ToastType) {
 }
 
 function normalizeClientTitle(type: ToastType, title?: string) {
-  if (type === "success") return "success";
+  if (type === "success") return title ?? translate(readCurrentLocale(), "toast.clientSuccessTitle");
   return title;
 }
 

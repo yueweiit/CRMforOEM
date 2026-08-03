@@ -1,4 +1,5 @@
 import type { ToastType } from "../components/Toast";
+import type { TranslationKey } from "../i18n/resources";
 
 export type TaskToastConfig = {
   type: ToastType;
@@ -16,47 +17,25 @@ export type FollowUpToastTaskType =
   | "THIRD_FOLLOW_UP"
   | "CUSTOM";
 
-export const TASK_TOAST_CONFIG: Record<FollowUpToastTaskType, TaskToastConfig> = {
-  REQUIREMENT_CONFIRMATION: {
+type T = (key: TranslationKey) => string;
+
+export function getTaskToastConfig(t: T): Record<FollowUpToastTaskType, TaskToastConfig> {
+  return {
+    REQUIREMENT_CONFIRMATION: createConfig(t, "events.requirementTask", (customerId) => `/customers/${customerId}`),
+    SAMPLE_FOLLOW_UP: createConfig(t, "events.sampleTask", (customerId) => `/customers/${customerId}`),
+    QUOTE_FOLLOW_UP: createConfig(t, "events.quoteTask", (customerId) => `/customers/${customerId}`),
+    SECOND_FOLLOW_UP: createConfig(t, "events.secondFollowUpTask", (customerId) => `/customers/${customerId}`),
+    THIRD_FOLLOW_UP: createConfig(t, "events.thirdFollowUpTask", () => "/follow-ups"),
+    CUSTOM: createConfig(t, "events.customTask", () => "/follow-ups")
+  };
+}
+
+function createConfig(t: T, messageKey: TranslationKey, actionHref: (customerId: string) => string): TaskToastConfig {
+  return {
     type: "notice",
-    title: "新跟进任务已生成",
-    message: "客户回复后已创建需求确认任务。",
-    actionHref: (customerId) => `/customers/${customerId}`,
-    actionLabel: "查看"
-  },
-  SAMPLE_FOLLOW_UP: {
-    type: "notice",
-    title: "新跟进任务已生成",
-    message: "已创建样品跟进任务，请确认样品测试反馈。",
-    actionHref: (customerId) => `/customers/${customerId}`,
-    actionLabel: "查看"
-  },
-  QUOTE_FOLLOW_UP: {
-    type: "notice",
-    title: "新跟进任务已生成",
-    message: "已创建报价跟进任务，请确认客户报价反馈。",
-    actionHref: (customerId) => `/customers/${customerId}`,
-    actionLabel: "查看"
-  },
-  SECOND_FOLLOW_UP: {
-    type: "notice",
-    title: "新跟进任务已生成",
-    message: "首封邮件已发送，已创建二次跟进任务。",
-    actionHref: (customerId) => `/customers/${customerId}`,
-    actionLabel: "查看"
-  },
-  THIRD_FOLLOW_UP: {
-    type: "notice",
-    title: "新跟进任务已生成",
-    message: "二次跟进已过期，已创建三次跟进任务。",
-    actionHref: () => "/follow-ups",
-    actionLabel: "查看"
-  },
-  CUSTOM: {
-    type: "notice",
-    title: "新跟进任务已生成",
-    message: "已创建后续跟进任务，请及时处理。",
-    actionHref: () => "/follow-ups",
-    actionLabel: "查看"
-  }
-};
+    title: t("events.taskGenerated"),
+    message: t(messageKey),
+    actionHref,
+    actionLabel: t("common.view")
+  };
+}

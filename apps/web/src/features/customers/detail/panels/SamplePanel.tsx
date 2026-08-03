@@ -24,6 +24,7 @@ import { DeleteIconButton } from "../../../../components/DeleteIconButton";
 import { EditIconButton } from "../../../../components/EditIconButton";
 import { FileUpload } from "../../../../components/FileUpload";
 import { Field } from "../../../../components/ui/Field";
+import { useI18n } from "../../../../i18n";
 import { formatDateInput } from "../../../../shared/utils/format";
 import type { Quote, Sample, SampleFee, SampleHistoryItem } from "../shared/types";
 
@@ -136,8 +137,8 @@ function statusCodeLabel(status: string) {
   return labels[status] ?? status;
 }
 
-function quoteStatusLabel(status: string) {
-  return quoteFlowStatusLabel(status);
+function quoteStatusLabel(status: string, locale: Parameters<typeof quoteFlowStatusLabel>[1] = "zh-CN") {
+  return quoteFlowStatusLabel(status, locale);
 }
 
 function quoteDisplayStatus(quote: Pick<Quote, "status" | "approvalStatus"> | null | undefined) {
@@ -400,6 +401,7 @@ function feeDisplayAmount(fee: SampleFee) {
 
 export function SamplePanel({ customerId }: { customerId: string }) {
   const queryClient = useQueryClient();
+  const { locale } = useI18n();
   const [createForm, setCreateForm] = useState({
     productSummary: "",
     specification: "",
@@ -1261,7 +1263,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                   <p className="detail-eyebrow">关联报价</p>
                   <h3>{detailValue(detailQuote?.quoteNo ?? detailSample?.quote?.quoteNo)}</h3>
                 </div>
-                <span className="status-pill">{quoteStatusLabel(quoteDisplayStatus(detailQuote ?? detailSample?.quote ?? null))}</span>
+                <span className="status-pill">{quoteStatusLabel(quoteDisplayStatus(detailQuote ?? detailSample?.quote ?? null), locale)}</span>
               </div>
               <div className="detail-grid">
                 <div className="detail-card">
@@ -1274,7 +1276,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                 </div>
                 <div className="detail-card">
                   <span>当前状态</span>
-                  <strong>{quoteStatusLabel(quoteDisplayStatus(detailQuote ?? detailSample?.quote ?? null))}</strong>
+                  <strong>{quoteStatusLabel(quoteDisplayStatus(detailQuote ?? detailSample?.quote ?? null), locale)}</strong>
                 </div>
                 <div className="detail-card">
                   <span>报价金额</span>

@@ -1,9 +1,11 @@
 import { stageLabel } from "@oem-crm/shared";
 import { EmptyState } from "../../components/ui/EmptyState";
+import { useI18n } from "../../i18n";
 import { formatDateTime } from "../../shared/utils/format";
 import type { PriorityCustomerRow } from "../../shared/types/customer";
 
 export function PriorityCustomerTable({ rows }: { rows: PriorityCustomerRow[] }) {
+  const { locale } = useI18n();
   if (!rows.length) {
     return <EmptyState message="暂无高优先级客户。" />;
   }
@@ -42,7 +44,7 @@ export function PriorityCustomerTable({ rows }: { rows: PriorityCustomerRow[] })
               ) : null}
             </td>
             <td>{customer.country ?? "-"}</td>
-            <td><span className="status-pill">{stageLabel(customer.stage)}</span></td>
+            <td><span className="status-pill">{stageLabel(customer.stage, locale)}</span></td>
             <td>{customer.score ?? "-"} {customer.grade ? `(${customer.grade})` : ""}</td>
             <td>{customer.owner_name}</td>
             <td>{customer.next_task_due_at ? formatDateTime(customer.next_task_due_at) : "-"}</td>

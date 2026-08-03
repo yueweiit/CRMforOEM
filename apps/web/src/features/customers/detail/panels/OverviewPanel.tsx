@@ -10,6 +10,7 @@ import { AddIconButton } from "../../../../components/AddIconButton";
 import { DeleteIconButton } from "../../../../components/DeleteIconButton";
 import { EditIconButton } from "../../../../components/EditIconButton";
 import { Field } from "../../../../components/ui/Field";
+import { useI18n } from "../../../../i18n";
 import { splitList } from "../../../../shared/utils/string";
 import type { CustomerOptions } from "../../../../shared/types/customer";
 import type { Contact, CustomerDetail } from "../shared/types";
@@ -40,6 +41,7 @@ function customerToForm(customer: CustomerDetail) {
 
 export function OverviewPanel({ customer, customerId, onChanged }: { customer: CustomerDetail; customerId: string; onChanged: () => void }) {
   const queryClient = useQueryClient();
+  const { locale } = useI18n();
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState(customerToForm(customer));
   const [contact, setContact] = useState(defaultContactForm());
@@ -275,7 +277,7 @@ export function OverviewPanel({ customer, customerId, onChanged }: { customer: C
               <AppSelect
                 value={editForm.stage}
                 onChange={(stage) => setEditForm({ ...editForm, stage })}
-                options={(options?.stages ?? Object.keys(STAGE_LABELS)).map((stage) => ({ value: stage, label: stageLabel(stage) }))}
+                options={(options?.stages ?? Object.keys(STAGE_LABELS)).map((stage) => ({ value: stage, label: stageLabel(stage, locale) }))}
               />
             </label>
             <Field label="标签" value={editForm.tags} onChange={(tags) => setEditForm({ ...editForm, tags })} />
@@ -286,7 +288,7 @@ export function OverviewPanel({ customer, customerId, onChanged }: { customer: C
           </div>
         ) : (
           <div className="detail-grid">
-            <Detail label="阶段" value={stageLabel(customer.stage)} />
+            <Detail label="阶段" value={stageLabel(customer.stage, locale)} />
             <Detail label="风险" value={customer.riskLevel} />
             <Detail label="官网" value={customer.websiteUrl ?? "-"} />
             <Detail label="国家/语言" value={`${customer.country ?? "-"} / ${customer.language ?? "-"}`} />

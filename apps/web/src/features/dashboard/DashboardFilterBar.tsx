@@ -1,5 +1,6 @@
 import { STAGE_LABELS, stageLabel } from "@oem-crm/shared";
 import { AppSelect } from "../../components/AppSelect";
+import { useI18n } from "../../i18n";
 
 export type DashboardFilterOptions = {
   countries: string[];
@@ -12,6 +13,7 @@ export function DashboardFilterBar(props: {
   options?: DashboardFilterOptions;
   onChange: (filters: { from: string; to: string; country: string; customer_type_id: string; stage: string }) => void;
 }) {
+  const { locale } = useI18n();
   const stages = props.options?.stages?.length ? props.options.stages : Object.keys(STAGE_LABELS);
   return (
     <section className="filter-panel">
@@ -55,7 +57,7 @@ export function DashboardFilterBar(props: {
           onChange={(stage) => props.onChange({ ...props.filters, stage })}
           options={[
             { value: "", label: "全部阶段" },
-            ...stages.map((stage) => ({ value: stage, label: stageLabel(stage) }))
+            ...stages.map((stage) => ({ value: stage, label: stageLabel(stage, locale) }))
           ]}
         />
       </label>

@@ -1,8 +1,10 @@
 import { stageLabel } from "@oem-crm/shared";
 import { EmptyState } from "../../components/ui/EmptyState";
+import { useI18n } from "../../i18n";
 import type { ReportCustomerRow } from "../../shared/types/customer";
 
 export function CustomerTable({ rows, mode }: { rows: ReportCustomerRow[]; mode: "value" | "risk" }) {
+  const { locale } = useI18n();
   if (!rows.length) return <EmptyState message="暂无客户数据。" />;
   return (
     <table>
@@ -20,7 +22,7 @@ export function CustomerTable({ rows, mode }: { rows: ReportCustomerRow[]; mode:
           <tr key={customer.id}>
             <td>{customer.name}</td>
             <td>{customer.country ?? "-"}</td>
-            <td><span className="status-pill">{stageLabel(customer.stage)}</span></td>
+            <td><span className="status-pill">{stageLabel(customer.stage, locale)}</span></td>
             <td>
               {mode === "value"
                 ? `${customer.score ?? "-"} ${customer.grade ? `(${customer.grade})` : ""} / ${customer.quote_amount ?? 0}`

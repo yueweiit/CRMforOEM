@@ -12,29 +12,31 @@ import {
 } from "lucide-react";
 import { apiGet } from "../api/http";
 import { canViewReports, defaultReportPath, defaultSettingsPath, getCurrentUser, type CurrentUser } from "../auth/permissions";
+import { LanguageSelect } from "../components/LanguageSelect";
 import { showServerToast, ToastContainer } from "../components/Toast";
 import { ChunkErrorBoundary } from "../components/ChunkErrorBoundary";
 import { PageLoadingSkeleton } from "../components/PageLoadingSkeleton";
-import { EMAIL_EVENT_TOAST_CONFIG } from "../config/email-event-toasts";
-import { TASK_TOAST_CONFIG } from "../config/follow-up-task-toasts";
+import { getEmailEventToastConfig } from "../config/email-event-toasts";
+import { getTaskToastConfig, type FollowUpToastTaskType } from "../config/follow-up-task-toasts";
 import { useSse } from "../hooks/useSse";
+import { useI18n } from "../i18n";
 
 type NavItem = {
   to: string | ((user: CurrentUser | null) => string);
   activeRoot: string;
-  label: string;
+  labelKey: "nav.dashboard" | "nav.customers" | "nav.emailCenter" | "nav.followUps" | "nav.knowledge" | "nav.reports" | "nav.settings";
   icon: typeof BarChart3;
   canView?: (user: CurrentUser | null) => boolean;
 };
 
 const navItems: NavItem[] = [
-  { to: "/dashboard", activeRoot: "/dashboard", label: "工作台", icon: BarChart3 },
-  { to: "/customers", activeRoot: "/customers", label: "客户开发", icon: Building2 },
-  { to: "/email-center/inbox", activeRoot: "/email-center", label: "邮件中心", icon: Mail },
-  { to: "/follow-ups", activeRoot: "/follow-ups", label: "跟进任务", icon: ClipboardCheck },
-  { to: "/knowledge/company", activeRoot: "/knowledge", label: "企业资料库", icon: BookOpen },
-  { to: defaultReportPath, activeRoot: "/reports", label: "数据看板", icon: UsersRound, canView: canViewReports },
-  { to: defaultSettingsPath, activeRoot: "/settings", label: "系统设置", icon: Settings }
+  { to: "/dashboard", activeRoot: "/dashboard", labelKey: "nav.dashboard", icon: BarChart3 },
+  { to: "/customers", activeRoot: "/customers", labelKey: "nav.customers", icon: Building2 },
+  { to: "/email-center/inbox", activeRoot: "/email-center", labelKey: "nav.emailCenter", icon: Mail },
+  { to: "/follow-ups", activeRoot: "/follow-ups", labelKey: "nav.followUps", icon: ClipboardCheck },
+  { to: "/knowledge/company", activeRoot: "/knowledge", labelKey: "nav.knowledge", icon: BookOpen },
+  { to: defaultReportPath, activeRoot: "/reports", labelKey: "nav.reports", icon: UsersRound, canView: canViewReports },
+  { to: defaultSettingsPath, activeRoot: "/settings", labelKey: "nav.settings", icon: Settings }
 ];
 
 type NavFollowUpSummary = { count: number };
@@ -50,6 +52,7 @@ export function AppShell() {
 
   const queryClient = useQueryClient();
   const location = useLocation();
+  const { t } = useI18n();
   const currentUser = getCurrentUser();
   const userId = currentUser?.id ?? "";
   const visibleNavItems = navItems
@@ -60,7 +63,7 @@ export function AppShell() {
     queryClient.setQueryData(["nav-follow-up-overdue-count"], { count: data.overdueCount });
     if (!data.targetUserIds?.includes(userId)) return;
 
-    const config = TASK_TOAST_CONFIG[data.type as keyof typeof TASK_TOAST_CONFIG];
+    const config = getTaskToastConfig(t)[data.type as FollowUpToastTaskType];
     if (!config) return;
 
     showServerToast({
@@ -85,7 +88,7 @@ export function AppShell() {
   useSse("inbound-mail.received", (data: { customerName: string; subject: string; customerId: string; targetUserIds: string[] }) => {
     if (!data.targetUserIds?.includes(userId)) return;
 
-    const config = EMAIL_EVENT_TOAST_CONFIG["inbound-mail.received"];
+    const config = getEmailEventToastConfig(t)["inbound-mail.received"];
 
     showServerToast({
       type: config.type,
@@ -111,8 +114,8 @@ export function AppShell() {
         <div className="brand-block">
           <div className="brand-mark">OEM</div>
           <div>
-            <strong>客户开发CRM</strong>
-            <span>外贸开发闭环</span>
+            <strong>{t("common.appName")}</strong>
+            <span>{t("common.appTagline")}</span>
           </div>
         </div>
         <nav className="nav-list">
@@ -122,12 +125,13 @@ export function AppShell() {
             return (
               <Link key={item.to} to={item.to} className={`nav-item ${active ? "active" : ""}`} aria-current={active ? "page" : undefined}>
                 <Icon size={18} />
-                <span>{item.label}</span>
+                <span>{t(item.labelKey)}</span>
                 {item.to === "/follow-ups" && openFollowUpCount > 0 ? <span className="nav-alert-badge">{badgeCount(openFollowUpCount)}</span> : null}
               </Link>
             );
           })}
         </nav>
+        <LanguageSelect className="sidebar-language-select" />
       </aside>
       <main className="workspace">
         <ChunkErrorBoundary resetKey={location.pathname}>
