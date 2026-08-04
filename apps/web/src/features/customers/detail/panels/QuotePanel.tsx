@@ -81,6 +81,40 @@ function quoteDisplayStatus(quote: Pick<Quote, "status" | "approvalStatus"> | nu
   return "DRAFT";
 }
 
+const QUOTE_CORE_STATUS_ORDER = ["DRAFT", "PENDING_APPROVAL", "APPROVED", "SENT"] as const;
+const QUOTE_AFTER_SENT_STATUSES = ["ACCEPTED", "CUSTOMER_REJECTED", "EXPIRED"];
+const QUOTE_TERMINAL_STATUSES = ["ACCEPTED", "CUSTOMER_REJECTED", "EXPIRED", "REJECTED", "VOIDED"];
+
+function quoteCoreStatusReached(currentStatus: string, targetStatus: (typeof QUOTE_CORE_STATUS_ORDER)[number]) {
+  if (currentStatus === "VOIDED") {
+    return targetStatus === "DRAFT";
+  }
+  if (currentStatus === "REJECTED") {
+    return targetStatus === "DRAFT" || targetStatus === "PENDING_APPROVAL";
+  }
+  if (QUOTE_AFTER_SENT_STATUSES.includes(currentStatus)) {
+    return true;
+  }
+  const currentIndex = QUOTE_CORE_STATUS_ORDER.indexOf(currentStatus as (typeof QUOTE_CORE_STATUS_ORDER)[number]);
+  const targetIndex = QUOTE_CORE_STATUS_ORDER.indexOf(targetStatus);
+  return currentIndex >= targetIndex && targetIndex >= 0;
+}
+
+function quoteStatusPillClass(status: string) {
+  const toneByStatus: Record<string, string> = {
+    DRAFT: "status-pill--neutral",
+    PENDING_APPROVAL: "status-pill--warning",
+    APPROVED: "status-pill--success",
+    SENT: "status-pill--info",
+    ACCEPTED: "status-pill--success",
+    CUSTOMER_REJECTED: "status-pill--danger",
+    EXPIRED: "status-pill--muted",
+    REJECTED: "status-pill--danger",
+    VOIDED: "status-pill--muted"
+  };
+  return ["status-pill", "status-pill--detail", toneByStatus[status] ?? "status-pill--neutral"].join(" ");
+}
+
 function historyActionLabel(action: string) {
   const labels: Record<string, string> = {
     CREATED: "创建",
@@ -788,6 +822,74 @@ export function QuotePanel({ customerId }: { customerId: string }) {
     const input = quoteToPricingInput(detailQuote);
     return input ? calculateQuotePricing(input) : null;
   }, [detailQuote]);
+  const detailQuoteStatus = quoteDisplayStatus(detailQuote);
+  const detailQuoteTerminalStatus = QUOTE_TERMINAL_STATUSES.includes(detailQuoteStatus) ? detailQuoteStatus : "";
+  const detailQuoteTimelineItems = [
+    {
+      label: statusLabel("DRAFT", locale),
+      value: detailQuote?.createdAt ? new Date(detailQuote.createdAt).toLocaleString() : "-",
+      done: Boolean(detailQuote),
+      current: detailQuoteStatus === "DRAFT"
+    },
+    {
+      label: statusLabel("PENDING_APPROVAL", locale),
+      value: detailQuote?.approvalSubmittedAt ? new Date(detailQuote.approvalSubmittedAt).toLocaleString() : detailQuoteStatus === "PENDING_APPROVAL" ? "当前状态" : "未提交",
+      done: quoteCoreStatusReached(detailQuoteStatus, "PENDING_APPROVAL"),
+      current: detailQuoteStatus === "PENDING_APPROVAL"
+    },
+    {
+      label: statusLabel("APPROVED", locale),
+      value: detailQuote?.approvalReviewedAt ? new Date(detailQuote.approvalReviewedAt).toLocaleString() : quoteCoreStatusReached(detailQuoteStatus, "APPROVED") ? "已审批" : "未审批",
+      done: quoteCoreStatusReached(detailQuoteStatus, "APPROVED"),
+      current: detailQuoteStatus === "APPROVED"
+    },
+    {
+      label: statusLabel("SENT", locale),
+      value: quoteCoreStatusReached(detailQuoteStatus, "SENT") ? statusLabel("SENT", locale) : "未发送",
+      done: quoteCoreStatusReached(detailQuoteStatus, "SENT"),
+      current: detailQuoteStatus === "SENT"
+    },
+    ...(detailQuoteTerminalStatus
+      ? [
+          {
+            label: statusLabel(detailQuoteTerminalStatus, locale),
+            value: statusLabel(detailQuoteTerminalStatus, locale),
+            done: true,
+            current: true
+          }
+        ]
+      : [])
+  ];
+  const detailQuoteSummary = detailQuote
+    ? [
+        detailQuote.productName ? `产品 ${detailQuote.productName}` : "未命名产品",
+        `金额 ${detailQuote.currency} ${detailQuote.amount}`,
+        `单价 ${detailQuote.currency} ${detailQuote.unitPrice}`,
+        `数量 ${detailQuote.quantity}`
+      ].filter(Boolean).join(" | ")
+    : "";
+  const detailQuoteBaseItems = [
+    { label: "产品名称", value: detailValue(detailQuote?.productName || "未命名产品"), highlight: true },
+    { label: "规格", value: detailValue(detailQuote?.specification) },
+    { label: "当前状态", value: statusLabel(detailQuoteStatus, locale), highlight: true },
+    { label: "MOQ", value: detailValue(detailQuote?.moq) },
+    { label: "数量", value: detailValue(detailQuote?.quantity) },
+    { label: "有效期", value: detailQuote?.validUntil ? new Date(detailQuote.validUntil).toLocaleDateString() : "-" },
+    { label: "提交审批时间", value: detailQuote?.approvalSubmittedAt ? new Date(detailQuote.approvalSubmittedAt).toLocaleString() : "-" },
+    { label: "审批完成时间", value: detailQuote?.approvalReviewedAt ? new Date(detailQuote.approvalReviewedAt).toLocaleString() : "-" },
+    { label: "更新时间", value: detailQuote?.updatedAt ? new Date(detailQuote.updatedAt).toLocaleString() : "-" }
+  ];
+  const detailQuoteAmountItems = [
+    { label: "报价金额", value: detailMoney(detailQuote, detailQuote?.amount), highlight: true },
+    { label: "单价", value: detailMoney(detailQuote, detailQuote?.unitPrice), highlight: true },
+    { label: "物料价", value: detailMoney(detailQuote, detailQuote?.materialCost) },
+    { label: "加工费", value: detailMoney(detailQuote, detailQuote?.processingCost) },
+    { label: "税费", value: detailMoney(detailQuote, detailQuote?.taxCost) },
+    { label: "运费", value: detailMoney(detailQuote, detailQuote?.shippingCost) },
+    { label: "优惠金额", value: detailMoney(detailQuote, detailQuote?.discountAmount) },
+    { label: "报价模式", value: detailQuote?.calcMode === "formula" ? "公式报价" : "直接报价" },
+    { label: "创建时间", value: detailQuote?.createdAt ? new Date(detailQuote.createdAt).toLocaleString() : "-" }
+  ];
   const reviewDialogTitle = reviewMode === "approve" ? "通过审批" : "驳回审批";
   const reviewDialogConfirmLabel = reviewMode === "approve" ? "通过" : "驳回";
   const reviewDialogDescription = "备注可留空。";
@@ -1151,8 +1253,9 @@ export function QuotePanel({ customerId }: { customerId: string }) {
 
       <Dialog
         v2
-        className="crm-action-dialog"
+        className="crm-action-dialog quote-detail-dialog"
         title={`报价详情 · ${detailQuote?.quoteNo ?? ""}`}
+        width="min(1040px, calc(100vw - 48px))"
         visible={detailOpen}
         onClose={() => setDetailOpen(false)}
         footer={(
@@ -1161,89 +1264,69 @@ export function QuotePanel({ customerId }: { customerId: string }) {
           </div>
         )}
       >
-        <div className="detail-window">
-          <section className="detail-section">
-            <div className="detail-hero">
-              <div>
-                <p className="detail-eyebrow">报价单</p>
-                <h3>{detailValue(detailQuote?.quoteNo)}</h3>
-              </div>
-              <span className="status-pill">{statusLabel(quoteDisplayStatus(detailQuote), locale)}</span>
+        <div className="detail-window sample-detail-window quote-detail-window">
+          <section className="sample-detail-summary quote-detail-summary">
+            <div>
+              <p className="detail-eyebrow">报价单</p>
+              <h3>{detailValue(detailQuote?.quoteNo)}</h3>
+              <p>{detailQuoteSummary}</p>
             </div>
-            <div className="detail-grid">
-              <div className="detail-card">
-                <span>产品名称</span>
-                <strong>{detailValue(detailQuote?.productName || "未命名产品")}</strong>
-              </div>
-              <div className="detail-card">
-                <span>规格</span>
-                <strong>{detailValue(detailQuote?.specification)}</strong>
-              </div>
-              <div className="detail-card">
-                <span>当前状态</span>
-                <strong>{statusLabel(quoteDisplayStatus(detailQuote), locale)}</strong>
-              </div>
-              <div className="detail-card">
-                <span>报价金额</span>
-                <strong>{detailQuote ? `${detailQuote.currency} ${detailQuote.amount}` : "-"}</strong>
-              </div>
-              <div className="detail-card">
-                <span>单价</span>
-                <strong>{detailQuote ? `${detailQuote.currency} ${detailQuote.unitPrice}` : "-"}</strong>
-              </div>
-              <div className="detail-card">
-                <span>MOQ</span>
-                <strong>{detailValue(detailQuote?.moq)}</strong>
-              </div>
-              <div className="detail-card">
-                <span>数量</span>
-                <strong>{detailValue(detailQuote?.quantity)}</strong>
-              </div>
-              <div className="detail-card">
-                <span>物料价</span>
-                <strong>{detailQuote ? `${detailQuote.currency} ${detailQuote.materialCost}` : "-"}</strong>
-              </div>
-              <div className="detail-card">
-                <span>加工费</span>
-                <strong>{detailQuote ? `${detailQuote.currency} ${detailQuote.processingCost}` : "-"}</strong>
-              </div>
-              <div className="detail-card">
-                <span>税费</span>
-                <strong>{detailQuote ? `${detailQuote.currency} ${detailQuote.taxCost}` : "-"}</strong>
-              </div>
-              <div className="detail-card">
-                <span>运费</span>
-                <strong>{detailQuote ? `${detailQuote.currency} ${detailQuote.shippingCost}` : "-"}</strong>
-              </div>
-              <div className="detail-card">
-                <span>优惠金额</span>
-                <strong>{detailQuote ? `${detailQuote.currency} ${detailQuote.discountAmount}` : "-"}</strong>
-              </div>
-              <div className="detail-card">
-                <span>有效期</span>
-                <strong>{detailQuote?.validUntil ? new Date(detailQuote.validUntil).toLocaleDateString() : "-"}</strong>
-              </div>
-              <div className="detail-card">
-                <span>提交审批时间</span>
-                <strong>{detailQuote?.approvalSubmittedAt ? new Date(detailQuote.approvalSubmittedAt).toLocaleString() : "-"}</strong>
-              </div>
-              <div className="detail-card">
-                <span>审批完成时间</span>
-                <strong>{detailQuote?.approvalReviewedAt ? new Date(detailQuote.approvalReviewedAt).toLocaleString() : "-"}</strong>
-              </div>
-              <div className="detail-card">
-                <span>创建时间</span>
-                <strong>{detailQuote?.createdAt ? new Date(detailQuote.createdAt).toLocaleString() : "-"}</strong>
-              </div>
-              <div className="detail-card">
-                <span>更新时间</span>
-                <strong>{detailQuote?.updatedAt ? new Date(detailQuote.updatedAt).toLocaleString() : "-"}</strong>
-              </div>
+            <div className="sample-detail-summary__actions">
+              <span className={quoteStatusPillClass(detailQuoteStatus)}>{statusLabel(detailQuoteStatus, locale)}</span>
             </div>
           </section>
 
-          <section className="detail-section">
-            <h4>计算快照</h4>
+          <section className="detail-section sample-detail-section">
+            <div className="sample-detail-section__header">
+              <h4>基础信息</h4>
+              <span>产品、状态、数量和审批时间</span>
+            </div>
+            <div className="detail-grid sample-detail-grid">
+              {detailQuoteBaseItems.map((item) => (
+                <div className={item.highlight ? "detail-card sample-detail-card is-highlight" : "detail-card sample-detail-card"} key={item.label}>
+                  <span>{item.label}</span>
+                  <strong>{item.value}</strong>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="detail-section sample-detail-section">
+            <div className="sample-detail-section__header">
+              <h4>金额构成</h4>
+              <span>报价、成本、运费和优惠摘要</span>
+            </div>
+            <div className="detail-grid sample-detail-grid">
+              {detailQuoteAmountItems.map((item) => (
+                <div className={item.highlight ? "detail-card sample-detail-card is-highlight" : "detail-card sample-detail-card"} key={item.label}>
+                  <span>{item.label}</span>
+                  <strong>{item.value}</strong>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="detail-section sample-detail-section">
+            <div className="sample-detail-section__header">
+              <h4>报价状态</h4>
+              <span>从新建到客户结果的关键节点</span>
+            </div>
+            <div className="sample-detail-timeline">
+              {detailQuoteTimelineItems.map((item) => (
+                <div className={["sample-detail-timeline__item", item.done ? "is-done" : "", item.current ? "is-current" : ""].filter(Boolean).join(" ")} key={item.label}>
+                  <span aria-hidden="true" />
+                  <strong>{item.label}</strong>
+                  <small>{item.value}</small>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="detail-section sample-detail-section">
+            <div className="sample-detail-section__header">
+              <h4>计算快照</h4>
+              <span>报价公式与金额校验</span>
+            </div>
             {detailQuote?.calcMode === "formula" && detailSnapshot?.breakdown ? (
               <>
                 <div className="quote-snapshot-formulas">
@@ -1299,8 +1382,11 @@ export function QuotePanel({ customerId }: { customerId: string }) {
             )}
           </section>
 
-          <section className="detail-section">
-            <h4>备注</h4>
+          <section className="detail-section sample-detail-section">
+            <div className="sample-detail-section__header">
+              <h4>备注</h4>
+              <span>审批意见和报价备注</span>
+            </div>
             <div className="detail-note">
               <strong>审批备注：</strong>{detailValue(detailQuote?.approvalComment)}
               <br />
