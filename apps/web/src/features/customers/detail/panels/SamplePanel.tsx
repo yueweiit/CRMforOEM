@@ -252,6 +252,10 @@ function quoteTimelineDateValue(date: string | null | undefined) {
   return date ? new Date(date).toLocaleString() : "";
 }
 
+function historyActorLabel(item: SampleHistoryItem) {
+  return item.actorName ?? item.actorId ?? "系统";
+}
+
 function normalizeHistoryComment(comment: string) {
   const legacyLabels: Record<string, string> = {
     "Sample request created": "已创建样品申请",
@@ -2093,18 +2097,23 @@ export function SamplePanel({ customerId }: { customerId: string }) {
         {historyQuery.isLoading ? <div className="empty-state">正在加载历史记录...</div> : null}
         {historyQuery.isError ? <div className="error-state">历史记录加载失败。</div> : null}
         {!historyQuery.isLoading && !historyQuery.isError ? (
-          <div className="task-list">
+          <div className="history-timeline" aria-label="样品历史时间轴">
             {currentHistory.length ? (
               currentHistory.map((item) => (
-                <div className="task-row" key={item.id}>
-                  <History size={16} />
-                  <div>
-                    <strong>{historyActionLabel(item)}</strong>
-                    <span>
-                      {new Date(item.createdAt).toLocaleString()} {item.actorName ?? item.actorId ?? "系统"}
+                <div className="history-timeline__item" key={item.id}>
+                  <div className="history-timeline__rail" aria-hidden="true">
+                    <span className="history-timeline__dot">
+                      <History size={14} />
                     </span>
-                    {historyDetailText(item) ? <span>{historyDetailText(item)}</span> : null}
-                    {item.comment ? <span>{normalizeHistoryComment(item.comment)}</span> : null}
+                  </div>
+                  <div className="history-timeline__content">
+                    <div className="history-timeline__header">
+                      <strong>{historyActionLabel(item)}</strong>
+                      <time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleString()}</time>
+                    </div>
+                    <span className="history-timeline__meta">{historyActorLabel(item)}</span>
+                    {historyDetailText(item) ? <span className="history-timeline__detail">{historyDetailText(item)}</span> : null}
+                    {item.comment ? <span className="history-timeline__detail">{normalizeHistoryComment(item.comment)}</span> : null}
                   </div>
                 </div>
               ))

@@ -180,6 +180,10 @@ function quoteTimelineDateValue(date: string | null | undefined) {
   return date ? new Date(date).toLocaleString() : "";
 }
 
+function historyActorLabel(item: QuoteHistoryItem) {
+  return item.actorName ?? item.actorId ?? "系统";
+}
+
 function toMoney(value: string) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -938,6 +942,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
   const detailQuoteStatus = quoteDisplayStatus(detailQuote);
   const detailQuoteTerminalStatus = QUOTE_TERMINAL_STATUSES.includes(detailQuoteStatus) ? detailQuoteStatus : "";
   const detailQuoteHistory = detailHistoryQuery.data ?? [];
+  const quoteHistoryItems = historyQuery.data ?? [];
   const detailQuoteSentAt = quoteHistoryStatusTime(detailQuoteHistory, "SENT");
   const detailQuoteTerminalAt = detailQuoteTerminalStatus ? quoteHistoryStatusTime(detailQuoteHistory, detailQuoteTerminalStatus) : "";
   const detailQuoteHistoryLoadingValue = detailHistoryQuery.isLoading ? "加载中..." : "";
@@ -1889,14 +1894,21 @@ export function QuotePanel({ customerId }: { customerId: string }) {
         {historyQuery.isLoading ? <div className="empty-state">正在加载历史记录...</div> : null}
         {historyQuery.isError ? <div className="error-state">历史记录加载失败。</div> : null}
         {!historyQuery.isLoading && !historyQuery.isError ? (
-          <div className="task-list">
-            {(historyQuery.data ?? []).length ? (historyQuery.data ?? []).map((item) => (
-              <div className="task-row" key={item.id}>
-                <History size={16} />
-                <div>
-                  <strong>{historyActionLabel(item.action)}</strong>
-                  <span>{new Date(item.createdAt).toLocaleString()} · {item.actorName ?? item.actorId ?? "系统"}</span>
-                  {item.comment ? <span>{normalizeHistoryComment(item.comment)}</span> : null}
+          <div className="history-timeline" aria-label="报价历史时间轴">
+            {quoteHistoryItems.length ? quoteHistoryItems.map((item) => (
+              <div className="history-timeline__item" key={item.id}>
+                <div className="history-timeline__rail" aria-hidden="true">
+                  <span className="history-timeline__dot">
+                    <History size={14} />
+                  </span>
+                </div>
+                <div className="history-timeline__content">
+                  <div className="history-timeline__header">
+                    <strong>{historyActionLabel(item.action)}</strong>
+                    <time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleString()}</time>
+                  </div>
+                  <span className="history-timeline__meta">{historyActorLabel(item)}</span>
+                  {item.comment ? <span className="history-timeline__detail">{normalizeHistoryComment(item.comment)}</span> : null}
                 </div>
               </div>
             )) : <div className="empty-state">暂无历史记录。</div>}

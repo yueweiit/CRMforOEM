@@ -768,6 +768,103 @@ td small {
   gap: 12px;
 }
 
+.history-timeline {
+  display: grid;
+  gap: 0;
+}
+
+.history-timeline__item {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 12px;
+  position: relative;
+  padding-bottom: 16px;
+}
+
+.history-timeline__item:last-child {
+  padding-bottom: 0;
+}
+
+.history-timeline__rail {
+  display: flex;
+  justify-content: center;
+  position: relative;
+}
+
+.history-timeline__rail::after {
+  content: "";
+  position: absolute;
+  top: 34px;
+  bottom: -16px;
+  width: 2px;
+  border-radius: 999px;
+  background: #dfe8ef;
+}
+
+.history-timeline__item:last-child .history-timeline__rail::after {
+  display: none;
+}
+
+.history-timeline__dot {
+  display: inline-grid;
+  place-items: center;
+  position: relative;
+  z-index: 1;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #b9d8d3;
+  border-radius: 999px;
+  background: #e8f3ef;
+  color: #0f766e;
+}
+
+.history-timeline__content {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  border: 1px solid #e4ebf1;
+  border-radius: 8px;
+  background: #fbfcfe;
+  padding: 12px 14px;
+}
+
+.history-timeline__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.history-timeline__header strong {
+  color: #24313b;
+  font-size: 14px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.history-timeline__header time {
+  flex: 0 0 auto;
+  color: #52677f;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+  white-space: nowrap;
+}
+
+.history-timeline__meta,
+.history-timeline__detail {
+  display: block;
+  color: #718096;
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.history-timeline__detail {
+  color: #3f4f5f;
+}
+
 .bar-row,
 .trend-row {
   display: grid;
@@ -2660,6 +2757,24 @@ td small {
   .bar-row,
   .trend-row {
     grid-template-columns: minmax(82px, 0.42fr) minmax(0, 1fr) 46px;
+  }
+
+  .history-timeline__item {
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .history-timeline__content {
+    padding: 11px 12px;
+  }
+
+  .history-timeline__header {
+    display: grid;
+    gap: 4px;
+  }
+
+  .history-timeline__header time {
+    white-space: normal;
   }
 
   .detail-page-header__top {
