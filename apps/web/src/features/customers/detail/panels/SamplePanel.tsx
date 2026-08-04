@@ -11,6 +11,7 @@ import {
   exportSamples,
   deleteSample,
   deleteSampleFee,
+  getQuoteHistory,
   getSampleHistory,
   getQuotes,
   getSamples,
@@ -26,7 +27,7 @@ import { FileUpload } from "../../../../components/FileUpload";
 import { Field } from "../../../../components/ui/Field";
 import { useI18n } from "../../../../i18n";
 import { formatDateInput } from "../../../../shared/utils/format";
-import type { Quote, Sample, SampleFee, SampleHistoryItem } from "../shared/types";
+import type { Quote, QuoteHistoryItem, Sample, SampleFee, SampleHistoryItem } from "../shared/types";
 
 function downloadBlob(blob: Blob, fileName: string) {
   const url = URL.createObjectURL(blob);
@@ -63,6 +64,7 @@ function statusLabel(status: string) {
   const labels: Record<string, string> = {
     REQUESTED: "待申请",
     APPROVING: "待审核",
+    REJECTED: "审批驳回",
     PREPARING: "打样中",
     SHIPPED: "已寄出",
     DELIVERED: "已签收",
@@ -82,7 +84,8 @@ function historyActionLabel(item: SampleHistoryItem) {
     const statusLabels: Record<string, string> = {
       APPROVING: "发起审核",
       PREPARING: beforeStatus === "APPROVING" ? "审核通过" : "打样中",
-      REQUESTED: beforeStatus === "APPROVING" ? "审核驳回" : "待申请",
+      REJECTED: "审核驳回",
+      REQUESTED: "待申请",
       SHIPPED: "已寄出",
       DELIVERED: "已签收",
       FEEDBACK_RECEIVED: "已反馈",
@@ -125,6 +128,7 @@ function statusCodeLabel(status: string) {
   const labels: Record<string, string> = {
     REQUESTED: "待申请",
     APPROVING: "待审核",
+    REJECTED: "审批驳回",
     PREPARING: "打样中",
     SHIPPED: "已寄出",
     DELIVERED: "已签收",
@@ -195,6 +199,58 @@ function quoteStatusPillClass(status: string) {
   return ["status-pill", "status-pill--detail", toneByStatus[status] ?? "status-pill--neutral"].join(" ");
 }
 
+function normalizeQuoteHistoryComment(comment: string) {
+  const legacyLabels: Record<string, string> = {
+    "Quote created": "已创建报价",
+    "Quote updated": "已更新报价",
+    "Quote voided": "已作废报价",
+    "Submitted for approval": "已提交报价审批",
+    "Quote approved": "已通过报价审批",
+    "Quote rejected": "已驳回报价审批"
+  };
+  return legacyLabels[comment] ?? comment;
+}
+
+function quoteHistoryField(item: QuoteHistoryItem, source: "before" | "after", field: string) {
+  const value = item[source]?.[field];
+  return typeof value === "string" ? value : "";
+}
+
+function quoteHistoryStatusTime(history: QuoteHistoryItem[], status: string) {
+  const matched = history.find((item) => {
+    const beforeStatus = quoteHistoryField(item, "before", "status");
+    const afterStatus = quoteHistoryField(item, "after", "status");
+    const afterApprovalStatus = quoteHistoryField(item, "after", "approvalStatus");
+    const comment = normalizeQuoteHistoryComment(item.comment ?? "");
+
+    if (status === "SENT") {
+      return afterStatus === "SENT" || comment.includes("发送报价");
+    }
+    if (status === "ACCEPTED") {
+      return afterStatus === "ACCEPTED" || comment.includes("客户已接受报价");
+    }
+    if (status === "CUSTOMER_REJECTED") {
+      return (afterStatus === "REJECTED" && afterApprovalStatus === "APPROVED") || comment.includes("客户已拒绝报价");
+    }
+    if (status === "EXPIRED") {
+      return afterStatus === "EXPIRED" || comment.includes("报价已到期失效");
+    }
+    if (status === "REJECTED") {
+      return afterApprovalStatus === "REJECTED" || comment.includes("驳回报价审批");
+    }
+    if (status === "VOIDED") {
+      return afterStatus === "VOIDED" || item.action === "VOIDED" || comment.includes("作废报价");
+    }
+
+    return beforeStatus !== afterStatus && afterStatus === status;
+  });
+  return matched?.createdAt ?? "";
+}
+
+function quoteTimelineDateValue(date: string | null | undefined) {
+  return date ? new Date(date).toLocaleString() : "";
+}
+
 function normalizeHistoryComment(comment: string) {
   const legacyLabels: Record<string, string> = {
     "Sample request created": "已创建样品申请",
@@ -243,6 +299,20 @@ function historyDetailText(item: SampleHistoryItem) {
   return segments.join(" · ");
 }
 
+function sampleHistoryField(item: SampleHistoryItem, source: "before" | "after", field: string) {
+  const value = item[source]?.[field];
+  return typeof value === "string" ? value : "";
+}
+
+function sampleHistoryStatusTime(history: SampleHistoryItem[], status: string) {
+  const matched = history.find((item) => {
+    const beforeStatus = sampleHistoryField(item, "before", "status");
+    const afterStatus = sampleHistoryField(item, "after", "status");
+    return beforeStatus !== afterStatus && afterStatus === status;
+  });
+  return matched?.createdAt ?? "";
+}
+
 function toNumber(value: string) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -269,11 +339,14 @@ function latestReturnRecord(sample: Sample) {
 
 const SAMPLE_CORE_STATUS_ORDER = ["REQUESTED", "APPROVING", "PREPARING", "SHIPPED", "DELIVERED"] as const;
 const SAMPLE_AFTER_DELIVERY_STATUSES = ["FEEDBACK_RECEIVED", "RETURNED", "STORED", "CLOSED"];
-const SAMPLE_TERMINAL_STATUSES = ["FEEDBACK_RECEIVED", "RETURNED", "STORED", "VOIDED", "CLOSED"];
+const SAMPLE_TERMINAL_STATUSES = ["REJECTED", "FEEDBACK_RECEIVED", "RETURNED", "STORED", "VOIDED", "CLOSED"];
 
 function sampleCoreStatusReached(currentStatus: string, targetStatus: (typeof SAMPLE_CORE_STATUS_ORDER)[number]) {
   if (currentStatus === "VOIDED") {
     return targetStatus === "REQUESTED";
+  }
+  if (currentStatus === "REJECTED") {
+    return targetStatus === "REQUESTED" || targetStatus === "APPROVING";
   }
   if (SAMPLE_AFTER_DELIVERY_STATUSES.includes(currentStatus)) {
     return true;
@@ -287,6 +360,7 @@ function sampleStatusPillClass(status: string) {
   const toneByStatus: Record<string, string> = {
     REQUESTED: "status-pill--neutral",
     APPROVING: "status-pill--warning",
+    REJECTED: "status-pill--danger",
     PREPARING: "status-pill--info",
     SHIPPED: "status-pill--info",
     DELIVERED: "status-pill--success",
@@ -303,6 +377,7 @@ function allowedTransitions(status: string) {
   const transitions: Record<string, string[]> = {
     REQUESTED: ["APPROVING", "VOIDED"],
     APPROVING: ["PREPARING", "VOIDED"],
+    REJECTED: ["APPROVING", "VOIDED"],
     PREPARING: ["SHIPPED", "VOIDED"],
     SHIPPED: ["DELIVERED", "VOIDED"],
     DELIVERED: ["FEEDBACK_RECEIVED", "RETURNED", "STORED", "CLOSED", "VOIDED"],
@@ -320,7 +395,7 @@ function statusDialogTransitions(status: string) {
 }
 
 function statusDialogActionLabel(currentStatus: string, nextStatus: string) {
-  if (currentStatus === "REQUESTED" && nextStatus === "APPROVING") {
+  if ((currentStatus === "REQUESTED" || currentStatus === "REJECTED") && nextStatus === "APPROVING") {
     return "发起审核";
   }
   return statusLabel(nextStatus);
@@ -554,6 +629,17 @@ export function SamplePanel({ customerId }: { customerId: string }) {
     queryFn: () => getSampleHistory<SampleHistoryItem[]>(historySample?.id ?? ""),
     enabled: Boolean(historyOpen && historySample?.id)
   });
+  const detailSampleHistoryQuery = useQuery({
+    queryKey: ["samples", customerId, detailSample?.id, "history"],
+    queryFn: () => getSampleHistory<SampleHistoryItem[]>(detailSample?.id ?? ""),
+    enabled: Boolean(detailOpen && detailMode === "sample" && detailSample?.id)
+  });
+  const detailQuoteId = detailSample?.quoteId ?? detailSample?.quote?.id ?? "";
+  const detailQuoteHistoryQuery = useQuery({
+    queryKey: ["quotes", customerId, detailQuoteId],
+    queryFn: () => getQuoteHistory<QuoteHistoryItem[]>(detailQuoteId),
+    enabled: Boolean(detailOpen && detailMode === "quote" && detailQuoteId)
+  });
 
   const data = samplesQuery.data ?? [];
   const quoteOptions = quotesQuery.data ?? [];
@@ -698,13 +784,13 @@ export function SamplePanel({ customerId }: { customerId: string }) {
 
   const reject = useMutation({
     mutationFn: ({ sampleId, comment }: { sampleId: string; comment?: string }) =>
-      updateSample(sampleId, { status: "REQUESTED", ...(comment ? { comment } : {}) }),
+      updateSample(sampleId, { status: "REJECTED", ...(comment ? { comment } : {}) }),
     onSuccess: () => {
       refreshSamples();
       setApprovalOpen(false);
       setApprovalSample(null);
       setApprovalComment("");
-      showClientToast({ type: "success", title: "驳回成功", message: "样品申请已退回待申请。" });
+      showClientToast({ type: "success", title: "驳回成功", message: "样品申请已标记为审批驳回。" });
     },
     onError: (error) => {
       showClientToast({
@@ -937,38 +1023,61 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   const detailQuoteSource = detailQuote ?? detailSample?.quote ?? null;
   const detailQuoteStatus = quoteDisplayStatus(detailQuoteSource);
   const detailQuoteTerminalStatus = QUOTE_TERMINAL_STATUSES.includes(detailQuoteStatus) ? detailQuoteStatus : "";
+  const detailQuoteHistory = detailQuoteHistoryQuery.data ?? [];
+  const detailQuoteSentAt = quoteHistoryStatusTime(detailQuoteHistory, "SENT");
+  const detailQuoteTerminalAt = detailQuoteTerminalStatus ? quoteHistoryStatusTime(detailQuoteHistory, detailQuoteTerminalStatus) : "";
+  const detailQuoteHistoryLoadingValue = detailQuoteHistoryQuery.isLoading ? "加载中..." : "";
+  const detailQuoteApprovalNote = detailQuote?.approvalComment?.trim() ? `审批备注：${detailQuote.approvalComment.trim()}` : "";
   const detailQuoteTimelineItems = [
     {
       label: quoteStatusLabel("DRAFT", locale),
       value: detailQuote?.createdAt ? new Date(detailQuote.createdAt).toLocaleString() : "-",
       done: Boolean(detailQuoteSource),
-      current: detailQuoteStatus === "DRAFT"
+      current: detailQuoteStatus === "DRAFT",
+      danger: false
     },
     {
       label: quoteStatusLabel("PENDING_APPROVAL", locale),
       value: detailQuote?.approvalSubmittedAt ? new Date(detailQuote.approvalSubmittedAt).toLocaleString() : detailQuoteStatus === "PENDING_APPROVAL" ? "当前状态" : "未提交",
       done: quoteCoreStatusReached(detailQuoteStatus, "PENDING_APPROVAL"),
-      current: detailQuoteStatus === "PENDING_APPROVAL"
+      current: detailQuoteStatus === "PENDING_APPROVAL",
+      danger: false
     },
+    ...(detailQuoteStatus === "REJECTED"
+      ? [
+          {
+            label: quoteStatusLabel("REJECTED", locale),
+            value: detailQuote?.approvalReviewedAt ? new Date(detailQuote.approvalReviewedAt).toLocaleString() : quoteTimelineDateValue(quoteHistoryStatusTime(detailQuoteHistory, "REJECTED")) || detailQuoteHistoryLoadingValue || quoteStatusLabel("REJECTED", locale),
+            done: true,
+            current: true,
+            danger: true,
+            note: detailQuoteApprovalNote
+          }
+        ]
+      : []),
     {
       label: quoteStatusLabel("APPROVED", locale),
       value: detailQuote?.approvalReviewedAt ? new Date(detailQuote.approvalReviewedAt).toLocaleString() : quoteCoreStatusReached(detailQuoteStatus, "APPROVED") ? "已审批" : "未审批",
       done: quoteCoreStatusReached(detailQuoteStatus, "APPROVED"),
-      current: detailQuoteStatus === "APPROVED"
+      current: detailQuoteStatus === "APPROVED",
+      danger: false,
+      note: quoteCoreStatusReached(detailQuoteStatus, "APPROVED") ? detailQuoteApprovalNote : ""
     },
     {
       label: quoteStatusLabel("SENT", locale),
-      value: quoteCoreStatusReached(detailQuoteStatus, "SENT") ? quoteStatusLabel("SENT", locale) : "未发送",
+      value: quoteCoreStatusReached(detailQuoteStatus, "SENT") ? quoteTimelineDateValue(detailQuoteSentAt) || detailQuoteHistoryLoadingValue || quoteStatusLabel("SENT", locale) : "未发送",
       done: quoteCoreStatusReached(detailQuoteStatus, "SENT"),
-      current: detailQuoteStatus === "SENT"
+      current: detailQuoteStatus === "SENT",
+      danger: false
     },
-    ...(detailQuoteTerminalStatus
+    ...(detailQuoteTerminalStatus && detailQuoteTerminalStatus !== "REJECTED"
       ? [
           {
             label: quoteStatusLabel(detailQuoteTerminalStatus, locale),
-            value: quoteStatusLabel(detailQuoteTerminalStatus, locale),
+            value: quoteTimelineDateValue(detailQuoteTerminalAt) || detailQuoteHistoryLoadingValue || quoteStatusLabel(detailQuoteTerminalStatus, locale),
             done: true,
-            current: true
+            current: true,
+            danger: ["CUSTOMER_REJECTED", "REJECTED"].includes(detailQuoteTerminalStatus)
           }
         ]
       : [])
@@ -984,12 +1093,9 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   const detailQuoteBaseItems = [
     { label: "产品名称", value: detailValue(detailQuoteSource?.productName || "未命名产品"), highlight: true },
     { label: "规格", value: detailValue(detailQuote?.specification) },
-    { label: "当前状态", value: quoteStatusLabel(detailQuoteStatus, locale), highlight: true },
     { label: "MOQ", value: detailValue(detailQuote?.moq) },
     { label: "数量", value: detailValue(detailQuote?.quantity) },
     { label: "有效期", value: detailQuote?.validUntil ? new Date(detailQuote.validUntil).toLocaleDateString() : "-" },
-    { label: "提交审批时间", value: detailQuote?.approvalSubmittedAt ? new Date(detailQuote.approvalSubmittedAt).toLocaleString() : "-" },
-    { label: "审批完成时间", value: detailQuote?.approvalReviewedAt ? new Date(detailQuote.approvalReviewedAt).toLocaleString() : "-" },
     { label: "更新时间", value: detailQuote?.updatedAt ? new Date(detailQuote.updatedAt).toLocaleString() : "-" }
   ];
   const detailQuoteAmountItems = [
@@ -1005,6 +1111,10 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   ];
   const detailSampleFeeTotal = detailSample ? formatMoney(sampleFeeTotal(detailSample), detailSample.quote?.currency ?? detailSample.fees?.[0]?.currency) : "-";
   const sampleDetailStatus = detailSample?.status ?? "";
+  const sampleDetailHistory = detailSampleHistoryQuery.data ?? [];
+  const sampleDetailRejectedAt = sampleHistoryStatusTime(sampleDetailHistory, "REJECTED");
+  const sampleDetailHistoryLoadingValue = detailSampleHistoryQuery.isLoading ? "加载中..." : "";
+  const sampleDetailApprovalNote = detailSample?.approvalComment?.trim() ? `审批备注：${detailSample.approvalComment.trim()}` : "";
   const latestDetailReturnRecord = detailSample ? latestReturnRecord(detailSample) : null;
   const sampleDetailTerminalStatus = SAMPLE_TERMINAL_STATUSES.includes(sampleDetailStatus) ? sampleDetailStatus : "";
   const sampleDetailSummary = detailSample
@@ -1035,10 +1145,23 @@ export function SamplePanel({ customerId }: { customerId: string }) {
     },
     {
       label: sampleCoreStatusReached(sampleDetailStatus, "PREPARING") ? "已审核" : statusLabel("APPROVING"),
-      value: detailSample?.approvedAt ? new Date(detailSample.approvedAt).toLocaleString() : sampleDetailStatus === "APPROVING" ? "当前状态" : "未审核",
+      value: detailSample?.approvedAt ? new Date(detailSample.approvedAt).toLocaleString() : sampleDetailStatus === "APPROVING" ? "当前状态" : sampleDetailStatus === "REJECTED" ? "已驳回" : "未审核",
       done: sampleCoreStatusReached(sampleDetailStatus, "APPROVING"),
-      current: sampleDetailStatus === "APPROVING"
+      current: sampleDetailStatus === "APPROVING",
+      note: sampleCoreStatusReached(sampleDetailStatus, "PREPARING") ? sampleDetailApprovalNote : ""
     },
+    ...(sampleDetailStatus === "REJECTED"
+      ? [
+          {
+            label: statusLabel("REJECTED"),
+            value: sampleDetailRejectedAt ? new Date(sampleDetailRejectedAt).toLocaleString() : sampleDetailHistoryLoadingValue || statusLabel("REJECTED"),
+            done: true,
+            current: true,
+            danger: true,
+            note: sampleDetailApprovalNote
+          }
+        ]
+      : []),
     {
       label: statusLabel("PREPARING"),
       value: sampleCoreStatusReached(sampleDetailStatus, "PREPARING") ? "已进入打样" : "未打样",
@@ -1057,13 +1180,14 @@ export function SamplePanel({ customerId }: { customerId: string }) {
       done: sampleCoreStatusReached(sampleDetailStatus, "DELIVERED"),
       current: sampleDetailStatus === "DELIVERED"
     },
-    ...(sampleDetailTerminalStatus
+    ...(sampleDetailTerminalStatus && sampleDetailTerminalStatus !== "REJECTED"
       ? [
           {
             label: statusLabel(sampleDetailTerminalStatus),
             value: latestDetailReturnRecord ? new Date(latestDetailReturnRecord.recordedAt).toLocaleDateString() : statusLabel(sampleDetailTerminalStatus),
             done: true,
-            current: true
+            current: true,
+            danger: ["REJECTED", "VOIDED"].includes(sampleDetailTerminalStatus)
           }
         ]
       : [])
@@ -1366,10 +1490,11 @@ export function SamplePanel({ customerId }: { customerId: string }) {
               </div>
               <div className="sample-detail-timeline">
                 {sampleDetailTimelineItems.map((item) => (
-                  <div className={["sample-detail-timeline__item", item.done ? "is-done" : "", item.current ? "is-current" : ""].filter(Boolean).join(" ")} key={item.label}>
+                  <div className={["sample-detail-timeline__item", item.done ? "is-done" : "", item.current ? "is-current" : "", item.danger ? "is-danger" : ""].filter(Boolean).join(" ")} key={item.label}>
                     <span aria-hidden="true" />
                     <strong>{item.label}</strong>
                     <small>{item.value}</small>
+                    {item.note ? <em>{item.note}</em> : null}
                   </div>
                 ))}
               </div>
@@ -1504,10 +1629,11 @@ export function SamplePanel({ customerId }: { customerId: string }) {
               </div>
               <div className="sample-detail-timeline">
                 {detailQuoteTimelineItems.map((item) => (
-                  <div className={["sample-detail-timeline__item", item.done ? "is-done" : "", item.current ? "is-current" : ""].filter(Boolean).join(" ")} key={item.label}>
+                  <div className={["sample-detail-timeline__item", item.done ? "is-done" : "", item.current ? "is-current" : "", item.danger ? "is-danger" : ""].filter(Boolean).join(" ")} key={item.label}>
                     <span aria-hidden="true" />
                     <strong>{item.label}</strong>
                     <small>{item.value}</small>
+                    {item.note ? <em>{item.note}</em> : null}
                   </div>
                 ))}
               </div>
@@ -1516,14 +1642,12 @@ export function SamplePanel({ customerId }: { customerId: string }) {
             <section className="detail-section sample-detail-section">
               <div className="sample-detail-section__header">
                 <h4>备注</h4>
-                <span>审批意见和报价备注</span>
-              </div>
-              <div className="detail-note">
-                <strong>审批备注：</strong>{detailValue(detailQuote?.approvalComment)}
-                <br />
-                <strong>备注：</strong>{detailValue(detailQuote?.notes)}
-              </div>
-            </section>
+              <span>审批意见和报价备注</span>
+            </div>
+            <div className="detail-note">
+              <strong>备注：</strong>{detailValue(detailQuote?.notes)}
+            </div>
+          </section>
           </div>
         )}
       </Dialog>

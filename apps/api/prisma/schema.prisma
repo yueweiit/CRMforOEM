@@ -180,6 +180,7 @@ enum QuoteHistoryAction {
 enum SampleStatus {
   REQUESTED
   APPROVING
+  REJECTED
   PREPARING
   SHIPPED
   DELIVERED

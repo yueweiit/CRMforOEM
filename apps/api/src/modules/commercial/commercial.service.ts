@@ -697,7 +697,7 @@ export class CommercialService {
           ...(dto.shippedAt !== undefined ? { shippedAt: dto.shippedAt ? new Date(dto.shippedAt) : null } : {}),
           ...(dto.deliveredAt !== undefined ? { deliveredAt: dto.deliveredAt ? new Date(dto.deliveredAt) : null } : {}),
           ...(dto.feedback !== undefined ? { feedback: dto.feedback } : {}),
-          ...(["PREPARING", "REQUESTED"].includes(targetStatus as string) && dto.comment !== undefined ? { approvalComment } : {}),
+          ...(["PREPARING", "REJECTED"].includes(targetStatus as string) && dto.comment !== undefined ? { approvalComment } : {}),
           ...(dto.status !== undefined ? { status: dto.status as never } : {}),
           ...(dto.status === "PREPARING" ? { approvedAt: sample.approvedAt ?? new Date() } : {}),
           ...(dto.status === "SHIPPED" ? { shippedAt: sample.shippedAt ?? new Date() } : {}),
@@ -738,7 +738,7 @@ export class CommercialService {
         });
       }
       if (dto.status !== undefined && dto.status !== sample.status) {
-        const isApprovalDecision = ["PREPARING", "REQUESTED"].includes(targetStatus as string);
+        const isApprovalDecision = ["PREPARING", "REJECTED"].includes(targetStatus as string);
         await tx.sampleHistory.create({
           data: {
             sampleRequestId: sampleId,
@@ -1074,7 +1074,8 @@ export class CommercialService {
     }
     const allowedTransitions: Record<string, string[]> = {
       REQUESTED: ["APPROVING", "VOIDED"],
-      APPROVING: ["REQUESTED", "PREPARING", "VOIDED"],
+      APPROVING: ["REJECTED", "PREPARING", "VOIDED"],
+      REJECTED: ["APPROVING", "VOIDED"],
       PREPARING: ["SHIPPED", "VOIDED"],
       SHIPPED: ["DELIVERED", "VOIDED"],
       DELIVERED: ["FEEDBACK_RECEIVED", "RETURNED", "STORED", "CLOSED", "VOIDED"],
@@ -1221,6 +1222,7 @@ export class CommercialService {
   private mapSampleHistoryAction(status: string) {
     const actionMap: Record<string, string> = {
       APPROVING: "STATUS_CHANGED",
+      REJECTED: "STATUS_CHANGED",
       PREPARING: "STATUS_CHANGED",
       SHIPPED: "STATUS_CHANGED",
       DELIVERED: "STATUS_CHANGED",
@@ -1237,6 +1239,7 @@ export class CommercialService {
     const labels: Record<string, string> = {
       REQUESTED: "待申请",
       APPROVING: "待审核",
+      REJECTED: "审批驳回",
       PREPARING: "打样中",
       SHIPPED: "已寄出",
       DELIVERED: "已签收",

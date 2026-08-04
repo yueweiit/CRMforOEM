@@ -3,6 +3,7 @@ import { IsArray, IsDateString, IsIn, IsInt, IsOptional, IsString, Min } from "c
 const SAMPLE_STATUSES = [
   "REQUESTED",
   "APPROVING",
+  "REJECTED",
   "PREPARING",
   "SHIPPED",
   "DELIVERED",

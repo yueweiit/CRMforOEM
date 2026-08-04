@@ -139,6 +139,46 @@ function normalizeHistoryComment(comment: string) {
   return legacyLabels[comment] ?? comment;
 }
 
+function quoteHistoryField(item: QuoteHistoryItem, source: "before" | "after", field: string) {
+  const value = item[source]?.[field];
+  return typeof value === "string" ? value : "";
+}
+
+function quoteHistoryStatusTime(history: QuoteHistoryItem[], status: string) {
+  const matched = history.find((item) => {
+    const beforeStatus = quoteHistoryField(item, "before", "status");
+    const afterStatus = quoteHistoryField(item, "after", "status");
+    const afterApprovalStatus = quoteHistoryField(item, "after", "approvalStatus");
+    const comment = normalizeHistoryComment(item.comment ?? "");
+
+    if (status === "SENT") {
+      return afterStatus === "SENT" || comment.includes("发送报价");
+    }
+    if (status === "ACCEPTED") {
+      return afterStatus === "ACCEPTED" || comment.includes("客户已接受报价");
+    }
+    if (status === "CUSTOMER_REJECTED") {
+      return (afterStatus === "REJECTED" && afterApprovalStatus === "APPROVED") || comment.includes("客户已拒绝报价");
+    }
+    if (status === "EXPIRED") {
+      return afterStatus === "EXPIRED" || comment.includes("报价已到期失效");
+    }
+    if (status === "REJECTED") {
+      return afterApprovalStatus === "REJECTED" || comment.includes("驳回报价审批");
+    }
+    if (status === "VOIDED") {
+      return afterStatus === "VOIDED" || item.action === "VOIDED" || comment.includes("作废报价");
+    }
+
+    return beforeStatus !== afterStatus && afterStatus === status;
+  });
+  return matched?.createdAt ?? "";
+}
+
+function quoteTimelineDateValue(date: string | null | undefined) {
+  return date ? new Date(date).toLocaleString() : "";
+}
+
 function toMoney(value: string) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -467,6 +507,11 @@ export function QuotePanel({ customerId }: { customerId: string }) {
     queryKey: ["quotes", customerId, historyQuote?.id],
     queryFn: () => getQuoteHistory<QuoteHistoryItem[]>(historyQuote?.id ?? ""),
     enabled: Boolean(historyOpen && historyQuote?.id)
+  });
+  const detailHistoryQuery = useQuery({
+    queryKey: ["quotes", customerId, detailQuote?.id],
+    queryFn: () => getQuoteHistory<QuoteHistoryItem[]>(detailQuote?.id ?? ""),
+    enabled: Boolean(detailOpen && detailQuote?.id)
   });
 
   const create = useMutation({
@@ -824,38 +869,61 @@ export function QuotePanel({ customerId }: { customerId: string }) {
   }, [detailQuote]);
   const detailQuoteStatus = quoteDisplayStatus(detailQuote);
   const detailQuoteTerminalStatus = QUOTE_TERMINAL_STATUSES.includes(detailQuoteStatus) ? detailQuoteStatus : "";
+  const detailQuoteHistory = detailHistoryQuery.data ?? [];
+  const detailQuoteSentAt = quoteHistoryStatusTime(detailQuoteHistory, "SENT");
+  const detailQuoteTerminalAt = detailQuoteTerminalStatus ? quoteHistoryStatusTime(detailQuoteHistory, detailQuoteTerminalStatus) : "";
+  const detailQuoteHistoryLoadingValue = detailHistoryQuery.isLoading ? "加载中..." : "";
+  const detailQuoteApprovalNote = detailQuote?.approvalComment?.trim() ? `审批备注：${detailQuote.approvalComment.trim()}` : "";
   const detailQuoteTimelineItems = [
     {
       label: statusLabel("DRAFT", locale),
       value: detailQuote?.createdAt ? new Date(detailQuote.createdAt).toLocaleString() : "-",
       done: Boolean(detailQuote),
-      current: detailQuoteStatus === "DRAFT"
+      current: detailQuoteStatus === "DRAFT",
+      danger: false
     },
     {
       label: statusLabel("PENDING_APPROVAL", locale),
       value: detailQuote?.approvalSubmittedAt ? new Date(detailQuote.approvalSubmittedAt).toLocaleString() : detailQuoteStatus === "PENDING_APPROVAL" ? "当前状态" : "未提交",
       done: quoteCoreStatusReached(detailQuoteStatus, "PENDING_APPROVAL"),
-      current: detailQuoteStatus === "PENDING_APPROVAL"
+      current: detailQuoteStatus === "PENDING_APPROVAL",
+      danger: false
     },
+    ...(detailQuoteStatus === "REJECTED"
+      ? [
+          {
+            label: statusLabel("REJECTED", locale),
+            value: detailQuote?.approvalReviewedAt ? new Date(detailQuote.approvalReviewedAt).toLocaleString() : quoteTimelineDateValue(quoteHistoryStatusTime(detailQuoteHistory, "REJECTED")) || detailQuoteHistoryLoadingValue || statusLabel("REJECTED", locale),
+            done: true,
+            current: true,
+            danger: true,
+            note: detailQuoteApprovalNote
+          }
+        ]
+      : []),
     {
       label: statusLabel("APPROVED", locale),
       value: detailQuote?.approvalReviewedAt ? new Date(detailQuote.approvalReviewedAt).toLocaleString() : quoteCoreStatusReached(detailQuoteStatus, "APPROVED") ? "已审批" : "未审批",
       done: quoteCoreStatusReached(detailQuoteStatus, "APPROVED"),
-      current: detailQuoteStatus === "APPROVED"
+      current: detailQuoteStatus === "APPROVED",
+      danger: false,
+      note: quoteCoreStatusReached(detailQuoteStatus, "APPROVED") ? detailQuoteApprovalNote : ""
     },
     {
       label: statusLabel("SENT", locale),
-      value: quoteCoreStatusReached(detailQuoteStatus, "SENT") ? statusLabel("SENT", locale) : "未发送",
+      value: quoteCoreStatusReached(detailQuoteStatus, "SENT") ? quoteTimelineDateValue(detailQuoteSentAt) || detailQuoteHistoryLoadingValue || statusLabel("SENT", locale) : "未发送",
       done: quoteCoreStatusReached(detailQuoteStatus, "SENT"),
-      current: detailQuoteStatus === "SENT"
+      current: detailQuoteStatus === "SENT",
+      danger: false
     },
-    ...(detailQuoteTerminalStatus
+    ...(detailQuoteTerminalStatus && detailQuoteTerminalStatus !== "REJECTED"
       ? [
           {
             label: statusLabel(detailQuoteTerminalStatus, locale),
-            value: statusLabel(detailQuoteTerminalStatus, locale),
+            value: quoteTimelineDateValue(detailQuoteTerminalAt) || detailQuoteHistoryLoadingValue || statusLabel(detailQuoteTerminalStatus, locale),
             done: true,
-            current: true
+            current: true,
+            danger: ["CUSTOMER_REJECTED", "REJECTED"].includes(detailQuoteTerminalStatus)
           }
         ]
       : [])
@@ -871,12 +939,9 @@ export function QuotePanel({ customerId }: { customerId: string }) {
   const detailQuoteBaseItems = [
     { label: "产品名称", value: detailValue(detailQuote?.productName || "未命名产品"), highlight: true },
     { label: "规格", value: detailValue(detailQuote?.specification) },
-    { label: "当前状态", value: statusLabel(detailQuoteStatus, locale), highlight: true },
     { label: "MOQ", value: detailValue(detailQuote?.moq) },
     { label: "数量", value: detailValue(detailQuote?.quantity) },
     { label: "有效期", value: detailQuote?.validUntil ? new Date(detailQuote.validUntil).toLocaleDateString() : "-" },
-    { label: "提交审批时间", value: detailQuote?.approvalSubmittedAt ? new Date(detailQuote.approvalSubmittedAt).toLocaleString() : "-" },
-    { label: "审批完成时间", value: detailQuote?.approvalReviewedAt ? new Date(detailQuote.approvalReviewedAt).toLocaleString() : "-" },
     { label: "更新时间", value: detailQuote?.updatedAt ? new Date(detailQuote.updatedAt).toLocaleString() : "-" }
   ];
   const detailQuoteAmountItems = [
@@ -1313,10 +1378,11 @@ export function QuotePanel({ customerId }: { customerId: string }) {
             </div>
             <div className="sample-detail-timeline">
               {detailQuoteTimelineItems.map((item) => (
-                <div className={["sample-detail-timeline__item", item.done ? "is-done" : "", item.current ? "is-current" : ""].filter(Boolean).join(" ")} key={item.label}>
+                <div className={["sample-detail-timeline__item", item.done ? "is-done" : "", item.current ? "is-current" : "", item.danger ? "is-danger" : ""].filter(Boolean).join(" ")} key={item.label}>
                   <span aria-hidden="true" />
                   <strong>{item.label}</strong>
                   <small>{item.value}</small>
+                  {item.note ? <em>{item.note}</em> : null}
                 </div>
               ))}
             </div>
@@ -1388,8 +1454,6 @@ export function QuotePanel({ customerId }: { customerId: string }) {
               <span>审批意见和报价备注</span>
             </div>
             <div className="detail-note">
-              <strong>审批备注：</strong>{detailValue(detailQuote?.approvalComment)}
-              <br />
               <strong>备注：</strong>{detailValue(detailQuote?.notes)}
             </div>
           </section>

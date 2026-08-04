@@ -1746,9 +1746,11 @@ td small {
 }
 
 .sample-detail-timeline__item {
+  align-content: start;
   display: grid;
+  grid-template-rows: 18px 18px 18px minmax(16px, auto);
   justify-items: center;
-  gap: 8px;
+  row-gap: 7px;
   min-width: 0;
   position: relative;
   text-align: center;
@@ -1777,16 +1779,48 @@ td small {
   color: #0b6f73;
 }
 
+.sample-detail-timeline__item.is-danger > span {
+  background: #dc2626;
+  box-shadow: 0 0 0 1px #dc2626;
+}
+
+.sample-detail-timeline__item.is-danger.is-current > span {
+  box-shadow: 0 0 0 1px #dc2626, 0 0 0 5px rgba(220, 38, 38, 0.12);
+}
+
+.sample-detail-timeline__item.is-danger strong {
+  color: #b42318;
+}
+
+.sample-detail-timeline__item.is-danger small {
+  color: #52677f;
+}
+
 .sample-detail-timeline__item strong {
   color: #24313b;
   font-size: 13px;
-  line-height: 1.35;
+  line-height: 18px;
+  min-height: 18px;
+  overflow-wrap: anywhere;
 }
 
 .sample-detail-timeline__item small {
   color: #52677f;
+  display: block;
   font-size: 12px;
-  line-height: 1.45;
+  line-height: 18px;
+  margin-top: 0;
+  min-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.sample-detail-timeline__item em {
+  color: #64748b;
+  display: block;
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.2;
+  margin-top: -4px;
   overflow-wrap: anywhere;
 }
 

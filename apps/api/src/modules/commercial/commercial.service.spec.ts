@@ -701,11 +701,11 @@ async function main() {
     const { service, calls } = buildService("APPROVING");
 
     await service.updateSample(user, "sample-1", {
-      status: "REQUESTED",
+      status: "REJECTED",
       comment: "资料还不完整"
     });
 
-    assert.equal(calls.sampleUpdate?.status, "REQUESTED");
+    assert.equal(calls.sampleUpdate?.status, "REJECTED");
     assert.equal(calls.sampleUpdate?.approvalComment, "资料还不完整");
   }
 
