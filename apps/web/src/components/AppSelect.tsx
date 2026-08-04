@@ -13,6 +13,7 @@ type AppSelectProps = {
   options: AppSelectOption[];
   placeholder?: string;
   className?: string;
+  popupClassName?: string;
   variant?: "form" | "filter" | "toolbar";
   disabled?: boolean;
   title?: string;
@@ -24,6 +25,7 @@ export function AppSelect({
   options,
   placeholder,
   className = "",
+  popupClassName = "",
   variant = "form",
   disabled,
   title
@@ -37,6 +39,7 @@ export function AppSelect({
       placeholder={placeholder}
       title={title}
       autoWidth={false}
+      popupClassName={popupClassName}
     >
       {options.map((option) => (
         <Select.Option value={option.value} disabled={option.disabled} key={option.value}>

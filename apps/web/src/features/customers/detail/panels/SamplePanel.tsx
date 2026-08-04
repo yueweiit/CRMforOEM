@@ -24,6 +24,7 @@ import { AddIconButton } from "../../../../components/AddIconButton";
 import { DeleteIconButton } from "../../../../components/DeleteIconButton";
 import { EditIconButton } from "../../../../components/EditIconButton";
 import { FileUpload } from "../../../../components/FileUpload";
+import { AppSelect } from "../../../../components/AppSelect";
 import { Field } from "../../../../components/ui/Field";
 import { useI18n } from "../../../../i18n";
 import { formatDateInput } from "../../../../shared/utils/format";
@@ -1300,13 +1301,13 @@ export function SamplePanel({ customerId }: { customerId: string }) {
         </label>
         <label>
           <span>{t("sampleFields.samplePurpose")}</span>
-          <select value={createForm.samplePurpose} onChange={(e) => setCreateForm({ ...createForm, samplePurpose: e.target.value })}>
-            {SAMPLE_PURPOSES.map((item) => (
-              <option key={item.value} value={item.value}>
-                {item.label}
-              </option>
-            ))}
-          </select>
+          <AppSelect
+            className="sample-light-select"
+            popupClassName="sample-light-select-popup"
+            value={createForm.samplePurpose}
+            onChange={(v) => setCreateForm({ ...createForm, samplePurpose: v })}
+            options={SAMPLE_PURPOSES.map((item) => ({ value: item.value, label: item.label }))}
+          />
         </label>
         <label>
           <span>{t("sampleFields.deliveryDeadlineOptional")}</span>
@@ -1314,14 +1315,14 @@ export function SamplePanel({ customerId }: { customerId: string }) {
         </label>
         <label>
           <span>{t("sampleFields.relatedQuote")}</span>
-          <select value={createForm.quoteId} onChange={(e) => setCreateForm({ ...createForm, quoteId: e.target.value })}>
-            <option value="">{t("sampleFields.noRelatedQuote")}</option>
-            {quoteOptions.map((quote) => (
-              <option key={quote.id} value={quote.id}>
-                {quote.quoteNo} · {quote.productName}
-              </option>
-            ))}
-          </select>
+          <AppSelect
+            className="sample-light-select"
+            popupClassName="sample-light-select-popup"
+            value={createForm.quoteId}
+            onChange={(v) => setCreateForm({ ...createForm, quoteId: v })}
+            options={[{ value: "", label: t("sampleFields.noRelatedQuote") }, ...quoteOptions.map((quote) => ({ value: quote.id, label: `${quote.quoteNo} · ${quote.productName}` }))]}
+            placeholder={t("sampleFields.noRelatedQuote")}
+          />
         </label>
         <div className="wide-field sample-upload-field">
           <span>{t("sampleFields.attachments")}</span>
@@ -1697,13 +1698,13 @@ export function SamplePanel({ customerId }: { customerId: string }) {
           </div>
           <div className="form-field">
             <label>{t("sampleFields.samplePurpose")}</label>
-            <select value={editForm.samplePurpose} onChange={(e) => setEditForm({ ...editForm, samplePurpose: e.target.value })}>
-              {SAMPLE_PURPOSES.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
+            <AppSelect
+              className="sample-light-select"
+              popupClassName="sample-light-select-popup"
+              value={editForm.samplePurpose}
+              onChange={(v) => setEditForm({ ...editForm, samplePurpose: v })}
+              options={SAMPLE_PURPOSES.map((item) => ({ value: item.value, label: item.label }))}
+            />
           </div>
           <div className="form-field">
             <label>{t("sampleFields.deliveryDeadline")}</label>
@@ -1711,14 +1712,14 @@ export function SamplePanel({ customerId }: { customerId: string }) {
           </div>
           <div className="form-field">
             <label>{t("sampleFields.relatedQuote")}</label>
-            <select value={editForm.quoteId} onChange={(e) => setEditForm({ ...editForm, quoteId: e.target.value })}>
-              <option value="">{t("sampleFields.noRelatedQuote")}</option>
-              {quoteOptions.map((quote) => (
-                <option key={quote.id} value={quote.id}>
-                  {quote.quoteNo} · {quote.productName}
-                </option>
-              ))}
-            </select>
+            <AppSelect
+              className="sample-light-select"
+              popupClassName="sample-light-select-popup"
+              value={editForm.quoteId}
+              onChange={(v) => setEditForm({ ...editForm, quoteId: v })}
+              options={[{ value: "", label: t("sampleFields.noRelatedQuote") }, ...quoteOptions.map((quote) => ({ value: quote.id, label: `${quote.quoteNo} · ${quote.productName}` }))]}
+              placeholder={t("sampleFields.noRelatedQuote")}
+            />
           </div>
           <div className="form-field wide-field">
             <label>{t("sampleFields.attachments")}</label>

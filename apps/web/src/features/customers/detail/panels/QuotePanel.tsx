@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog } from "@alifd/next";
 import "@alifd/next/lib/dialog/style.js";
-import { CheckCircle2, Download, History, NotebookTabs, Send, XCircle } from "lucide-react";
+import { CheckCircle2, ChevronDown, Download, History, NotebookTabs, Send, XCircle } from "lucide-react";
 import {
   calculateQuotePricing,
   quoteFlowStatusLabel
@@ -36,6 +36,7 @@ const DEFAULT_QUOTE_FORM: { moq: string; quantity: string } = {
   moq: "50",
   quantity: "50"
 };
+type QuoteCalcMode = "formula" | "direct";
 type MaterialFormItem = { name: string; usage: string; unitPrice: string; lossRate: string };
 
 const EMPTY_MATERIAL_ITEM: MaterialFormItem = { name: "", usage: "", unitPrice: "", lossRate: "" };
@@ -446,6 +447,73 @@ function CurrencyInput({
               type="button"
             >
               <span>{option}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function CalcModeSelect({
+  id,
+  value,
+  onChange,
+  directLabel,
+  formulaLabel
+}: {
+  id: string;
+  value: QuoteCalcMode;
+  onChange: (value: QuoteCalcMode) => void;
+  directLabel: string;
+  formulaLabel: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const options = [
+    { value: "direct" as const, label: directLabel },
+    { value: "formula" as const, label: formulaLabel }
+  ];
+  const selected = options.find((option) => option.value === value) ?? options[0];
+
+  useEffect(() => {
+    function handlePointerDown(event: PointerEvent) {
+      if (!wrapperRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, []);
+
+  return (
+    <div ref={wrapperRef} className={["calc-mode-combo", open ? "is-open" : ""].filter(Boolean).join(" ")}>
+      <button
+        aria-controls={id}
+        aria-expanded={open}
+        className="quote-calc-mode-select"
+        onClick={() => setOpen((current) => !current)}
+        type="button"
+      >
+        <span>{selected.label}</span>
+        <ChevronDown size={16} aria-hidden="true" />
+      </button>
+      {open ? (
+        <div className="calc-mode-combo__menu" id={id} role="listbox">
+          {options.map((option) => (
+            <button
+              aria-selected={option.value === value}
+              className={["calc-mode-combo__option", option.value === value ? "is-active" : ""].filter(Boolean).join(" ")}
+              key={option.value}
+              onMouseDown={(event) => {
+                event.preventDefault();
+                onChange(option.value);
+                setOpen(false);
+              }}
+              role="option"
+              type="button"
+            >
+              <span>{option.label}</span>
             </button>
           ))}
         </div>
@@ -1076,14 +1144,13 @@ export function QuotePanel({ customerId }: { customerId: string }) {
         <div className="form-field">
           <label>
             <span>{t("quoteFields.calcMode")}</span>
-            <select
-              className="quote-calc-mode-select"
+            <CalcModeSelect
+              id="quote-calc-mode-create-options"
               value={form.calcMode}
-              onChange={(e) => setForm({ ...form, calcMode: e.target.value as "formula" | "direct" })}
-            >
-              <option value="direct">{t("quoteFields.directMode")}</option>
-              <option value="formula">{t("quoteFields.formulaMode")}</option>
-            </select>
+              onChange={(value) => setForm({ ...form, calcMode: value })}
+              directLabel={t("quoteFields.directMode")}
+              formulaLabel={t("quoteFields.formulaMode")}
+            />
           </label>
         </div>
         {form.calcMode === "formula" ? (
@@ -1547,14 +1614,13 @@ export function QuotePanel({ customerId }: { customerId: string }) {
           </div>
           <div className="form-field">
             <label>{t("quoteFields.calcMode")}</label>
-            <select
-              className="quote-calc-mode-select"
+            <CalcModeSelect
+              id="quote-calc-mode-edit-options"
               value={editForm.calcMode}
-              onChange={(e) => setEditForm({ ...editForm, calcMode: e.target.value as "formula" | "direct" })}
-            >
-              <option value="direct">{t("quoteFields.directMode")}</option>
-              <option value="formula">{t("quoteFields.formulaMode")}</option>
-            </select>
+              onChange={(value) => setEditForm({ ...editForm, calcMode: value })}
+              directLabel={t("quoteFields.directMode")}
+              formulaLabel={t("quoteFields.formulaMode")}
+            />
           </div>
           {editForm.calcMode === "formula" ? (
             <>
