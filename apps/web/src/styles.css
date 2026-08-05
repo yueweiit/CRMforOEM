@@ -1535,6 +1535,16 @@ td small {
   gap: 10px;
 }
 
+.quote-edit-base-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.quote-edit-base-grid .form-field {
+  min-width: 0;
+}
+
 .quote-dimension-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
@@ -2449,6 +2459,12 @@ td small {
   font-size: 14px;
 }
 
+.quote-record-table th:first-child,
+.quote-record-table td:first-child {
+  min-width: 160px;
+  white-space: nowrap;
+}
+
 .quote-record-table th:last-child,
 .quote-record-table td:last-child {
   background: #fff;
@@ -2471,6 +2487,7 @@ td small {
   cursor: pointer;
   padding: 0;
   text-align: left;
+  white-space: nowrap;
 }
 
 .quote-record-product {
@@ -3214,6 +3231,7 @@ td small {
   }
 
   .quote-material-row,
+  .quote-edit-base-grid,
   .quote-dimension-grid,
   .quote-formula-grid--three,
   .quote-formula-grid--four,

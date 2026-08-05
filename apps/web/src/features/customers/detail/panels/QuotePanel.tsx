@@ -153,7 +153,12 @@ function quoteStatusPillClass(status: string) {
   return ["status-pill", "status-pill--detail", toneByStatus[status] ?? "status-pill--neutral"].join(" ");
 }
 
-function historyActionLabel(action: string) {
+function historyActionLabel(item: QuoteHistoryItem) {
+  const afterStatus = quoteHistoryField(item, "after", "status");
+  const afterApprovalStatus = quoteHistoryField(item, "after", "approvalStatus");
+  if (item.action === "REJECTED" && afterStatus === "REJECTED" && afterApprovalStatus === "APPROVED") {
+    return "客户拒绝";
+  }
   const labels: Record<string, string> = {
     CREATED: "创建",
     UPDATED: "更新",
@@ -162,7 +167,7 @@ function historyActionLabel(action: string) {
     REJECTED: "审批驳回",
     VOIDED: "作废"
   };
-  return labels[action] ?? action;
+  return labels[item.action] ?? item.action;
 }
 
 function normalizeHistoryComment(comment: string) {
@@ -1329,8 +1334,8 @@ export function QuotePanel({ customerId }: { customerId: string }) {
     <section className="panel quote-create-panel">
       <div className="panel-title">
         <div className="quote-panel-title">
-          <h2>新增报价</h2>
-          <span>填写基础信息与金额明细</span>
+          <h2>{t("quoteFields.createSectionTitle")}</h2>
+          <span>{t("quoteFields.createSectionDescription")}</span>
         </div>
       </div>
       <div className="form-grid compact-form">
@@ -1366,14 +1371,14 @@ export function QuotePanel({ customerId }: { customerId: string }) {
             <div className="form-field wide-field quote-formula-section">
               <div className="quote-formula-section__header">
                 <strong>{t("quoteFields.materialQuote")}</strong>
-                <span>Sum(用量 × 单价 × (1 + 损耗率)) × (1 + 物料利润率)</span>
+                <span>{t("quoteFields.materialFormula")}</span>
               </div>
               {form.materialItems.map((material, index) => (
                 <div className="quote-material-row" key={`material-${index}`}>
                   <label>
                     <span>{t("quoteFields.materialName").replace("{index}", String(index + 1))}</span>
                     <input
-                      placeholder="如 ABS、包装盒"
+                      placeholder={t("quoteFields.materialNamePlaceholder")}
                       value={material.name}
                       onChange={(event) => setForm({
                         ...form,
@@ -1449,7 +1454,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
             <div className="form-field wide-field quote-formula-section">
               <div className="quote-formula-section__header">
                 <strong>{t("quoteFields.processingCost")}</strong>
-                <span>加工时间 × 工时费率 × (1 + 加工利润率)</span>
+                <span>{t("quoteFields.processingFormula")}</span>
               </div>
               <div className="quote-formula-grid quote-formula-grid--four">
                 <label>
@@ -1474,9 +1479,9 @@ export function QuotePanel({ customerId }: { customerId: string }) {
             <div className="form-field wide-field quote-formula-section">
               <div className="quote-formula-section__header">
                 <strong>{t("quoteFields.shipping")}</strong>
-                <span>Max(毛重, 长 × 宽 × 高 ÷ 体积系数) × 运输单位价格</span>
+                <span>{t("quoteFields.shippingFormula")}</span>
               </div>
-              <div className="quote-formula-subtitle">体积重量 = 长 × 宽 × 高 ÷ 体积系数</div>
+              <div className="quote-formula-subtitle">{t("quoteFields.volumeWeightFormula")}</div>
               <div className="quote-formula-grid quote-formula-grid--four">
                 <label>
                   <span>{t("quoteFields.length")}</span>
@@ -1495,7 +1500,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
                   <input type="number" value={form.volumeDivisor} onChange={(event) => setForm({ ...form, volumeDivisor: event.target.value })} />
                 </label>
               </div>
-              <div className="quote-formula-subtitle">运费 = Max(毛重, 体积重量) × 运输单位价格</div>
+              <div className="quote-formula-subtitle">{t("quoteFields.shippingCostFormula")}</div>
               <div className="quote-formula-grid quote-formula-grid--four">
                 <label>
                   <span>{t("quoteFields.volumeWeight")}</span>
@@ -1519,7 +1524,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
             <div className="form-field wide-field quote-formula-section">
               <div className="quote-formula-section__header">
                 <strong>{t("quoteFields.taxCost")}</strong>
-                <span>(物料报价 + 加工费报价 + 运费) × 增值税率</span>
+                <span>{t("quoteFields.taxFormula")}</span>
               </div>
               <div className="quote-formula-grid quote-formula-grid--three">
                 <label>
@@ -1542,7 +1547,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
             <div className="form-field wide-field quote-formula-section">
               <div className="quote-formula-section__header">
                 <strong>{t("quoteFields.directMode")}</strong>
-                <span>总价 = 物料价 + 加工费 + 税费 + 运费 - 优惠金额</span>
+                <span>{t("quoteFields.directFormula")}</span>
               </div>
               <div className="quote-formula-grid quote-formula-grid--four">
                 <label>
@@ -1569,7 +1574,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
         <div className="form-field wide-field quote-formula-section">
           <div className="quote-formula-section__header">
             <strong>{t("quoteFields.summary")}</strong>
-            <span>总价 = 成本合计 - 优惠金额；单价 = 总价 ÷ 数量</span>
+            <span>{t("quoteFields.summaryFormula")}</span>
           </div>
           <div className="quote-formula-grid quote-formula-grid--three">
             <label>
@@ -1782,33 +1787,35 @@ export function QuotePanel({ customerId }: { customerId: string }) {
           </div>
         }>
         <div className="analysis-edit-form">
-          <div className="form-field">
-            <label>{t("quoteFields.quoteNo")}</label>
-            <input value={editForm.quoteNo} onChange={(e) => setEditForm({ ...editForm, quoteNo: e.target.value })} />
-          </div>
-          <div className="form-field">
-            <label>{t("quoteFields.productName")}</label>
-            <input value={editForm.productName} onChange={(e) => setEditForm({ ...editForm, productName: e.target.value })} />
-          </div>
-          <div className="form-field">
-            <label>{t("quoteFields.specification")}</label>
-            <input value={editForm.specification} onChange={(e) => setEditForm({ ...editForm, specification: e.target.value })} />
-          </div>
-          <div className="form-field">
-            <label>{t("quoteFields.moq")}</label>
-            <input type="number" value={editForm.moq} onChange={(e) => setEditForm({ ...editForm, moq: e.target.value })} />
-          </div>
-          <div className="form-field">
-            <label>{t("quoteFields.quantity")}</label>
-            <input type="number" value={editForm.quantity} onChange={(e) => setEditForm({ ...editForm, quantity: e.target.value })} />
-          </div>
-          <div className="form-field">
-            <label>{t("quoteFields.currency")}</label>
-            <CurrencyInput
-              id="quote-currency-edit-options"
-              value={editForm.currency}
-              onChange={(value) => setEditForm({ ...editForm, currency: value })}
-            />
+          <div className="quote-edit-base-grid">
+            <div className="form-field">
+              <label>{t("quoteFields.quoteNo")}</label>
+              <input value={editForm.quoteNo} onChange={(e) => setEditForm({ ...editForm, quoteNo: e.target.value })} />
+            </div>
+            <div className="form-field">
+              <label>{t("quoteFields.productName")}</label>
+              <input value={editForm.productName} onChange={(e) => setEditForm({ ...editForm, productName: e.target.value })} />
+            </div>
+            <div className="form-field">
+              <label>{t("quoteFields.specification")}</label>
+              <input value={editForm.specification} onChange={(e) => setEditForm({ ...editForm, specification: e.target.value })} />
+            </div>
+            <div className="form-field">
+              <label>{t("quoteFields.moq")}</label>
+              <input type="number" value={editForm.moq} onChange={(e) => setEditForm({ ...editForm, moq: e.target.value })} />
+            </div>
+            <div className="form-field">
+              <label>{t("quoteFields.quantity")}</label>
+              <input type="number" value={editForm.quantity} onChange={(e) => setEditForm({ ...editForm, quantity: e.target.value })} />
+            </div>
+            <div className="form-field">
+              <label>{t("quoteFields.currency")}</label>
+              <CurrencyInput
+                id="quote-currency-edit-options"
+                value={editForm.currency}
+                onChange={(value) => setEditForm({ ...editForm, currency: value })}
+              />
+            </div>
           </div>
           <div className="form-field">
             <label>{t("quoteFields.calcMode")}</label>
@@ -1822,145 +1829,189 @@ export function QuotePanel({ customerId }: { customerId: string }) {
           </div>
           {editForm.calcMode === "formula" ? (
             <>
-              {editForm.materialItems.map((material, index) => (
-                <div className="form-field wide-field quote-material-row" key={`edit-material-${index}`}>
-                  <label>
-                    <span>{t("quoteFields.materialName").replace("{index}", String(index + 1))}</span>
-                    <input
-                      placeholder="如 ABS、包装盒"
-                      value={material.name}
-                      onChange={(event) => setEditForm({
-                        ...editForm,
-                        materialItems: editForm.materialItems.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item)
-                      })}
-                    />
-                  </label>
-                  <label>
-                    <span>{t("quoteFields.usage")}</span>
-                    <input
-                      placeholder="0"
-                      type="number"
-                      value={material.usage}
-                      onChange={(event) => setEditForm({
-                        ...editForm,
-                        materialItems: editForm.materialItems.map((item, itemIndex) => itemIndex === index ? { ...item, usage: event.target.value } : item)
-                      })}
-                    />
-                  </label>
-                  <label>
-                    <span>{t("quoteFields.unitPrice")}</span>
-                    <input
-                      placeholder="0.00"
-                      type="number"
-                      value={material.unitPrice}
-                      onChange={(event) => setEditForm({
-                        ...editForm,
-                        materialItems: editForm.materialItems.map((item, itemIndex) => itemIndex === index ? { ...item, unitPrice: event.target.value } : item)
-                      })}
-                    />
-                  </label>
-                  <label>
-                    <span>{t("quoteFields.lossRate")}</span>
-                    <input
-                      placeholder="0.05"
-                      type="number"
-                      value={material.lossRate}
-                      onChange={(event) => setEditForm({
-                        ...editForm,
-                        materialItems: editForm.materialItems.map((item, itemIndex) => itemIndex === index ? { ...item, lossRate: event.target.value } : item)
-                      })}
-                    />
-                  </label>
-                  <button
-                    className="secondary-button quote-row-action"
-                    disabled={editForm.materialItems.length <= 1}
-                    onClick={() => setEditForm({ ...editForm, materialItems: editForm.materialItems.filter((_, itemIndex) => itemIndex !== index) })}
-                    type="button"
-                  >
-                    {t("common.delete")}
-                  </button>
+              <div className="form-field wide-field quote-formula-section">
+                <div className="quote-formula-section__header">
+                  <strong>{t("quoteFields.materialQuote")}</strong>
+                  <span>{t("quoteFields.materialFormula")}</span>
                 </div>
-              ))}
-              <div className="form-field">
-                <label>{t("quoteFields.materialRows")}</label>
-                <button className="secondary-button" onClick={() => setEditForm({ ...editForm, materialItems: [...editForm.materialItems, { ...EMPTY_MATERIAL_ITEM }] })} type="button">
+                {editForm.materialItems.map((material, index) => (
+                  <div className="quote-material-row" key={`edit-material-${index}`}>
+                    <label>
+                      <span>{t("quoteFields.materialName").replace("{index}", String(index + 1))}</span>
+                      <input placeholder={t("quoteFields.materialNamePlaceholder")} value={material.name} onChange={(event) => setEditForm({ ...editForm, materialItems: editForm.materialItems.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item) })} />
+                    </label>
+                    <label>
+                      <span>{t("quoteFields.usage")}</span>
+                      <input placeholder="0" type="number" value={material.usage} onChange={(event) => setEditForm({ ...editForm, materialItems: editForm.materialItems.map((item, itemIndex) => itemIndex === index ? { ...item, usage: event.target.value } : item) })} />
+                    </label>
+                    <label>
+                      <span>{t("quoteFields.unitPrice")}</span>
+                      <input placeholder="0.00" type="number" value={material.unitPrice} onChange={(event) => setEditForm({ ...editForm, materialItems: editForm.materialItems.map((item, itemIndex) => itemIndex === index ? { ...item, unitPrice: event.target.value } : item) })} />
+                    </label>
+                    <label>
+                      <span>{t("quoteFields.lossRate")}</span>
+                      <input placeholder="0.05" type="number" value={material.lossRate} onChange={(event) => setEditForm({ ...editForm, materialItems: editForm.materialItems.map((item, itemIndex) => itemIndex === index ? { ...item, lossRate: event.target.value } : item) })} />
+                    </label>
+                    <button className="secondary-button quote-row-action" disabled={editForm.materialItems.length <= 1} onClick={() => setEditForm({ ...editForm, materialItems: editForm.materialItems.filter((_, itemIndex) => itemIndex !== index) })} type="button">
+                      {t("common.delete")}
+                    </button>
+                  </div>
+                ))}
+                <div className="quote-formula-grid quote-formula-grid--three">
+                  <label>
+                    <span>{t("quoteFields.materialProfitRate")}</span>
+                    <input type="number" placeholder="0.10" value={editForm.materialProfitRate} onChange={(event) => setEditForm({ ...editForm, materialProfitRate: event.target.value })} />
+                  </label>
+                  <label>
+                    <span>{t("quoteFields.materialCostAfterLoss")}</span>
+                    <input readOnly value={(editSummary.breakdown?.materialCost ?? 0).toFixed(2)} />
+                  </label>
+                  <label>
+                    <span>{t("quoteFields.materialQuote")}</span>
+                    <input readOnly value={editSummary.materialCost.toFixed(2)} />
+                  </label>
+                </div>
+                <button className="secondary-button quote-add-material-button" onClick={() => setEditForm({ ...editForm, materialItems: [...editForm.materialItems, { ...EMPTY_MATERIAL_ITEM }] })} type="button">
                   {t("quoteFields.addMaterial")}
                 </button>
               </div>
-              <div className="form-field">
-                <label>{t("quoteFields.materialProfitRateHint")}</label>
-                <input type="number" value={editForm.materialProfitRate} onChange={(e) => setEditForm({ ...editForm, materialProfitRate: e.target.value })} />
+
+              <div className="form-field wide-field quote-formula-section">
+                <div className="quote-formula-section__header">
+                  <strong>{t("quoteFields.processingCost")}</strong>
+                  <span>{t("quoteFields.processingFormula")}</span>
+                </div>
+                <div className="quote-formula-grid quote-formula-grid--four">
+                  <label>
+                    <span>{t("quoteFields.processingTime")}</span>
+                    <input type="number" value={editForm.processingTime} onChange={(event) => setEditForm({ ...editForm, processingTime: event.target.value })} />
+                  </label>
+                  <label>
+                    <span>{t("quoteFields.hourlyRate")}</span>
+                    <input type="number" value={editForm.processingHourlyRate} onChange={(event) => setEditForm({ ...editForm, processingHourlyRate: event.target.value })} />
+                  </label>
+                  <label>
+                    <span>{t("quoteFields.processingProfitRate")}</span>
+                    <input type="number" placeholder="0.10" value={editForm.processingProfitRate} onChange={(event) => setEditForm({ ...editForm, processingProfitRate: event.target.value })} />
+                  </label>
+                  <label>
+                    <span>{t("quoteFields.processingQuote")}</span>
+                    <input readOnly value={editSummary.processingCost.toFixed(2)} />
+                  </label>
+                </div>
               </div>
-              <div className="form-field">
-                <label>{t("quoteFields.processingTime")}</label>
-                <input type="number" value={editForm.processingTime} onChange={(e) => setEditForm({ ...editForm, processingTime: e.target.value })} />
+
+              <div className="form-field wide-field quote-formula-section">
+                <div className="quote-formula-section__header">
+                  <strong>{t("quoteFields.shipping")}</strong>
+                  <span>{t("quoteFields.shippingFormula")}</span>
+                </div>
+                <div className="quote-formula-subtitle">{t("quoteFields.volumeWeightFormula")}</div>
+                <div className="quote-formula-grid quote-formula-grid--four">
+                  <label>
+                    <span>{t("quoteFields.length")}</span>
+                    <input type="number" value={editForm.packageLength} onChange={(event) => setEditForm({ ...editForm, packageLength: event.target.value })} />
+                  </label>
+                  <label>
+                    <span>{t("quoteFields.width")}</span>
+                    <input type="number" value={editForm.packageWidth} onChange={(event) => setEditForm({ ...editForm, packageWidth: event.target.value })} />
+                  </label>
+                  <label>
+                    <span>{t("quoteFields.height")}</span>
+                    <input type="number" value={editForm.packageHeight} onChange={(event) => setEditForm({ ...editForm, packageHeight: event.target.value })} />
+                  </label>
+                  <label>
+                    <span>{t("quoteFields.volumeDivisor")}</span>
+                    <input type="number" value={editForm.volumeDivisor} onChange={(event) => setEditForm({ ...editForm, volumeDivisor: event.target.value })} />
+                  </label>
+                </div>
+                <div className="quote-formula-subtitle">{t("quoteFields.shippingCostFormula")}</div>
+                <div className="quote-formula-grid quote-formula-grid--four">
+                  <label>
+                    <span>{t("quoteFields.volumeWeight")}</span>
+                    <input readOnly value={(editSummary.breakdown?.volumeWeight ?? 0).toFixed(2)} />
+                  </label>
+                  <label>
+                    <span>{t("quoteFields.grossWeight")}</span>
+                    <input type="number" value={editForm.grossWeight} onChange={(event) => setEditForm({ ...editForm, grossWeight: event.target.value })} />
+                  </label>
+                  <label>
+                    <span>{t("quoteFields.shippingUnitPrice")}</span>
+                    <input type="number" value={editForm.shippingUnitPrice} onChange={(event) => setEditForm({ ...editForm, shippingUnitPrice: event.target.value })} />
+                  </label>
+                  <label>
+                    <span>{t("quoteFields.shipping")}</span>
+                    <input readOnly value={editSummary.shippingCost.toFixed(2)} />
+                  </label>
+                </div>
               </div>
-              <div className="form-field">
-                <label>{t("quoteFields.processingHourlyRate")}</label>
-                <input type="number" value={editForm.processingHourlyRate} onChange={(e) => setEditForm({ ...editForm, processingHourlyRate: e.target.value })} />
-              </div>
-              <div className="form-field">
-                <label>{t("quoteFields.processingProfitRateHint")}</label>
-                <input type="number" value={editForm.processingProfitRate} onChange={(e) => setEditForm({ ...editForm, processingProfitRate: e.target.value })} />
-              </div>
-              <div className="form-field">
-                <label>{t("quoteFields.grossWeight")}</label>
-                <input type="number" value={editForm.grossWeight} onChange={(e) => setEditForm({ ...editForm, grossWeight: e.target.value })} />
-              </div>
-              <div className="form-field wide-field quote-inline-grid quote-dimension-grid">
-                <label>
-                  <span>{t("quoteFields.length")}</span>
-                  <input type="number" value={editForm.packageLength} onChange={(event) => setEditForm({ ...editForm, packageLength: event.target.value })} />
-                </label>
-                <label>
-                  <span>{t("quoteFields.width")}</span>
-                  <input type="number" value={editForm.packageWidth} onChange={(event) => setEditForm({ ...editForm, packageWidth: event.target.value })} />
-                </label>
-                <label>
-                  <span>{t("quoteFields.height")}</span>
-                  <input type="number" value={editForm.packageHeight} onChange={(event) => setEditForm({ ...editForm, packageHeight: event.target.value })} />
-                </label>
-                <label>
-                  <span>{t("quoteFields.volumeDivisor")}</span>
-                  <input type="number" value={editForm.volumeDivisor} onChange={(event) => setEditForm({ ...editForm, volumeDivisor: event.target.value })} />
-                </label>
-              </div>
-              <div className="form-field">
-                <label>{t("quoteFields.volumeWeight")}</label>
-                <input readOnly value={(editSummary.breakdown?.volumeWeight ?? 0).toFixed(2)} />
-              </div>
-              <div className="form-field">
-                <label>{t("quoteFields.shippingUnitPrice")}</label>
-                <input type="number" value={editForm.shippingUnitPrice} onChange={(e) => setEditForm({ ...editForm, shippingUnitPrice: e.target.value })} />
-              </div>
-              <div className="form-field">
-                <label>{t("quoteFields.vatRateHint")}</label>
-                <input type="number" value={editForm.vatRate} onChange={(e) => setEditForm({ ...editForm, vatRate: e.target.value })} />
+
+              <div className="form-field wide-field quote-formula-section">
+                <div className="quote-formula-section__header">
+                  <strong>{t("quoteFields.taxCost")}</strong>
+                  <span>{t("quoteFields.taxFormula")}</span>
+                </div>
+                <div className="quote-formula-grid quote-formula-grid--three">
+                  <label>
+                    <span>{t("quoteFields.taxBase")}</span>
+                    <input readOnly value={(editSummary.breakdown?.taxBase ?? 0).toFixed(2)} />
+                  </label>
+                  <label>
+                    <span>{t("quoteFields.vatRate")}</span>
+                    <input type="number" placeholder="0.13" value={editForm.vatRate} onChange={(event) => setEditForm({ ...editForm, vatRate: event.target.value })} />
+                  </label>
+                  <label>
+                    <span>{t("quoteFields.taxCost")}</span>
+                    <input readOnly value={editSummary.taxCost.toFixed(2)} />
+                  </label>
+                </div>
               </div>
             </>
           ) : (
-            <>
-              <div className="form-field">
-                <label>{t("quoteFields.materialCost")}</label>
-                <input type="number" value={editForm.materialCost} onChange={(e) => setEditForm({ ...editForm, materialCost: e.target.value })} />
+            <div className="form-field wide-field quote-formula-section">
+              <div className="quote-formula-section__header">
+                <strong>{t("quoteFields.directMode")}</strong>
+                <span>{t("quoteFields.directFormula")}</span>
               </div>
-              <div className="form-field">
-                <label>{t("quoteFields.processingCost")}</label>
-                <input type="number" value={editForm.processingCost} onChange={(e) => setEditForm({ ...editForm, processingCost: e.target.value })} />
+              <div className="quote-formula-grid quote-formula-grid--four">
+                <label>
+                  <span>{t("quoteFields.materialCost")}</span>
+                  <input type="number" value={editForm.materialCost} onChange={(event) => setEditForm({ ...editForm, materialCost: event.target.value })} />
+                </label>
+                <label>
+                  <span>{t("quoteFields.processingCost")}</span>
+                  <input type="number" value={editForm.processingCost} onChange={(event) => setEditForm({ ...editForm, processingCost: event.target.value })} />
+                </label>
+                <label>
+                  <span>{t("quoteFields.taxCost")}</span>
+                  <input type="number" value={editForm.taxCost} onChange={(event) => setEditForm({ ...editForm, taxCost: event.target.value })} />
+                </label>
+                <label>
+                  <span>{t("quoteFields.shipping")}</span>
+                  <input type="number" value={editForm.shippingCost} onChange={(event) => setEditForm({ ...editForm, shippingCost: event.target.value })} />
+                </label>
               </div>
-              <div className="form-field">
-                <label>{t("quoteFields.taxCost")}</label>
-                <input type="number" value={editForm.taxCost} onChange={(e) => setEditForm({ ...editForm, taxCost: e.target.value })} />
-              </div>
-              <div className="form-field">
-                <label>{t("quoteFields.shipping")}</label>
-                <input type="number" value={editForm.shippingCost} onChange={(e) => setEditForm({ ...editForm, shippingCost: e.target.value })} />
-              </div>
-            </>
+            </div>
           )}
-          <div className="form-field">
-            <label>{t("quoteFields.discountAmount")}</label>
-            <input type="number" value={editForm.discountAmount} onChange={(e) => setEditForm({ ...editForm, discountAmount: e.target.value })} />
+          <div className="form-field wide-field quote-formula-section">
+            <div className="quote-formula-section__header">
+              <strong>{t("quoteFields.summary")}</strong>
+              <span>{t("quoteFields.summaryFormula")}</span>
+            </div>
+            <div className="quote-formula-grid quote-formula-grid--three">
+              <label>
+                <span>{t("quoteFields.discountAmount")}</span>
+                <input type="number" value={editForm.discountAmount} onChange={(event) => setEditForm({ ...editForm, discountAmount: event.target.value })} />
+              </label>
+              <label>
+                <span>{t("quoteFields.total")}</span>
+                <input readOnly value={editSummary.total.toFixed(2)} />
+              </label>
+              <label>
+                <span>{t("quoteFields.unitPrice")}</span>
+                <input readOnly value={editSummary.unitPrice.toFixed(2)} />
+              </label>
+            </div>
           </div>
           <div className="form-field">
             <label>{t("quoteFields.validUntil")}</label>
@@ -1969,18 +2020,6 @@ export function QuotePanel({ customerId }: { customerId: string }) {
           <div className="form-field wide-field">
             <label>{t("common.notes")}</label>
             <textarea value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} rows={3} />
-          </div>
-          <div className="form-field">
-            <label>
-              <span>{t("quoteFields.unitPrice")}</span>
-              <input readOnly value={editSummary.unitPrice.toFixed(2)} />
-            </label>
-          </div>
-          <div className="form-field">
-            <label>
-              <span>{t("quoteFields.total")}</span>
-              <input readOnly value={editSummary.total.toFixed(2)} />
-            </label>
           </div>
           {editValidationMessage ? <div className="error-state">{editValidationMessage}</div> : null}
         </div>
@@ -2085,7 +2124,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
                 </div>
                 <div className="history-timeline__content">
                   <div className="history-timeline__header">
-                    <strong>{historyActionLabel(item.action)}</strong>
+                    <strong>{historyActionLabel(item)}</strong>
                     <time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleString()}</time>
                   </div>
                   <span className="history-timeline__meta">{historyActorLabel(item)}</span>
