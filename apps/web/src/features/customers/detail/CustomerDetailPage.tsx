@@ -148,7 +148,7 @@ export function CustomerDetailPage() {
       <DetailPageHeader
         backTo="/customers"
         backLabel={t("customerDetail.backToPool")}
-        eyebrow={customer?.websiteDomain ?? `Customer #${id}`}
+        eyebrow={customer?.websiteDomain}
         title={customer?.name ?? t("customerDetail.detailFallbackTitle")}
         breadcrumbs={[
           { label: t("customerDetail.breadcrumbCustomers"), to: "/customers" },

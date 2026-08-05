@@ -782,8 +782,9 @@ async function main() {
 
   {
     const { service, calls } = buildService("PREPARING", { status: "SENT", approvalStatus: "APPROVED" });
-    await service.rejectQuoteByCustomer(user, "quote-1", {});
+    const updated = await service.rejectQuoteByCustomer(user, "quote-1", {});
     assert.equal(calls.quoteUpdate?.status, "REJECTED");
+    assert.equal(updated.approvalStatus, "APPROVED");
   }
 
   {
