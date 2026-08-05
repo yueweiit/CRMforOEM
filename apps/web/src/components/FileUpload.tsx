@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { apiDelete, apiGet, apiGetBlob, apiUpload } from "../api/http";
+import { useI18n } from "../i18n";
 import { DeleteIconButton } from "./DeleteIconButton";
 
 type FileAssetMeta = {
@@ -42,6 +43,7 @@ type PreviewState = {
 type ApiMode = "signed" | "rich";
 
 export function FileUpload(props: FileUploadProps) {
+  const { t } = useI18n();
   const [items, setItems] = useState<FilePreviewItem[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -218,7 +220,7 @@ export function FileUpload(props: FileUploadProps) {
       {items.length ? (
         <div className="file-upload-grid">
           {items.map((item) => (
-            <div className="file-upload-card" key={item.id}>
+            <div className={`file-upload-card ${item.thumbUrl ? "file-upload-card-image" : "file-upload-card-document"}`} key={item.id}>
               {item.thumbUrl ? (
                 <button className="file-upload-thumb" onClick={() => void openRaw(item)} type="button">
                   <img alt={item.originalName} src={item.thumbUrl} />
@@ -226,7 +228,7 @@ export function FileUpload(props: FileUploadProps) {
               ) : (
                 <button className="file-upload-file" onClick={() => void openRaw(item)} type="button">
                   <strong>{item.originalName}</strong>
-                  <span>{item.mimeType ?? "文件"}</span>
+                  <span>{t(getFileTypeTranslationKey(item.mimeType))}</span>
                 </button>
               )}
               <div className="toolbar">
@@ -352,5 +354,32 @@ function isMissingFileError(error: unknown) {
 function releasePreview(preview: PreviewState | null) {
   if (preview?.managed && preview.url.startsWith("blob:")) {
     URL.revokeObjectURL(preview.url);
+  }
+}
+
+function getFileTypeTranslationKey(mimeType?: string | null) {
+  if (mimeType?.startsWith("image/")) return "common.fileTypeImage" as const;
+  if (mimeType?.startsWith("video/")) return "common.fileTypeVideo" as const;
+  if (mimeType?.startsWith("audio/")) return "common.fileTypeAudio" as const;
+
+  switch (mimeType) {
+    case "application/pdf":
+      return "common.fileTypePdf" as const;
+    case "application/vnd.ms-excel":
+    case "application/vnd.ms-excel.sheet.macroenabled.12":
+    case "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+      return "common.fileTypeExcel" as const;
+    case "application/msword":
+    case "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+      return "common.fileTypeWord" as const;
+    case "application/vnd.ms-powerpoint":
+    case "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+      return "common.fileTypePresentation" as const;
+    case "text/csv":
+      return "common.fileTypeCsv" as const;
+    case "text/plain":
+      return "common.fileTypeText" as const;
+    default:
+      return "common.fileTypeFile" as const;
   }
 }

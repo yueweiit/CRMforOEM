@@ -3257,6 +3257,13 @@ td small {
   background: #fbfbf8;
 }
 
+.file-upload-card-document {
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+}
+
 .file-upload-thumb,
 .file-upload-file {
   width: 100%;
@@ -3287,6 +3294,13 @@ td small {
   text-align: left;
 }
 
+.file-upload-card-document .file-upload-file {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
 .file-upload-file strong {
   display: block;
   line-height: 1.35;
@@ -3296,6 +3310,28 @@ td small {
 .file-upload-file span {
   color: #718096;
   font-size: 12px;
+}
+
+.file-upload-card-document .file-upload-file strong,
+.file-upload-card-document .file-upload-file span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-upload-card-document .toolbar {
+  flex-wrap: nowrap;
+}
+
+@media (max-width: 560px) {
+  .file-upload-card-document {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .file-upload-card-document .toolbar {
+    justify-content: flex-start;
+  }
 }
 
 .spec-editor {

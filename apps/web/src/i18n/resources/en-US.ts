@@ -63,7 +63,17 @@ export const enUS = {
     loaded: "loaded",
     sent: "Sent",
     replied: "Replied",
-    optionalNote: "Notes (optional)"
+    optionalNote: "Notes (optional)",
+    fileTypeFile: "File",
+    fileTypeImage: "Image",
+    fileTypePdf: "PDF file",
+    fileTypeExcel: "Excel file",
+    fileTypeWord: "Word document",
+    fileTypePresentation: "Presentation",
+    fileTypeCsv: "CSV file",
+    fileTypeText: "Text file",
+    fileTypeVideo: "Video",
+    fileTypeAudio: "Audio"
   },
   nav: {
     dashboard: "Dashboard",

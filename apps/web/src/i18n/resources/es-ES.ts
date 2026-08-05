@@ -63,7 +63,17 @@ export const esES = {
     loaded: "cargados",
     sent: "Enviados",
     replied: "Respuestas",
-    optionalNote: "Notas (opcional)"
+    optionalNote: "Notas (opcional)",
+    fileTypeFile: "Archivo",
+    fileTypeImage: "Imagen",
+    fileTypePdf: "Archivo PDF",
+    fileTypeExcel: "Archivo de Excel",
+    fileTypeWord: "Documento de Word",
+    fileTypePresentation: "Presentación",
+    fileTypeCsv: "Archivo CSV",
+    fileTypeText: "Archivo de texto",
+    fileTypeVideo: "Video",
+    fileTypeAudio: "Audio"
   },
   nav: {
     dashboard: "Panel",

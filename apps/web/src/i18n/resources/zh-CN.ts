@@ -63,7 +63,17 @@ export const zhCN = {
     loaded: "已加载",
     sent: "发送",
     replied: "回复",
-    optionalNote: "备注（可选）"
+    optionalNote: "备注（可选）",
+    fileTypeFile: "文件",
+    fileTypeImage: "图片",
+    fileTypePdf: "PDF 文件",
+    fileTypeExcel: "Excel 文件",
+    fileTypeWord: "Word 文档",
+    fileTypePresentation: "演示文稿",
+    fileTypeCsv: "CSV 文件",
+    fileTypeText: "文本文件",
+    fileTypeVideo: "视频",
+    fileTypeAudio: "音频"
   },
   nav: {
     dashboard: "工作台",
