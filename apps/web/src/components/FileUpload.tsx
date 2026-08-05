@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { apiDelete, apiGet, apiGetBlob, apiUpload } from "../api/http";
 import { useI18n } from "../i18n";
+import { repairMojibakeFileName } from "../shared/utils/file-name";
 import { DeleteIconButton } from "./DeleteIconButton";
 
 type FileAssetMeta = {
@@ -24,6 +25,7 @@ type FileUploadProps = {
   entityType: string;
   entityId?: string;
   multiple?: boolean;
+  accept?: string;
   readOnly?: boolean;
 };
 
@@ -125,6 +127,7 @@ export function FileUpload(props: FileUploadProps) {
       for (const file of selected) {
         const formData = new FormData();
         formData.append("file", file);
+        formData.append("fileName", file.name);
         formData.append("entityType", props.entityType);
         if (props.entityId) {
           formData.append("entityId", props.entityId);
@@ -203,7 +206,7 @@ export function FileUpload(props: FileUploadProps) {
             hidden
             multiple={props.multiple}
             type="file"
-            accept="image/*,.pdf"
+            accept={props.accept ?? "image/*,.pdf"}
             onChange={(event) => {
               void handleSelect(event.target.files);
               event.currentTarget.value = "";
@@ -309,7 +312,7 @@ async function loadFileItem(id: string, mode: ApiMode, objectUrls: string[]) {
     const signed = await apiGet<SignedFileAsset>(`/upload/${id}/url`);
     return {
       id: signed.id,
-      originalName: signed.originalName,
+      originalName: repairMojibakeFileName(signed.originalName),
       mimeType: signed.mimeType,
       thumbUrl: signed.mimeType?.startsWith("image/") ? signed.url : undefined,
       rawUrl: signed.url
@@ -330,7 +333,7 @@ async function loadFileItem(id: string, mode: ApiMode, objectUrls: string[]) {
     thumbUrl = raw.url;
   }
 
-  return { ...meta, thumbUrl, rawUrl };
+  return { ...meta, originalName: repairMojibakeFileName(meta.originalName), thumbUrl, rawUrl };
 }
 
 async function buildRawUrl(id: string, objectUrls?: string[]) {

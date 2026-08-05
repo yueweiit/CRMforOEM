@@ -29,6 +29,7 @@ export const zhCN = {
     phone: "电话",
     title: "职位",
     updatedAt: "更新时间",
+    createdAt: "创建日期",
     date: "日期",
     time: "时间",
     type: "类型",
@@ -428,7 +429,113 @@ export const zhCN = {
     riskPenaltyMax: "风险最大扣分",
     riskPenaltyDescription: "黑名单、信息异常、低可信度等风险最多可扣分数",
     saveConfig: "保存配置",
-    resetDefault: "恢复默认"
+    resetDefault: "恢复默认",
+    roleManagement: {
+      roleList: "角色列表",
+      allData: "全部数据",
+      teamData: "团队数据",
+      personalData: "个人数据",
+      inheritsRoles: "包含 {roles} 的权限",
+      roles: {
+        admin: "系统管理员",
+        executive: "管理层",
+        salesManager: "销售主管",
+        salesRep: "业务员",
+        operator: "运营人员"
+      },
+      modules: {
+        customers: "客户管理",
+        website: "官网分析",
+        research: "背调报告",
+        scoring: "OEM评分",
+        emails: "邮件中心",
+        dashboards: "数据看板",
+        knowledge: "企业资料库",
+        settings: "系统设置"
+      },
+      noRoles: "暂无角色数据。",
+      readOnlyHint: "当前账号仅可查看角色权限，只有拥有\"角色权限管理\"权限的用户可以修改。",
+      inheritanceHint: "上级角色自动拥有下级角色的全部权限。灰色虚线勾选表示来自下级角色包含，不可在当前角色中单独取消。",
+      permissionCount: "{current}/{total} 项",
+      inheritedTooltip: "来自下级角色继承，不可在当前角色单独取消",
+      directTooltip: "当前角色直接授权",
+      removedTooltip: "已从当前角色移除，保存后生效",
+      dependsTooltip: "依赖：{deps}",
+      confirmSave: "修改角色权限会影响该角色下所有用户。保存后相关用户可能需要重新登录。确认保存？",
+      saving: "保存中...",
+      saveRolePermissions: "保存角色权限",
+      cancelEdit: "取消修改",
+      savingTitle: "保存中",
+      savingMessage: "正在保存角色权限配置。",
+      saveSuccessTitle: "保存成功",
+      saveSuccessMessage: "角色权限已更新（{direct} 项直接授权，展开为 {total} 项含依赖）。相关用户需重新登录后生效。",
+      saveFailedTitle: "保存失败",
+      saveFailedMessage: "保存失败"
+    }
+  },
+  permissions: {
+    customers: {
+      read: "查看客户",
+      write: "创建和更新客户",
+      assign: "分配客户"
+    },
+    website: {
+      analyze: "分析客户官网"
+    },
+    research: {
+      generate: "生成背调报告"
+    },
+    scoring: {
+      generate: "生成OEM评分"
+    },
+    emails: {
+      generate: "生成邮件草稿",
+      send: "发送已审核邮件",
+      approve: "审核邮件草稿",
+      accounts: {
+        manage_personal: "管理个人邮箱账号",
+        manage_shared: "管理共享邮箱账号"
+      }
+    },
+    dashboards: {
+      personal: {
+        view: "查看个人工作台",
+        legacy: "查看个人工作台（兼容权限）"
+      },
+      view: "查看团队/管理看板",
+      team: "查看团队看板（兼容权限）",
+      management: "查看管理看板（兼容权限）"
+    },
+    knowledge: {
+      write: "维护企业资料库"
+    },
+    settings: {
+      users: {
+        manage: "管理用户"
+      },
+      manage: "管理系统设置（兼容权限）",
+      roles: {
+        manage: "管理角色权限"
+      },
+      audit_logs: {
+        read: "查看操作日志"
+      },
+      customer_dictionaries: {
+        manage: "管理客户字典"
+      },
+      blacklist: {
+        manage: "管理黑名单规则"
+      },
+      ai_config: {
+        manage: "管理AI配置"
+      },
+      scoring_weights: {
+        manage: "管理OEM评分权重"
+      },
+      email_prompt: {
+        manage: "管理邮件提示词配置"
+      }
+    }
   },
   scoringFields: {
     productLineFit: "产品线匹配度",
@@ -513,6 +620,7 @@ export const zhCN = {
   },
   quoteFields: {
     quoteNo: "报价编号",
+    amount: "金额",
     productName: "产品名",
     specification: "规格",
     moq: "MOQ",
@@ -560,6 +668,7 @@ export const zhCN = {
   },
   sampleFields: {
     sampleProduct: "样品/产品",
+    fee: "费用",
     specification: "规格",
     material: "材质",
     process: "工艺",
@@ -588,6 +697,19 @@ export const zhCN = {
     receiver: "接收人",
     destination: "去向",
     recordDate: "记录日期"
+  },
+  sampleStatus: {
+    requested: "待申请",
+    approving: "待审核",
+    rejected: "审批驳回",
+    preparing: "打样中",
+    shipped: "已寄出",
+    delivered: "已签收",
+    feedbackReceived: "已反馈",
+    returned: "已归还",
+    stored: "已留样",
+    voided: "已作废",
+    closed: "已关闭"
   },
   scorePanel: {
     manualOverrideTitle: "手动覆盖OEM评分",

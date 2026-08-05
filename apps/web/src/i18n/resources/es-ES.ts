@@ -29,6 +29,7 @@ export const esES = {
     phone: "Telefono",
     title: "Cargo",
     updatedAt: "Actualizado",
+    createdAt: "Fecha de creacion",
     date: "Fecha",
     time: "Hora",
     type: "Tipo",
@@ -428,7 +429,113 @@ export const esES = {
     riskPenaltyMax: "Penalizacion maxima por riesgo",
     riskPenaltyDescription: "Puntos maximos deducidos por lista negra, informacion anormal o baja credibilidad",
     saveConfig: "Guardar configuracion",
-    resetDefault: "Restaurar defecto"
+    resetDefault: "Restaurar defecto",
+    roleManagement: {
+      roleList: "Lista de roles",
+      allData: "Todos los datos",
+      teamData: "Datos del equipo",
+      personalData: "Datos personales",
+      inheritsRoles: "Incluye permisos de {roles}",
+      roles: {
+        admin: "Administrador del sistema",
+        executive: "Direccion",
+        salesManager: "Gerente de ventas",
+        salesRep: "Representante de ventas",
+        operator: "Especialista de operaciones"
+      },
+      modules: {
+        customers: "Gestion de clientes",
+        website: "Analisis web",
+        research: "Informes de investigacion",
+        scoring: "Puntuacion OEM",
+        emails: "Centro de email",
+        dashboards: "Paneles",
+        knowledge: "Base de conocimiento de la empresa",
+        settings: "Configuracion del sistema"
+      },
+      noRoles: "No hay roles disponibles.",
+      readOnlyHint: "Tu cuenta solo puede ver los permisos de roles. Solo los usuarios con permiso de \"Gestion de permisos de roles\" pueden modificarlos.",
+      inheritanceHint: "Los roles superiores heredan automaticamente todos los permisos de los roles inferiores. Las marcas de verificacion grises punteadas indican permisos heredados de roles inferiores y no se pueden desmarcar independientemente.",
+      permissionCount: "{current}/{total} items",
+      inheritedTooltip: "Heredado de rol inferior, no se puede desmarcar en este rol",
+      directTooltip: "Autorizado directamente para este rol",
+      removedTooltip: "Eliminado de este rol, se aplicara despues de guardar",
+      dependsTooltip: "Dependencias: {deps}",
+      confirmSave: "Modificar permisos de rol afectara a todos los usuarios bajo este rol. Los usuarios relacionados pueden necesitar iniciar sesion de nuevo despues de guardar. Confirmar guardado?",
+      saving: "Guardando...",
+      saveRolePermissions: "Guardar permisos de rol",
+      cancelEdit: "Cancelar cambios",
+      savingTitle: "Guardando",
+      savingMessage: "Guardando configuracion de permisos de rol.",
+      saveSuccessTitle: "Guardado correctamente",
+      saveSuccessMessage: "Permisos de rol actualizados ({direct} autorizaciones directas, expandido a {total} incluyendo dependencias). Los usuarios relacionados necesitan iniciar sesion de nuevo.",
+      saveFailedTitle: "Error al guardar",
+      saveFailedMessage: "Error al guardar"
+    }
+  },
+  permissions: {
+    customers: {
+      read: "Ver clientes",
+      write: "Crear y actualizar clientes",
+      assign: "Asignar clientes"
+    },
+    website: {
+      analyze: "Analizar sitios web de clientes"
+    },
+    research: {
+      generate: "Generar informes de investigacion"
+    },
+    scoring: {
+      generate: "Generar puntuaciones OEM"
+    },
+    emails: {
+      generate: "Generar borradores de email",
+      send: "Enviar emails aprobados",
+      approve: "Aprobar borradores de email",
+      accounts: {
+        manage_personal: "Gestionar cuentas de email personales",
+        manage_shared: "Gestionar cuentas de email compartidas"
+      }
+    },
+    dashboards: {
+      personal: {
+        view: "Ver panel personal",
+        legacy: "Ver panel personal (permiso de compatibilidad)"
+      },
+      view: "Ver paneles de equipo/gestion",
+      team: "Ver panel del equipo (permiso de compatibilidad)",
+      management: "Ver panel de gestion (permiso de compatibilidad)"
+    },
+    knowledge: {
+      write: "Mantener base de conocimiento"
+    },
+    settings: {
+      users: {
+        manage: "Gestionar usuarios"
+      },
+      manage: "Gestionar la configuracion del sistema (permiso de compatibilidad)",
+      roles: {
+        manage: "Gestionar roles y permisos"
+      },
+      audit_logs: {
+        read: "Ver logs de operacion"
+      },
+      customer_dictionaries: {
+        manage: "Gestionar diccionarios de clientes"
+      },
+      blacklist: {
+        manage: "Gestionar reglas de lista negra"
+      },
+      ai_config: {
+        manage: "Gestionar configuracion de AI"
+      },
+      scoring_weights: {
+        manage: "Gestionar pesos de puntuacion OEM"
+      },
+      email_prompt: {
+        manage: "Gestionar configuracion de prompts de email"
+      }
+    }
   },
   scoringFields: {
     productLineFit: "Ajuste de linea de producto",
@@ -513,6 +620,7 @@ export const esES = {
   },
   quoteFields: {
     quoteNo: "No. de cotizacion",
+    amount: "Importe",
     productName: "Nombre de producto",
     specification: "Especificacion",
     moq: "MOQ",
@@ -560,6 +668,7 @@ export const esES = {
   },
   sampleFields: {
     sampleProduct: "Muestra/producto",
+    fee: "Costo",
     specification: "Especificacion",
     material: "Material",
     process: "Proceso",
@@ -588,6 +697,19 @@ export const esES = {
     receiver: "Receptor",
     destination: "Destino",
     recordDate: "Fecha de registro"
+  },
+  sampleStatus: {
+    requested: "Solicitada",
+    approving: "Pendiente de aprobacion",
+    rejected: "Aprobacion rechazada",
+    preparing: "En preparacion",
+    shipped: "Enviada",
+    delivered: "Entregada",
+    feedbackReceived: "Feedback recibido",
+    returned: "Devuelta",
+    stored: "Almacenada",
+    voided: "Anulada",
+    closed: "Cerrada"
   },
   scorePanel: {
     manualOverrideTitle: "Sobrescribir puntuacion OEM manualmente",

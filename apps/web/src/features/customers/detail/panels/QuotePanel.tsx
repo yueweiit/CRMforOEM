@@ -41,6 +41,7 @@ type QuoteCalcMode = "formula" | "direct";
 type MaterialFormItem = { name: string; usage: string; unitPrice: string; lossRate: string };
 type QuoteReviewMode = "submit" | "approve" | "reject";
 type QuoteStatusAction = "send" | "accept" | "rejectCustomer";
+type QuoteAmountSnapshotKey = "total" | "unitPrice" | "material" | "processing" | "tax" | "shipping" | "discount";
 type QuoteNextAction = {
   type: QuoteReviewMode | QuoteStatusAction;
   label: string;
@@ -390,6 +391,10 @@ function formulaAmount(value: string | number | null | undefined) {
   return formulaNumber(value);
 }
 
+function hasFormulaInput(value: string | number | null | undefined) {
+  return value !== null && value !== undefined && value !== "";
+}
+
 function quoteToPricingInput(quote: Quote | null) {
   if (!quote) {
     return null;
@@ -605,6 +610,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
   });
   const [historyQuote, setHistoryQuote] = useState<Quote | null>(null);
   const [detailQuote, setDetailQuote] = useState<Quote | null>(null);
+  const [expandedAmountSnapshotKey, setExpandedAmountSnapshotKey] = useState<QuoteAmountSnapshotKey | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewMode, setReviewMode] = useState<QuoteReviewMode>("approve");
   const [reviewQuote, setReviewQuote] = useState<Quote | null>(null);
@@ -926,6 +932,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
 
   const openDetail = (item: Quote) => {
     setDetailQuote(item);
+    setExpandedAmountSnapshotKey(null);
     setDetailOpen(true);
   };
 
@@ -1055,17 +1062,94 @@ export function QuotePanel({ customerId }: { customerId: string }) {
     { label: "有效期", value: detailQuote?.validUntil ? new Date(detailQuote.validUntil).toLocaleDateString() : "-" },
     { label: "更新时间", value: detailQuote?.updatedAt ? new Date(detailQuote.updatedAt).toLocaleString() : "-" }
   ];
-  const detailQuoteAmountItems = [
-    { label: "报价金额", value: detailMoney(detailQuote, detailQuote?.amount), highlight: true },
-    { label: "单价", value: detailMoney(detailQuote, detailQuote?.unitPrice), highlight: true },
-    { label: "物料价", value: detailMoney(detailQuote, detailQuote?.materialCost) },
-    { label: "加工费", value: detailMoney(detailQuote, detailQuote?.processingCost) },
-    { label: "税费", value: detailMoney(detailQuote, detailQuote?.taxCost) },
-    { label: "运费", value: detailMoney(detailQuote, detailQuote?.shippingCost) },
-    { label: "优惠金额", value: detailMoney(detailQuote, detailQuote?.discountAmount) },
-    { label: "报价模式", value: detailQuote?.calcMode === "formula" ? "公式报价" : "直接报价" },
-    { label: "创建时间", value: detailQuote?.createdAt ? new Date(detailQuote.createdAt).toLocaleString() : "-" }
+  const detailQuoteAmountItems: Array<{ label: string; value: string; highlight?: boolean; snapshotKey?: QuoteAmountSnapshotKey }> = [
+    { label: "报价金额", value: detailMoney(detailQuote, detailQuote?.amount), highlight: true, snapshotKey: "total" },
+    { label: "单价", value: detailMoney(detailQuote, detailQuote?.unitPrice), highlight: true, snapshotKey: "unitPrice" },
+    { label: "物料价", value: detailMoney(detailQuote, detailQuote?.materialCost), snapshotKey: "material" },
+    { label: "加工费", value: detailMoney(detailQuote, detailQuote?.processingCost), snapshotKey: "processing" },
+    { label: "税费", value: detailMoney(detailQuote, detailQuote?.taxCost), snapshotKey: "tax" },
+    { label: "运费", value: detailMoney(detailQuote, detailQuote?.shippingCost), snapshotKey: "shipping" },
+    { label: "优惠金额", value: detailMoney(detailQuote, detailQuote?.discountAmount), snapshotKey: "discount" }
   ];
+  const detailQuoteAmountMeta = [
+    detailQuote?.calcMode === "formula" ? "公式报价" : "直接报价",
+    detailQuote?.createdAt ? `创建于 ${new Date(detailQuote.createdAt).toLocaleString()}` : ""
+  ].filter(Boolean).join(" · ");
+  const expandedAmountSnapshot = detailQuoteAmountItems.find((item) => item.snapshotKey === expandedAmountSnapshotKey);
+  const expandedAmountSnapshotLines = (() => {
+    if (!expandedAmountSnapshotKey || !detailQuote || !detailSnapshot) return [];
+
+    if (detailQuote.calcMode !== "formula" || !detailSnapshot.breakdown) {
+      if (expandedAmountSnapshotKey === "total") {
+        return [{
+          label: "总价 = 物料价 + 加工费 + 税费 + 运费 - 优惠金额",
+          value: `${formulaAmount(detailQuote.materialCost)} + ${formulaAmount(detailQuote.processingCost)} + ${formulaAmount(detailQuote.taxCost)} + ${formulaAmount(detailQuote.shippingCost)} - ${formulaAmount(detailQuote.discountAmount)} = ${formulaAmount(detailQuote.amount)}`
+        }];
+      }
+      if (expandedAmountSnapshotKey === "unitPrice") {
+        return [{
+          label: "单价 = 总价 ÷ 数量",
+          value: `${formulaAmount(detailQuote.amount)} ÷ ${formulaNumber(detailQuote.quantity)} = ${formulaAmount(detailQuote.unitPrice)}`
+        }];
+      }
+      return [];
+    }
+
+    const { breakdown } = detailSnapshot;
+    switch (expandedAmountSnapshotKey) {
+      case "material":
+        return breakdown.materialItems.length ? [
+          ...breakdown.materialItems.map((material) => ({
+            label: `${material.name}：用量 × 单价 × (1 + 损耗率)`,
+            value: `${formulaNumber(material.usage)} × ${formulaAmount(material.unitPrice)} × (1 + ${formulaNumber(material.lossRate)}) = ${formulaAmount(material.cost)}`
+          })),
+          {
+            label: "物料报价 = 物料损耗后成本合计 × (1 + 物料利润率)",
+            value: `${formulaAmount(breakdown.materialCost)} × (1 + ${formulaNumber(detailQuote.materialProfitRate)}) = ${formulaAmount(breakdown.materialQuote)}`
+          }
+        ] : [];
+      case "processing":
+        return hasFormulaInput(detailQuote.processingTime) && hasFormulaInput(detailQuote.processingHourlyRate) ? [{
+          label: "加工费报价 = 加工时间 × 工时费率 × (1 + 利润率)",
+          value: `${formulaNumber(detailQuote.processingTime)} × ${formulaAmount(detailQuote.processingHourlyRate)} × (1 + ${formulaNumber(detailQuote.processingProfitRate)}) = ${formulaAmount(breakdown.processingQuote)}`
+        }] : [];
+      case "shipping":
+        return hasFormulaInput(detailQuote.shippingUnitPrice) && (
+          hasFormulaInput(detailQuote.grossWeight) || (
+            hasFormulaInput(detailQuote.packageLength) &&
+            hasFormulaInput(detailQuote.packageWidth) &&
+            hasFormulaInput(detailQuote.packageHeight) &&
+            hasFormulaInput(detailQuote.volumeDivisor)
+          )
+        ) ? [
+          {
+            label: "体积重量 = 长 × 宽 × 高 ÷ 体积系数",
+            value: `${formulaNumber(detailQuote.packageLength)} × ${formulaNumber(detailQuote.packageWidth)} × ${formulaNumber(detailQuote.packageHeight)} ÷ ${formulaNumber(detailQuote.volumeDivisor)} = ${formulaNumber(breakdown.volumeWeight)}`
+          },
+          {
+            label: "运费 = Max(毛重, 体积重量) × 运输单位价格",
+            value: `Max(${formulaNumber(detailQuote.grossWeight)}, ${formulaNumber(breakdown.volumeWeight)}) × ${formulaAmount(detailQuote.shippingUnitPrice)} = ${formulaAmount(breakdown.shippingCost)}`
+          }
+        ] : [];
+      case "tax":
+        return hasFormulaInput(detailQuote.vatRate) ? [{
+          label: "税费 = (物料报价 + 加工费报价 + 运费) × 增值税率",
+          value: `(${formulaAmount(breakdown.materialQuote)} + ${formulaAmount(breakdown.processingQuote)} + ${formulaAmount(breakdown.shippingCost)}) × ${formulaNumber(detailQuote.vatRate)} = ${formulaAmount(breakdown.taxCost)}`
+        }] : [];
+      case "total":
+        return [{
+          label: "总价 = 物料报价 + 加工费报价 + 税费 + 运费 - 优惠金额",
+          value: `${formulaAmount(detailSnapshot.materialCost)} + ${formulaAmount(detailSnapshot.processingCost)} + ${formulaAmount(detailSnapshot.taxCost)} + ${formulaAmount(detailSnapshot.shippingCost)} - ${formulaAmount(detailSnapshot.discountAmount)} = ${formulaAmount(detailSnapshot.total)}`
+        }];
+      case "unitPrice":
+        return [{
+          label: "单价 = 总价 ÷ 数量",
+          value: `${formulaAmount(detailSnapshot.total)} ÷ ${formulaNumber(detailSnapshot.quantity)} = ${formulaAmount(detailSnapshot.unitPrice)}`
+        }];
+      default:
+        return [];
+    }
+  })();
   const reviewDialogTitle = reviewMode === "submit" ? "提交报价审批" : reviewMode === "approve" ? "通过审批" : "驳回审批";
   const reviewDialogConfirmLabel = reviewMode === "submit" ? "确认提交" : reviewMode === "approve" ? "通过" : "驳回";
   const reviewDialogDescription = reviewMode === "submit" ? "确认提交后，报价将进入待审批状态；备注可留空。" : "备注可留空。";
@@ -1112,15 +1196,21 @@ export function QuotePanel({ customerId }: { customerId: string }) {
           <table className="quote-record-table">
             <thead>
               <tr>
-                <th>报价编号</th>
-                <th>产品</th>
-                <th>规格</th>
-                <th>状态</th>
-                <th>金额</th>
-                <th>数量</th>
-                <th>MOQ</th>
-                <th>创建日期</th>
-                <th>操作</th>
+                <th>{t("quoteFields.quoteNo")}</th>
+                <th>{t("quoteFields.productName")}</th>
+                <th>{t("quoteFields.specification")}</th>
+                <th>{t("quoteFields.amount")}</th>
+                <th>{t("quoteFields.unitPrice")}</th>
+                <th>{t("quoteFields.materialCost")}</th>
+                <th>{t("quoteFields.processingCost")}</th>
+                <th>{t("quoteFields.taxCost")}</th>
+                <th>{t("quoteFields.shipping")}</th>
+                <th>{t("quoteFields.discountAmount")}</th>
+                <th>{t("quoteFields.quantity")}</th>
+                <th>{t("quoteFields.moq")}</th>
+                <th>{t("common.status")}</th>
+                <th>{t("common.createdAt")}</th>
+                <th>{t("common.operation")}</th>
               </tr>
             </thead>
             <tbody>
@@ -1139,14 +1229,20 @@ export function QuotePanel({ customerId }: { customerId: string }) {
                     </div>
                   </td>
                   <td>{item.specification || "未填写"}</td>
+                  <td>{item.amount}</td>
+                  <td>{item.unitPrice}</td>
+                  <td>{item.materialCost}</td>
+                  <td>{item.processingCost}</td>
+                  <td>{item.taxCost}</td>
+                  <td>{item.shippingCost}</td>
+                  <td>{item.discountAmount}</td>
+                  <td>{item.quantity}</td>
+                  <td>{item.moq}</td>
                   <td>
                     <span className={quoteStatusPillClass(quoteDisplayStatus(item))}>
                       {statusLabel(quoteDisplayStatus(item), locale)}
                     </span>
                   </td>
-                  <td>{item.amount}</td>
-                  <td>{item.quantity}</td>
-                  <td>{item.moq}</td>
                   <td>{new Date(item.createdAt).toLocaleDateString()}</td>
                   <td>
                     <div className="quote-record-actions">
@@ -1498,7 +1594,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
 
       <Dialog
         v2
-        className="crm-action-dialog quote-detail-dialog"
+        className="crm-action-dialog quote-dialog quote-detail-dialog"
         title={`报价详情 · ${detailQuote?.quoteNo ?? ""}`}
         width="min(1040px, calc(100vw - 48px))"
         visible={detailOpen}
@@ -1539,16 +1635,57 @@ export function QuotePanel({ customerId }: { customerId: string }) {
           <section className="detail-section sample-detail-section">
             <div className="sample-detail-section__header">
               <h4>金额构成</h4>
-              <span>报价、成本、运费和优惠摘要</span>
+              <span>{detailQuoteAmountMeta}</span>
             </div>
-            <div className="detail-grid sample-detail-grid">
+            <div className="detail-grid sample-detail-grid quote-amount-grid">
               {detailQuoteAmountItems.map((item) => (
-                <div className={item.highlight ? "detail-card sample-detail-card is-highlight" : "detail-card sample-detail-card"} key={item.label}>
-                  <span>{item.label}</span>
-                  <strong>{item.value}</strong>
-                </div>
+                item.snapshotKey ? (
+                  <button
+                    aria-controls="quote-amount-snapshot"
+                    aria-expanded={expandedAmountSnapshotKey === item.snapshotKey}
+                    className={[
+                      "detail-card",
+                      "sample-detail-card",
+                      "quote-amount-card",
+                      item.highlight ? "is-highlight" : "",
+                      expandedAmountSnapshotKey === item.snapshotKey ? "is-expanded" : ""
+                    ].filter(Boolean).join(" ")}
+                    key={item.label}
+                    onClick={() => setExpandedAmountSnapshotKey((current) => current === item.snapshotKey ? null : item.snapshotKey ?? null)}
+                    type="button"
+                  >
+                    <span>{item.label}</span>
+                    <strong>{item.value}</strong>
+                    <ChevronDown aria-hidden="true" size={16} />
+                  </button>
+                ) : (
+                  <div className={item.highlight ? "detail-card sample-detail-card is-highlight" : "detail-card sample-detail-card"} key={item.label}>
+                    <span>{item.label}</span>
+                    <strong>{item.value}</strong>
+                  </div>
+                )
               ))}
             </div>
+            {expandedAmountSnapshot ? (
+              <div aria-live="polite" className="quote-amount-snapshot" id="quote-amount-snapshot">
+                <div className="quote-amount-snapshot__header">
+                  <strong>{expandedAmountSnapshot.label}计算快照</strong>
+                  <button aria-label={`收起${expandedAmountSnapshot.label}计算快照`} onClick={() => setExpandedAmountSnapshotKey(null)} type="button">
+                    <ChevronDown aria-hidden="true" size={16} />
+                  </button>
+                </div>
+                {expandedAmountSnapshotLines.length ? (
+                  <div className="quote-snapshot-formulas">
+                    {expandedAmountSnapshotLines.map((item, index) => (
+                      <div className="quote-snapshot-formula" key={`${item.label}-${index}`}>
+                        <span>{item.label}</span>
+                        <strong>{item.value}</strong>
+                      </div>
+                    ))}
+                  </div>
+                ) : <div className="quote-amount-snapshot__empty">暂无计算快照</div>}
+              </div>
+            ) : null}
           </section>
 
           <section className="detail-section sample-detail-section">
@@ -1570,66 +1707,6 @@ export function QuotePanel({ customerId }: { customerId: string }) {
 
           <section className="detail-section sample-detail-section">
             <div className="sample-detail-section__header">
-              <h4>计算快照</h4>
-              <span>报价公式与金额校验</span>
-            </div>
-            {detailQuote?.calcMode === "formula" && detailSnapshot?.breakdown ? (
-              <>
-                <div className="quote-snapshot-formulas">
-                  {detailSnapshot.breakdown.materialItems.length ? detailSnapshot.breakdown.materialItems.map((material, index) => (
-                    <div className="quote-snapshot-formula" key={`${material.name}-${index}`}>
-                      <span>{material.name}：用量 × 单价 × (1 + 损耗率)</span>
-                      <strong>{formulaNumber(material.usage)} × {formulaAmount(material.unitPrice)} × (1 + {formulaNumber(material.lossRate)}) = {formulaAmount(material.cost)}</strong>
-                    </div>
-                  )) : <div className="empty-state">未填写物料明细。</div>}
-                  <div className="quote-snapshot-formula">
-                    <span>物料报价 = 物料损耗后成本合计 × (1 + 物料利润率)</span>
-                    <strong>{formulaAmount(detailSnapshot.breakdown.materialCost)} × (1 + {formulaNumber(detailQuote.materialProfitRate)}) = {formulaAmount(detailSnapshot.breakdown.materialQuote)}</strong>
-                  </div>
-                  <div className="quote-snapshot-formula">
-                    <span>加工费报价 = 加工时间 × 工时费率 × (1 + 加工利润率)</span>
-                    <strong>{formulaNumber(detailQuote.processingTime)} × {formulaAmount(detailQuote.processingHourlyRate)} × (1 + {formulaNumber(detailQuote.processingProfitRate)}) = {formulaAmount(detailSnapshot.breakdown.processingQuote)}</strong>
-                  </div>
-                  <div className="quote-snapshot-formula">
-                    <span>体积重量 = 长 × 宽 × 高 ÷ 体积系数</span>
-                    <strong>{formulaNumber(detailQuote.packageLength)} × {formulaNumber(detailQuote.packageWidth)} × {formulaNumber(detailQuote.packageHeight)} ÷ {formulaNumber(detailQuote.volumeDivisor)} = {formulaNumber(detailSnapshot.breakdown.volumeWeight)}</strong>
-                  </div>
-                  <div className="quote-snapshot-formula">
-                    <span>运费 = Max(毛重, 体积重量) × 运输单位价格</span>
-                    <strong>Max({formulaNumber(detailQuote.grossWeight)}, {formulaNumber(detailSnapshot.breakdown.volumeWeight)}) × {formulaAmount(detailQuote.shippingUnitPrice)} = {formulaAmount(detailSnapshot.breakdown.shippingCost)}</strong>
-                  </div>
-                  <div className="quote-snapshot-formula">
-                    <span>税费 = (物料报价 + 加工费报价 + 运费) × 增值税率</span>
-                    <strong>({formulaAmount(detailSnapshot.breakdown.materialQuote)} + {formulaAmount(detailSnapshot.breakdown.processingQuote)} + {formulaAmount(detailSnapshot.breakdown.shippingCost)}) × {formulaNumber(detailQuote.vatRate)} = {formulaAmount(detailSnapshot.breakdown.taxCost)}</strong>
-                  </div>
-                  <div className="quote-snapshot-formula">
-                    <span>总价 = 物料报价 + 加工费报价 + 税费 + 运费 - 优惠金额</span>
-                    <strong>{formulaAmount(detailSnapshot.materialCost)} + {formulaAmount(detailSnapshot.processingCost)} + {formulaAmount(detailSnapshot.taxCost)} + {formulaAmount(detailSnapshot.shippingCost)} - {formulaAmount(detailSnapshot.discountAmount)} = {formulaAmount(detailSnapshot.total)}</strong>
-                  </div>
-                  <div className="quote-snapshot-formula">
-                    <span>单价 = 总价 ÷ 数量</span>
-                    <strong>{formulaAmount(detailSnapshot.total)} ÷ {formulaNumber(detailSnapshot.quantity)} = {formulaAmount(detailSnapshot.unitPrice)}</strong>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="quote-snapshot-formulas">
-                  <div className="quote-snapshot-formula">
-                    <span>总价 = 物料价 + 加工费 + 税费 + 运费 - 优惠金额</span>
-                    <strong>{formulaAmount(detailQuote?.materialCost)} + {formulaAmount(detailQuote?.processingCost)} + {formulaAmount(detailQuote?.taxCost)} + {formulaAmount(detailQuote?.shippingCost)} - {formulaAmount(detailQuote?.discountAmount)} = {formulaAmount(detailQuote?.amount)}</strong>
-                  </div>
-                  <div className="quote-snapshot-formula">
-                    <span>单价 = 总价 ÷ 数量</span>
-                    <strong>{formulaAmount(detailQuote?.amount)} ÷ {formulaNumber(detailQuote?.quantity)} = {formulaAmount(detailQuote?.unitPrice)}</strong>
-                  </div>
-                </div>
-              </>
-            )}
-          </section>
-
-          <section className="detail-section sample-detail-section">
-            <div className="sample-detail-section__header">
               <h4>备注</h4>
               <span>审批意见和报价备注</span>
             </div>
@@ -1642,7 +1719,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
 
       <Dialog
         v2
-        className="crm-action-dialog"
+        className="crm-action-dialog quote-dialog"
         title={reviewDialogTitle}
         visible={reviewOpen}
         onClose={closeReview}
@@ -1684,7 +1761,13 @@ export function QuotePanel({ customerId }: { customerId: string }) {
         </div>
       </Dialog>
 
-      <Dialog v2 className="crm-action-dialog" title="编辑报价" visible={editOpen} onClose={() => setEditOpen(false)}
+      <Dialog
+        v2
+        className="crm-action-dialog quote-dialog quote-edit-dialog"
+        title="编辑报价"
+        width="min(1040px, calc(100vw - 48px))"
+        visible={editOpen}
+        onClose={() => setEditOpen(false)}
         footer={
           <div className="toolbar crm-dialog-footer">
             <button className="secondary-button" onClick={() => setEditOpen(false)} type="button">取消</button>
@@ -1905,7 +1988,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
 
       <Dialog
         v2
-        className="crm-action-dialog"
+        className="crm-action-dialog quote-dialog"
         title={`${statusActionLabel || "报价状态"} · ${statusQuote?.quoteNo ?? ""}`}
         visible={statusOpen}
         onClose={() => {
@@ -1967,7 +2050,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
         </div>
       </Dialog>
 
-      <Dialog v2 className="crm-action-dialog" title="确认删除" visible={deleteOpen} onClose={() => setDeleteOpen(false)}
+      <Dialog v2 className="crm-action-dialog quote-dialog" title="确认删除" visible={deleteOpen} onClose={() => setDeleteOpen(false)}
         footer={
           <div className="toolbar crm-dialog-footer">
             <button className="secondary-button" onClick={() => setDeleteOpen(false)} type="button">取消</button>
@@ -1979,7 +2062,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
 
       <Dialog
         v2
-        className="crm-action-dialog"
+        className="crm-action-dialog quote-dialog"
         title={`报价历史记录 · ${historyQuote?.quoteNo ?? ""}`}
         visible={historyOpen}
         onClose={() => setHistoryOpen(false)}

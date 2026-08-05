@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getPermissions, getRoles, updateRolePermissions } from "../../../api/settings";
 import { getCurrentUser, hasPermission } from "../../../auth/permissions";
 import { notifyMutationStep } from "../../../components/Toast";
+import { useI18n } from "../../../i18n";
+import type { TranslationKey } from "../../../i18n/resources";
 import type { RoleRow, PermissionRow } from "../shared/types";
 
 // Role inheritance: direct parent → child (parent includes all descendant permissions recursively)
@@ -13,6 +15,49 @@ const ROLE_CHILDREN: Record<string, string[]> = {
   SALES_REP: [],
   OPERATOR: []
 };
+
+const ROLE_TRANSLATION_KEYS: Record<string, TranslationKey> = {
+  ADMIN: "settings.roleManagement.roles.admin",
+  EXECUTIVE: "settings.roleManagement.roles.executive",
+  SALES_MANAGER: "settings.roleManagement.roles.salesManager",
+  SALES_REP: "settings.roleManagement.roles.salesRep",
+  OPERATOR: "settings.roleManagement.roles.operator"
+};
+
+const MODULE_TRANSLATION_KEYS: Record<string, TranslationKey> = {
+  customers: "settings.roleManagement.modules.customers",
+  website: "settings.roleManagement.modules.website",
+  research: "settings.roleManagement.modules.research",
+  scoring: "settings.roleManagement.modules.scoring",
+  emails: "settings.roleManagement.modules.emails",
+  dashboards: "settings.roleManagement.modules.dashboards",
+  knowledge: "settings.roleManagement.modules.knowledge",
+  settings: "settings.roleManagement.modules.settings"
+};
+
+const PERMISSION_TRANSLATION_KEYS: Record<string, TranslationKey> = {
+  "dashboards.personal": "permissions.dashboards.personal.legacy"
+};
+
+type Translate = (key: TranslationKey) => string;
+
+function localizedLabel(key: TranslationKey | undefined, fallback: string, t: Translate) {
+  if (!key) return fallback;
+  const translated = t(key);
+  return translated === key ? fallback : translated;
+}
+
+function localizedRoleLabel(code: string, fallback: string, t: Translate) {
+  return localizedLabel(ROLE_TRANSLATION_KEYS[code], fallback, t);
+}
+
+function localizedModuleLabel(module: string, fallback: string, t: Translate) {
+  return localizedLabel(MODULE_TRANSLATION_KEYS[module], fallback, t);
+}
+
+function localizedPermissionLabel(code: string, fallback: string, t: Translate) {
+  return localizedLabel(PERMISSION_TRANSLATION_KEYS[code] ?? `permissions.${code}` as TranslationKey, fallback, t);
+}
 
 function collectDescendantCodes(rootCode: string): string[] {
   const result = new Set<string>();
@@ -51,6 +96,7 @@ export function RoleManagement() {
   const queryClient = useQueryClient();
   const currentUser = getCurrentUser();
   const canEdit = hasPermission(currentUser, "settings.roles.manage");
+  const { t } = useI18n();
 
   const { data: roles = [] } = useQuery({
     queryKey: ["settings-roles"],
@@ -126,18 +172,18 @@ export function RoleManagement() {
 
   const saveRole = useMutation({
     mutationFn: () => updateRolePermissions<{ permissionCodes: string[]; expandedFrom: string[] }>(selectedRoleId, [...editedCodes]),
-    onMutate: () => notifyMutationStep({ phase: "loading", title: "保存中", message: "正在保存角色权限配置。", dedupeKey: "role-permissions-save" }),
+    onMutate: () => notifyMutationStep({ phase: "loading", title: t("settings.roleManagement.savingTitle"), message: t("settings.roleManagement.savingMessage"), dedupeKey: "role-permissions-save" }),
     onSuccess: (result: { permissionCodes: string[]; expandedFrom: string[] }) => {
       notifyMutationStep({
         phase: "success",
-        title: "保存成功",
-        message: `角色权限已更新（${result.expandedFrom.length} 项直接授权，展开为 ${result.permissionCodes.length} 项含依赖）。相关用户需重新登录后生效。`
+        title: t("settings.roleManagement.saveSuccessTitle"),
+        message: t("settings.roleManagement.saveSuccessMessage").replace("{direct}", String(result.expandedFrom.length)).replace("{total}", String(result.permissionCodes.length))
       });
       queryClient.invalidateQueries({ queryKey: ["settings-roles"] });
       setHasChanges(false);
     },
     onError: (error) => {
-      notifyMutationStep({ phase: "error", title: "保存失败", message: error instanceof Error ? error.message : "保存失败" });
+      notifyMutationStep({ phase: "error", title: t("settings.roleManagement.saveFailedTitle"), message: error instanceof Error ? error.message : t("settings.roleManagement.saveFailedMessage") });
     }
   });
 
@@ -148,7 +194,7 @@ export function RoleManagement() {
     }
   }, [roles, selectedRoleId]);
 
-  if (!roles.length) return <div className="empty-state">暂无角色数据。</div>;
+  if (!roles.length) return <div className="empty-state">{t("settings.roleManagement.noRoles")}</div>;
 
   const sortedRoles = [...roles].sort((a, b) => (b.level ?? 0) - (a.level ?? 0));
 
@@ -157,7 +203,7 @@ export function RoleManagement() {
       {/* Left: role list */}
       <nav className="settings-role-sidebar">
         <div className="settings-role-sidebar-title">
-          角色列表
+          {t("settings.roleManagement.roleList")}
         </div>
         {sortedRoles.map((role) => {
           const childCodes = ROLE_CHILDREN[role.code] ?? [];
@@ -169,10 +215,14 @@ export function RoleManagement() {
               onClick={() => { setSelectedRoleId(role.id); }}
               type="button"
             >
-              <div className="settings-role-card-name">{role.name}</div>
+              <div className="settings-role-card-name">{localizedRoleLabel(role.code, role.name, t)}</div>
               <div className="settings-role-card-meta">
-                {role.dataScope === "ALL" ? "全部数据" : role.dataScope === "TEAM" ? "团队数据" : "个人数据"}
-                {childCodes.length > 0 ? <span style={{ marginLeft: 6 }}>▸ {childCodes.join(", ")}</span> : null}
+                {role.dataScope === "ALL" ? t("settings.roleManagement.allData") : role.dataScope === "TEAM" ? t("settings.roleManagement.teamData") : t("settings.roleManagement.personalData")}
+                {childCodes.length > 0 ? (
+                  <span style={{ marginLeft: 6 }}>
+                    {t("settings.roleManagement.inheritsRoles").replace("{roles}", childCodes.map((code) => localizedRoleLabel(code, code, t)).join(", "))}
+                  </span>
+                ) : null}
               </div>
             </button>
           );
@@ -183,12 +233,12 @@ export function RoleManagement() {
       <div className="page-stack">
         {!canEdit ? (
           <div className="empty-state" style={{ background: "#fef9c3", color: "#854d0e", padding: 12, borderRadius: 6, fontSize: 13 }}>
-            当前账号仅可查看角色权限，只有拥有"角色权限管理"权限的用户可以修改。
+            {t("settings.roleManagement.readOnlyHint")}
           </div>
         ) : null}
 
         <div className="empty-state" style={{ fontSize: 13 }}>
-          上级角色自动拥有下级角色的全部权限。灰色虚线勾选表示来自下级角色包含，不可在当前角色中单独取消。
+          {t("settings.roleManagement.inheritanceHint")}
         </div>
 
         {selectedRole ? (
@@ -196,8 +246,8 @@ export function RoleManagement() {
             {moduleGroups.map(([module, { group, permissions }]) => (
               <section className="panel" key={module}>
                 <div className="panel-title">
-                  <h2>{group}</h2>
-                  <span>{permissions.filter((p) => effectiveCodes.has(p.code)).length}/{permissions.length} 项</span>
+                  <h2>{localizedModuleLabel(module, group, t)}</h2>
+                  <span>{t("settings.roleManagement.permissionCount").replace("{current}", String(permissions.filter((p) => effectiveCodes.has(p.code)).length)).replace("{total}", String(permissions.length))}</span>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 16px" }}>
                   {permissions.map((perm) => {
@@ -221,10 +271,10 @@ export function RoleManagement() {
                         }}
                         title={
                           [
-                            isInheritedOnly ? "来自下级角色继承，不可在当前角色单独取消" : "",
-                            isNowDirect ? "当前角色直接授权" : "",
-                            wasDirect && !isChecked ? "已从当前角色移除，保存后生效" : "",
-                            hasDep ? `依赖：${perm.dependsOn.join("、")}` : ""
+                            isInheritedOnly ? t("settings.roleManagement.inheritedTooltip") : "",
+                            isNowDirect ? t("settings.roleManagement.directTooltip") : "",
+                            wasDirect && !isChecked ? t("settings.roleManagement.removedTooltip") : "",
+                            hasDep ? t("settings.roleManagement.dependsTooltip").replace("{deps}", perm.dependsOn.map((dependency) => localizedPermissionLabel(dependency, dependency, t)).join(", ")) : ""
                           ].filter(Boolean).join("\n") || perm.name
                         }
                       >
@@ -236,8 +286,7 @@ export function RoleManagement() {
                           style={isInheritedOnly ? { accentColor: "var(--color-muted)", opacity: 0.5 } : undefined}
                         />
                         <span style={{ flex: 1 }}>
-                          {perm.name}
-                          <span style={{ color: "var(--color-muted)", fontSize: 11, marginLeft: 4 }}>{perm.code}</span>
+                          {localizedPermissionLabel(perm.code, perm.name, t)}
                         </span>
                       </label>
                     );
@@ -252,12 +301,12 @@ export function RoleManagement() {
                   className="primary-button"
                   disabled={saveRole.isPending}
                   onClick={() => {
-                    if (window.confirm("修改角色权限会影响该角色下所有用户。保存后相关用户可能需要重新登录。确认保存？")) {
+                    if (window.confirm(t("settings.roleManagement.confirmSave"))) {
                       saveRole.mutate();
                     }
                   }}
                 >
-                  {saveRole.isPending ? "保存中..." : "保存角色权限"}
+                  {saveRole.isPending ? t("settings.roleManagement.saving") : t("settings.roleManagement.saveRolePermissions")}
                 </button>
                 <button
                   className="secondary-button"
@@ -266,7 +315,7 @@ export function RoleManagement() {
                     setHasChanges(false);
                   }}
                 >
-                  取消修改
+                  {t("settings.roleManagement.cancelEdit")}
                 </button>
               </div>
             ) : null}

@@ -28,6 +28,7 @@ import { FileUpload } from "../../../../components/FileUpload";
 import { AppSelect } from "../../../../components/AppSelect";
 import { Field } from "../../../../components/ui/Field";
 import { useI18n } from "../../../../i18n";
+import type { TranslationKey } from "../../../../i18n/resources";
 import { formatDateInput } from "../../../../shared/utils/format";
 import type { Quote, QuoteHistoryItem, Sample, SampleFee, SampleHistoryItem } from "../shared/types";
 
@@ -61,6 +62,25 @@ const SAMPLE_PURPOSES = [
   { value: "EXHIBITION", label: "参展" },
   { value: "APPEARANCE_CONFIRMATION", label: "确认外观" }
 ] as const;
+
+const SAMPLE_STATUS_TRANSLATION_KEYS: Record<string, TranslationKey> = {
+  REQUESTED: "sampleStatus.requested",
+  APPROVING: "sampleStatus.approving",
+  REJECTED: "sampleStatus.rejected",
+  PREPARING: "sampleStatus.preparing",
+  SHIPPED: "sampleStatus.shipped",
+  DELIVERED: "sampleStatus.delivered",
+  FEEDBACK_RECEIVED: "sampleStatus.feedbackReceived",
+  RETURNED: "sampleStatus.returned",
+  STORED: "sampleStatus.stored",
+  VOIDED: "sampleStatus.voided",
+  CLOSED: "sampleStatus.closed"
+};
+
+function localizedSampleStatusLabel(status: string, t: (key: TranslationKey) => string) {
+  const key = SAMPLE_STATUS_TRANSLATION_KEYS[status];
+  return key ? t(key) : status;
+}
 
 function statusLabel(status: string) {
   const labels: Record<string, string> = {
@@ -1274,22 +1294,24 @@ export function SamplePanel({ customerId }: { customerId: string }) {
           <table className="sample-record-table">
             <thead>
               <tr>
-                <th>样品</th>
-                <th>规格</th>
-                <th>用途</th>
-                <th>状态</th>
-                <th>数量</th>
-                <th>费用</th>
-                <th>关联报价</th>
-                <th>物流</th>
-                <th>创建日期</th>
-                <th>操作</th>
+                <th>{t("sampleFields.sampleProduct")}</th>
+                <th>{t("sampleFields.specification")}</th>
+                <th>{t("sampleFields.material")}</th>
+                <th>{t("sampleFields.process")}</th>
+                <th>{t("sampleFields.samplePurpose")}</th>
+                <th>{t("sampleFields.sampleQuantity")}</th>
+                <th>{t("sampleFields.fee")}</th>
+                <th>{t("sampleFields.relatedQuote")}</th>
+                <th>{t("sampleFields.carrier")}</th>
+                <th>{t("sampleFields.trackingNo")}</th>
+                <th>{t("common.status")}</th>
+                <th>{t("common.createdAt")}</th>
+                <th>{t("common.operation")}</th>
               </tr>
             </thead>
             <tbody>
               {data.map((item) => {
                 const feeTotal = sampleFeeTotal(item);
-                const shippingText = item.trackingNo ? `${item.carrier ? `${item.carrier} · ` : ""}${item.trackingNo}` : "未填运单";
                 const nextActions = sampleStatusActions(item.status);
                 return (
                   <tr key={item.id}>
@@ -1299,12 +1321,9 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                       </button>
                     </td>
                     <td>{item.specification || "未填写"}</td>
+                    <td>{item.material || "未填写"}</td>
+                    <td>{item.process || "未填写"}</td>
                     <td>{item.samplePurpose ? samplePurposeLabel(item.samplePurpose) : "未填写"}</td>
-                    <td>
-                      <span className={sampleStatusPillClass(item.status)}>
-                        {statusLabel(item.status)}
-                      </span>
-                    </td>
                     <td>{item.sampleQuantity ?? "-"}</td>
                     <td>{feeTotal.toFixed(2)}</td>
                     <td>
@@ -1314,7 +1333,13 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                         </button>
                       ) : "未关联"}
                     </td>
-                    <td>{shippingText}</td>
+                    <td>{item.carrier || "未填写"}</td>
+                    <td>{item.trackingNo || "未填写"}</td>
+                    <td>
+                      <span className={sampleStatusPillClass(item.status)}>
+                        {localizedSampleStatusLabel(item.status, t)}
+                      </span>
+                    </td>
                     <td>{new Date(item.createdAt).toLocaleDateString()}</td>
                     <td>
                       <div className="sample-record-actions">
@@ -1455,6 +1480,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
             entityType="sample-request"
             fileIds={createForm.fileAssetIds}
             multiple
+            accept="*/*"
             onChange={(ids) => setCreateForm({ ...createForm, fileAssetIds: ids })}
           />
         </div>
@@ -1476,7 +1502,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
 
       <Dialog
         v2
-        className="crm-action-dialog"
+        className="crm-action-dialog sample-dialog"
         title={t("sampleFields.fillFees")}
         visible={createFeeOpen}
         onClose={() => setCreateFeeOpen(false)}
@@ -1522,7 +1548,6 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                   <strong>费用 {index + 1}</strong>
                   <button
                     className="secondary-button"
-                    disabled={createFeeForms.length === 1}
                     onClick={() => setCreateFeeForms(createFeeForms.filter((_, currentIndex) => currentIndex !== index))}
                     type="button"
                   >
@@ -1566,7 +1591,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
 
       <Dialog
         v2
-        className={`crm-action-dialog ${detailMode === "sample" ? "sample-detail-dialog" : "quote-detail-dialog"}`}
+        className={`crm-action-dialog sample-dialog ${detailMode === "sample" ? "sample-detail-dialog" : "quote-detail-dialog"}`}
         title={detailMode === "sample" ? `样品详情 · ${detailSample?.productSummary ?? ""}` : `报价详情 · ${detailQuote?.quoteNo ?? detailSample?.quote?.quoteNo ?? ""}`}
         width="min(1040px, calc(100vw - 48px))"
         visible={detailOpen}
@@ -1781,8 +1806,9 @@ export function SamplePanel({ customerId }: { customerId: string }) {
 
       <Dialog
         v2
-        className="crm-action-dialog"
+        className="crm-action-dialog sample-dialog sample-edit-dialog"
         title="编辑样品"
+        width="min(1040px, calc(100vw - 48px))"
         visible={editOpen}
         onClose={() => setEditOpen(false)}
         footer={
@@ -1854,6 +1880,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
               entityType="sample-request"
               fileIds={editForm.fileAssetIds}
               multiple
+              accept="*/*"
               onChange={(ids) => setEditForm({ ...editForm, fileAssetIds: ids })}
             />
           </div>
@@ -1919,7 +1946,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
 
       <Dialog
         v2
-        className="crm-action-dialog"
+        className="crm-action-dialog sample-dialog"
         title={`${selectedStatusAction?.label ?? "样品状态"} · ${currentStatusSample?.productSummary ?? ""}`}
         visible={statusOpen}
         onClose={() => {
@@ -2070,7 +2097,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
 
       <Dialog
         v2
-        className="crm-action-dialog"
+        className="crm-action-dialog sample-dialog"
         title={approvalDialogTitle}
         visible={approvalOpen}
         onClose={closeApproval}
@@ -2114,7 +2141,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
 
       <Dialog
         v2
-        className="crm-action-dialog"
+        className="crm-action-dialog sample-dialog"
         title="确认删除费用"
         visible={feeDeleteOpen}
         onClose={() => {
@@ -2144,7 +2171,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
 
       <Dialog
         v2
-        className="crm-action-dialog"
+        className="crm-action-dialog sample-dialog"
         title={feeMode === "edit" ? "编辑费用记录" : "填写费用记录"}
         visible={feeOpen}
         onClose={() => setFeeOpen(false)}
@@ -2205,7 +2232,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
 
       <Dialog
         v2
-        className="crm-action-dialog"
+        className="crm-action-dialog sample-dialog"
         title={`样品历史 · ${historySample?.productSummary ?? ""}`}
         visible={historyOpen}
         onClose={() => setHistoryOpen(false)}
@@ -2249,7 +2276,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
 
       <Dialog
         v2
-        className="crm-action-dialog"
+        className="crm-action-dialog sample-dialog"
         title="确认作废"
         visible={deleteOpen}
         onClose={() => setDeleteOpen(false)}

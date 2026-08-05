@@ -3,6 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import { CreateBucketCommand, DeleteObjectCommand, GetObjectCommand, HeadBucketCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { PrismaService } from "../../infrastructure/prisma/prisma.service";
+import { repairMojibakeFileName, resolveUploadFileName } from "./upload-file-name";
 
 @Injectable()
 export class UploadService implements OnModuleInit {
@@ -51,9 +52,11 @@ export class UploadService implements OnModuleInit {
     organizationId: string,
     createdById: string,
     entityType?: string,
-    entityId?: string
+    entityId?: string,
+    clientFileName?: string
   ) {
-    const objectKey = `${organizationId}/${Date.now()}_${file.originalname}`;
+    const originalName = resolveUploadFileName(clientFileName, file.originalname);
+    const objectKey = `${organizationId}/${Date.now()}_${originalName}`;
 
     await this.s3.send(
       new PutObjectCommand({
@@ -71,7 +74,7 @@ export class UploadService implements OnModuleInit {
         storageDriver: "s3",
         bucket: this.bucket,
         objectKey,
-        originalName: file.originalname,
+        originalName,
         mimeType: file.mimetype,
         sizeBytes: file.size,
         entityType: entityType ?? null,
@@ -80,7 +83,7 @@ export class UploadService implements OnModuleInit {
       }
     });
 
-    this.logger.log(`Uploaded ${file.originalname} -> ${record.id}`);
+    this.logger.log(`Uploaded ${originalName} -> ${record.id}`);
     return record;
   }
 
@@ -96,7 +99,7 @@ export class UploadService implements OnModuleInit {
       new GetObjectCommand({ Bucket: this.bucket, Key: record.objectKey }),
       { expiresIn: 3600 }
     );
-    return { id: record.id, url, originalName: record.originalName, mimeType: record.mimeType };
+    return { id: record.id, url, originalName: repairMojibakeFileName(record.originalName), mimeType: record.mimeType };
   }
 
   async deleteFile(id: string, organizationId: string) {

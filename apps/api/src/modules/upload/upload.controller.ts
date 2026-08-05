@@ -1,6 +1,7 @@
 import {
   Controller,
   Delete,
+  Body,
   Get,
   Param,
   Post,
@@ -19,9 +20,10 @@ export class UploadController {
   @UseInterceptors(FileInterceptor("file", { limits: { fileSize: 10 * 1024 * 1024 } }))
   async upload(
     @CurrentUser() user: RequestUser,
-    @UploadedFile() file: Express.Multer.File
+    @UploadedFile() file: Express.Multer.File,
+    @Body("fileName") fileName?: string
   ) {
-    return this.uploadService.uploadFile(file, user.organizationId, user.id);
+    return this.uploadService.uploadFile(file, user.organizationId, user.id, undefined, undefined, fileName);
   }
 
   @Get(":id/url")

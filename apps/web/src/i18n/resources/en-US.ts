@@ -29,6 +29,7 @@ export const enUS = {
     phone: "Phone",
     title: "Title",
     updatedAt: "Updated at",
+    createdAt: "Created at",
     date: "Date",
     time: "Time",
     type: "Type",
@@ -428,7 +429,113 @@ export const enUS = {
     riskPenaltyMax: "Maximum risk penalty",
     riskPenaltyDescription: "Maximum points deducted for blacklist, abnormal information, or low credibility risks",
     saveConfig: "Save configuration",
-    resetDefault: "Reset default"
+    resetDefault: "Reset default",
+    roleManagement: {
+      roleList: "Role list",
+      allData: "All data",
+      teamData: "Team data",
+      personalData: "Personal data",
+      inheritsRoles: "Includes permissions from {roles}",
+      roles: {
+        admin: "System administrator",
+        executive: "Executive",
+        salesManager: "Sales manager",
+        salesRep: "Sales representative",
+        operator: "Operations specialist"
+      },
+      modules: {
+        customers: "Customer management",
+        website: "Website analysis",
+        research: "Research reports",
+        scoring: "OEM scoring",
+        emails: "Email center",
+        dashboards: "Dashboards",
+        knowledge: "Company knowledge base",
+        settings: "System settings"
+      },
+      noRoles: "No roles available.",
+      readOnlyHint: "Your account can only view role permissions. Only users with \"Role permission management\" permission can modify them.",
+      inheritanceHint: "Senior roles automatically inherit all permissions from junior roles. Gray dashed checkmarks indicate permissions inherited from junior roles and cannot be unchecked independently.",
+      permissionCount: "{current}/{total} items",
+      inheritedTooltip: "Inherited from junior role, cannot be unchecked in this role",
+      directTooltip: "Directly authorized for this role",
+      removedTooltip: "Removed from this role, will take effect after saving",
+      dependsTooltip: "Dependencies: {deps}",
+      confirmSave: "Modifying role permissions will affect all users under this role. Related users may need to log in again after saving. Confirm save?",
+      saving: "Saving...",
+      saveRolePermissions: "Save role permissions",
+      cancelEdit: "Cancel changes",
+      savingTitle: "Saving",
+      savingMessage: "Saving role permission configuration.",
+      saveSuccessTitle: "Saved successfully",
+      saveSuccessMessage: "Role permissions updated ({direct} direct authorizations, expanded to {total} including dependencies). Related users need to log in again to take effect.",
+      saveFailedTitle: "Save failed",
+      saveFailedMessage: "Save failed"
+    }
+  },
+  permissions: {
+    customers: {
+      read: "View customers",
+      write: "Create and update customers",
+      assign: "Assign customers"
+    },
+    website: {
+      analyze: "Analyze customer websites"
+    },
+    research: {
+      generate: "Generate research reports"
+    },
+    scoring: {
+      generate: "Generate OEM fit scores"
+    },
+    emails: {
+      generate: "Generate email drafts",
+      send: "Send approved emails",
+      approve: "Approve email drafts",
+      accounts: {
+        manage_personal: "Manage personal email accounts",
+        manage_shared: "Manage shared email accounts"
+      }
+    },
+    dashboards: {
+      personal: {
+        view: "View personal workbench",
+        legacy: "View personal workbench (compatibility permission)"
+      },
+      view: "View team/management dashboards",
+      team: "View team dashboards (compatibility permission)",
+      management: "View management dashboards (compatibility permission)"
+    },
+    knowledge: {
+      write: "Maintain company knowledge base"
+    },
+    settings: {
+      users: {
+        manage: "Manage users"
+      },
+      manage: "Manage system settings (compatibility permission)",
+      roles: {
+        manage: "Manage roles and permissions"
+      },
+      audit_logs: {
+        read: "View audit logs"
+      },
+      customer_dictionaries: {
+        manage: "Manage customer dictionaries"
+      },
+      blacklist: {
+        manage: "Manage blacklist rules"
+      },
+      ai_config: {
+        manage: "Manage AI configuration"
+      },
+      scoring_weights: {
+        manage: "Manage OEM scoring weights"
+      },
+      email_prompt: {
+        manage: "Manage email prompt configuration"
+      }
+    }
   },
   scoringFields: {
     productLineFit: "Product line fit",
@@ -513,6 +620,7 @@ export const enUS = {
   },
   quoteFields: {
     quoteNo: "Quote No.",
+    amount: "Amount",
     productName: "Product name",
     specification: "Specification",
     moq: "MOQ",
@@ -560,6 +668,7 @@ export const enUS = {
   },
   sampleFields: {
     sampleProduct: "Sample/product",
+    fee: "Fee",
     specification: "Specification",
     material: "Material",
     process: "Process",
@@ -588,6 +697,19 @@ export const enUS = {
     receiver: "Receiver",
     destination: "Destination",
     recordDate: "Record date"
+  },
+  sampleStatus: {
+    requested: "Requested",
+    approving: "Pending approval",
+    rejected: "Approval rejected",
+    preparing: "In preparation",
+    shipped: "Shipped",
+    delivered: "Delivered",
+    feedbackReceived: "Feedback received",
+    returned: "Returned",
+    stored: "Stored",
+    voided: "Voided",
+    closed: "Closed"
   },
   scorePanel: {
     manualOverrideTitle: "Manually override OEM score",
