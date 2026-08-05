@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog } from "@alifd/next";
 import "@alifd/next/lib/dialog/style.js";
-import { CheckCircle2, ChevronDown, Download, History, NotebookTabs, Send, XCircle } from "lucide-react";
+import { CheckCircle2, ChevronDown, Download, History, MoreHorizontal, Send, XCircle } from "lucide-react";
 import {
   calculateQuotePricing,
   quoteFlowStatusLabel
@@ -38,6 +39,12 @@ const DEFAULT_QUOTE_FORM: { moq: string; quantity: string } = {
 };
 type QuoteCalcMode = "formula" | "direct";
 type MaterialFormItem = { name: string; usage: string; unitPrice: string; lossRate: string };
+type QuoteReviewMode = "submit" | "approve" | "reject";
+type QuoteStatusAction = "send" | "accept" | "rejectCustomer";
+type QuoteNextAction = {
+  type: QuoteReviewMode | QuoteStatusAction;
+  label: string;
+};
 
 const EMPTY_MATERIAL_ITEM: MaterialFormItem = { name: "", usage: "", unitPrice: "", lossRate: "" };
 
@@ -80,6 +87,35 @@ function quoteDisplayStatus(quote: Pick<Quote, "status" | "approvalStatus"> | nu
     return "REJECTED";
   }
   return "DRAFT";
+}
+
+function quoteNextActions(item: Quote): QuoteNextAction[] {
+  const displayStatus = quoteDisplayStatus(item);
+  if (
+    item.status !== "VOIDED" &&
+    item.status !== "SENT" &&
+    item.status !== "ACCEPTED" &&
+    item.status !== "EXPIRED" &&
+    (item.approvalStatus === "DRAFT" || item.approvalStatus === "REJECTED")
+  ) {
+    return [{ type: "submit", label: "提交审批" }];
+  }
+  if (item.status !== "VOIDED" && item.approvalStatus === "PENDING_APPROVAL") {
+    return [
+      { type: "approve", label: "审批通过" },
+      { type: "reject", label: "审批驳回" }
+    ];
+  }
+  if (displayStatus === "APPROVED") {
+    return [{ type: "send", label: "发送报价" }];
+  }
+  if (displayStatus === "SENT") {
+    return [
+      { type: "accept", label: "客户接受" },
+      { type: "rejectCustomer", label: "客户拒绝" }
+    ];
+  }
+  return [];
 }
 
 const QUOTE_CORE_STATUS_ORDER = ["DRAFT", "PENDING_APPROVAL", "APPROVED", "SENT"] as const;
@@ -570,9 +606,11 @@ export function QuotePanel({ customerId }: { customerId: string }) {
   const [historyQuote, setHistoryQuote] = useState<Quote | null>(null);
   const [detailQuote, setDetailQuote] = useState<Quote | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
-  const [reviewMode, setReviewMode] = useState<"approve" | "reject">("approve");
+  const [reviewMode, setReviewMode] = useState<QuoteReviewMode>("approve");
   const [reviewQuote, setReviewQuote] = useState<Quote | null>(null);
   const [reviewComment, setReviewComment] = useState("");
+  const [statusAction, setStatusAction] = useState<QuoteStatusAction | null>(null);
+  const [moreActionsMenu, setMoreActionsMenu] = useState<{ id: string; top: number; right: number } | null>(null);
 
   const { data = [] } = useQuery({ queryKey: ["quotes", customerId], queryFn: () => getQuotes<Quote[]>(customerId) });
   const historyQuery = useQuery({
@@ -683,6 +721,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
       }
       setStatusOpen(false);
       setStatusQuote(null);
+      setStatusAction(null);
       showClientToast({
         type: "success",
         title: "发送报价成功",
@@ -707,6 +746,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
       }
       setStatusOpen(false);
       setStatusQuote(null);
+      setStatusAction(null);
       showClientToast({
         type: "success",
         title: "客户接收成功",
@@ -731,6 +771,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
       }
       setStatusOpen(false);
       setStatusQuote(null);
+      setStatusAction(null);
       showClientToast({
         type: "success",
         title: "客户拒绝成功",
@@ -872,8 +913,9 @@ export function QuotePanel({ customerId }: { customerId: string }) {
     setEditOpen(true);
   };
 
-  const openStatus = (item: Quote) => {
+  const openStatus = (item: Quote, action: QuoteStatusAction) => {
     setStatusQuote(item);
+    setStatusAction(action);
     setStatusOpen(true);
   };
 
@@ -892,7 +934,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
     setDeleteOpen(true);
   };
 
-  const openReview = (item: Quote, mode: "approve" | "reject") => {
+  const openReview = (item: Quote, mode: QuoteReviewMode) => {
     setReviewQuote(item);
     setReviewMode(mode);
     setReviewComment(item.approvalComment ?? "");
@@ -905,20 +947,8 @@ export function QuotePanel({ customerId }: { customerId: string }) {
     setReviewComment("");
   };
 
-  const canSubmitReview = (item: Quote) =>
-    item.status !== "VOIDED" &&
-    item.status !== "SENT" &&
-    item.status !== "ACCEPTED" &&
-    item.status !== "EXPIRED" &&
-    (item.approvalStatus === "DRAFT" || item.approvalStatus === "REJECTED");
-  const canReview = (item: Quote) => item.status !== "VOIDED" && item.approvalStatus === "PENDING_APPROVAL";
   const canEditQuote = (item: Quote) => item.status !== "VOIDED";
-  const canOpenStatusAction = (item: Quote) => {
-    const displayStatus = quoteDisplayStatus(item);
-    return displayStatus === "APPROVED" || displayStatus === "SENT";
-  };
   const statusQuoteId = statusQuote?.id ?? "";
-  const statusDisplay = quoteDisplayStatus(statusQuote);
   const createSummary = calculateQuotePricing(form);
   const editSummary = calculateQuotePricing(editForm);
   const createValidationMessage = !createSummary.moqValid
@@ -944,6 +974,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
   const detailQuoteHistory = detailHistoryQuery.data ?? [];
   const quoteHistoryItems = historyQuery.data ?? [];
   const detailQuoteSentAt = quoteHistoryStatusTime(detailQuoteHistory, "SENT");
+  const detailQuoteAcceptedAt = quoteHistoryStatusTime(detailQuoteHistory, "ACCEPTED");
   const detailQuoteTerminalAt = detailQuoteTerminalStatus ? quoteHistoryStatusTime(detailQuoteHistory, detailQuoteTerminalStatus) : "";
   const detailQuoteHistoryLoadingValue = detailHistoryQuery.isLoading ? "加载中..." : "";
   const detailQuoteApprovalNote = detailQuote?.approvalComment?.trim() ? `审批备注：${detailQuote.approvalComment.trim()}` : "";
@@ -989,7 +1020,14 @@ export function QuotePanel({ customerId }: { customerId: string }) {
       current: detailQuoteStatus === "SENT",
       danger: false
     },
-    ...(detailQuoteTerminalStatus && detailQuoteTerminalStatus !== "REJECTED"
+    {
+      label: statusLabel("ACCEPTED", locale),
+      value: detailQuoteStatus === "ACCEPTED" ? quoteTimelineDateValue(detailQuoteAcceptedAt) || detailQuoteHistoryLoadingValue || statusLabel("ACCEPTED", locale) : "未接受",
+      done: detailQuoteStatus === "ACCEPTED",
+      current: detailQuoteStatus === "ACCEPTED",
+      danger: false
+    },
+    ...(detailQuoteTerminalStatus && !["REJECTED", "ACCEPTED"].includes(detailQuoteTerminalStatus)
       ? [
           {
             label: statusLabel(detailQuoteTerminalStatus, locale),
@@ -1028,13 +1066,29 @@ export function QuotePanel({ customerId }: { customerId: string }) {
     { label: "报价模式", value: detailQuote?.calcMode === "formula" ? "公式报价" : "直接报价" },
     { label: "创建时间", value: detailQuote?.createdAt ? new Date(detailQuote.createdAt).toLocaleString() : "-" }
   ];
-  const reviewDialogTitle = reviewMode === "approve" ? "通过审批" : "驳回审批";
-  const reviewDialogConfirmLabel = reviewMode === "approve" ? "通过" : "驳回";
-  const reviewDialogDescription = "备注可留空。";
-  const reviewPending = reviewMode === "approve" ? approve.isPending : reject.isPending;
+  const reviewDialogTitle = reviewMode === "submit" ? "提交报价审批" : reviewMode === "approve" ? "通过审批" : "驳回审批";
+  const reviewDialogConfirmLabel = reviewMode === "submit" ? "确认提交" : reviewMode === "approve" ? "通过" : "驳回";
+  const reviewDialogDescription = reviewMode === "submit" ? "确认提交后，报价将进入待审批状态；备注可留空。" : "备注可留空。";
+  const reviewPending = reviewMode === "submit" ? submitReview.isPending : reviewMode === "approve" ? approve.isPending : reject.isPending;
+  const statusActionLabel = statusAction === "send" ? "发送报价" : statusAction === "accept" ? "客户接受" : statusAction === "rejectCustomer" ? "客户拒绝" : "";
+  const statusActionDescription = statusAction === "send"
+    ? "确认后，报价将标记为已发送。"
+    : statusAction === "accept"
+      ? "确认后，将记录客户已接受当前报价。"
+      : statusAction === "rejectCustomer"
+        ? "确认后，将记录客户已拒绝当前报价。"
+        : "";
+  const statusActionPending = statusAction === "send"
+    ? sendAction.isPending
+    : statusAction === "accept"
+      ? acceptAction.isPending
+      : statusAction === "rejectCustomer"
+        ? rejectCustomerAction.isPending
+        : false;
 
   return (
-    <section className="panel">
+    <>
+    <section className="panel quote-records-panel">
       <div className="panel-title">
         <div className="quote-panel-title">
           <h2>报价记录</h2>
@@ -1052,84 +1106,137 @@ export function QuotePanel({ customerId }: { customerId: string }) {
       </div>
 
       {data.length === 0 ? (
-        <div className="empty-state">当前还没有报价记录。</div>
+        <div className="empty-state">暂无记录</div>
       ) : (
-        <div className="task-list">
-          {data.map((item) => (
-            <div className="task-row" key={item.id}>
-              <NotebookTabs size={16} />
-              <div>
-                <strong>
-                  <button
-                    className="table-link"
-                    onClick={() => openDetail(item)}
-                    style={{ background: "transparent", border: 0, cursor: "pointer", padding: 0, textAlign: "left" }}
-                    type="button"
-                  >
-                    {item.quoteNo}
-                  </button>
-                  {` · ${item.productName || "未命名产品"} · ${item.currency} ${item.amount}`}
-                </strong>
-                <span>{statusLabel(quoteDisplayStatus(item), locale)} · {new Date(item.createdAt).toLocaleDateString()}   |   </span>
-                <span>规格 {item.specification || "未填写"} · MOQ {item.moq} · 数量 {item.quantity} · 单价 {item.unitPrice}   |   </span>
-                <span>物料 {item.materialCost} + 加工 {item.processingCost} + 税费 {item.taxCost} + 运费 {item.shippingCost} - 优惠 {item.discountAmount}=总价{item.amount}</span>
-              </div>
-              <div className="contact-row-actions">
-                <EditIconButton disabled={!canEditQuote(item)} onClick={() => openEdit(item)} />
-                <button className="secondary-button icon-button" onClick={() => openHistory(item)} title="历史" type="button">
-                  <History size={14} />
-                </button>
-                <button
-                  className="secondary-button icon-button"
-                  disabled={exportMutation.isPending}
-                  onClick={() => exportMutation.mutate(item.id)}
-                  title="导出当前报价"
-                  type="button"
-                >
-                  <Download size={14} />
-                </button>
-                <button
-                  className="secondary-button"
-                  disabled={!canOpenStatusAction(item)}
-                  onClick={() => openStatus(item)}
-                  type="button"
-                >
-                  状态
-                </button>
-                <button
-                  className="secondary-button icon-button"
-                  disabled={!canSubmitReview(item) || submitReview.isPending}
-                  onClick={() => submitReview.mutate({ quoteId: item.id })}
-                  title="提交审批流"
-                  type="button"
-                >
-                  <Send size={14} />
-                </button>
-                <button
-                  className="secondary-button icon-button"
-                  disabled={!canReview(item) || approve.isPending}
-                  onClick={() => openReview(item, "approve")}
-                  title="通过审批"
-                  type="button"
-                >
-                  <CheckCircle2 size={14} />
-                </button>
-                <button
-                  className="secondary-button icon-button"
-                  disabled={!canReview(item) || reject.isPending}
-                  onClick={() => openReview(item, "reject")}
-                  title="驳回审批"
-                  type="button"
-                >
-                  <XCircle size={14} />
-                </button>
-                <DeleteIconButton disabled={item.status === "VOIDED"} label="作废" onClick={() => openDelete(item)} />
-              </div>
-            </div>
-          ))}
+        <div className="quote-record-table-wrap">
+          <table className="quote-record-table">
+            <thead>
+              <tr>
+                <th>报价编号</th>
+                <th>产品</th>
+                <th>规格</th>
+                <th>状态</th>
+                <th>金额</th>
+                <th>数量</th>
+                <th>MOQ</th>
+                <th>创建日期</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((item) => {
+                const nextActions = quoteNextActions(item);
+                return (
+                <tr key={item.id}>
+                  <td>
+                    <button className="table-link quote-record-link" onClick={() => openDetail(item)} type="button">
+                      {item.quoteNo}
+                    </button>
+                  </td>
+                  <td>
+                    <div className="quote-record-product">
+                      <strong>{item.productName || "未命名产品"}</strong>
+                    </div>
+                  </td>
+                  <td>{item.specification || "未填写"}</td>
+                  <td>
+                    <span className={quoteStatusPillClass(quoteDisplayStatus(item))}>
+                      {statusLabel(quoteDisplayStatus(item), locale)}
+                    </span>
+                  </td>
+                  <td>{item.amount}</td>
+                  <td>{item.quantity}</td>
+                  <td>{item.moq}</td>
+                  <td>{new Date(item.createdAt).toLocaleDateString()}</td>
+                  <td>
+                    <div className="quote-record-actions">
+                      <EditIconButton disabled={!canEditQuote(item)} onClick={() => openEdit(item)} />
+                      <button
+                        className="secondary-button icon-button"
+                        disabled={exportMutation.isPending}
+                        onClick={() => exportMutation.mutate(item.id)}
+                        title="导出当前报价"
+                        type="button"
+                      >
+                        <Download size={14} />
+                      </button>
+                      <div className="quote-record-more">
+                        <button
+                          aria-expanded={moreActionsMenu?.id === item.id}
+                          className="secondary-button icon-button"
+                          onClick={(event) => {
+                            const rect = event.currentTarget.getBoundingClientRect();
+                            setMoreActionsMenu((current) => current?.id === item.id ? null : {
+                              id: item.id,
+                              top: rect.bottom + 6,
+                              right: window.innerWidth - rect.right
+                            });
+                          }}
+                          title="更多"
+                          type="button"
+                        >
+                          <MoreHorizontal size={15} />
+                        </button>
+                        {moreActionsMenu?.id === item.id ? createPortal(
+                          <div className="quote-record-more-layer" onMouseDown={() => setMoreActionsMenu(null)}>
+                          <div
+                            className="quote-record-more-menu"
+                            onMouseDown={(event) => event.stopPropagation()}
+                            style={{ top: moreActionsMenu.top, right: moreActionsMenu.right }}
+                          >
+                            <button
+                              onClick={() => {
+                                setMoreActionsMenu(null);
+                                openHistory(item);
+                              }}
+                              type="button"
+                            >
+                              <History size={14} />
+                              <span>历史记录</span>
+                            </button>
+                            {nextActions.map((action) => (
+                              <button
+                                key={action.type}
+                                onClick={() => {
+                                  setMoreActionsMenu(null);
+                                  if (action.type === "submit" || action.type === "approve" || action.type === "reject") {
+                                    openReview(item, action.type);
+                                  } else {
+                                    openStatus(item, action.type);
+                                  }
+                                }}
+                                type="button"
+                              >
+                                {action.type === "submit" || action.type === "send" ? <Send size={14} /> : null}
+                                {action.type === "approve" || action.type === "accept" ? <CheckCircle2 size={14} /> : null}
+                                {action.type === "reject" || action.type === "rejectCustomer" ? <XCircle size={14} /> : null}
+                                <span>{action.label}</span>
+                              </button>
+                            ))}
+                          </div>
+                          </div>,
+                          document.body
+                        ) : null}
+                      </div>
+                      <DeleteIconButton disabled={item.status === "VOIDED"} label="作废" onClick={() => openDelete(item)} />
+                    </div>
+                  </td>
+                </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
+    </section>
 
+    <section className="panel quote-create-panel">
+      <div className="panel-title">
+        <div className="quote-panel-title">
+          <h2>新增报价</h2>
+          <span>填写基础信息与金额明细</span>
+        </div>
+      </div>
       <div className="form-grid compact-form">
         <Field label={t("quoteFields.quoteNo")} value={form.quoteNo} onChange={(value) => setForm({ ...form, quoteNo: value })} />
         <Field label={t("quoteFields.productName")} value={form.productName} onChange={(value) => setForm({ ...form, productName: value })} />
@@ -1387,6 +1494,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
         {createValidationMessage ? <div className="error-state">{createValidationMessage}</div> : null}
         <div className="wide-field"><AddIconButton disabled={create.isPending || Boolean(createValidationMessage)} label={create.isPending ? t("quoteFields.submitting") : t("quoteFields.createQuote")} onClick={() => create.mutate()} /></div>
       </div>
+    </section>
 
       <Dialog
         v2
@@ -1547,7 +1655,9 @@ export function QuotePanel({ customerId }: { customerId: string }) {
               onClick={() => {
                 if (!reviewQuote) return;
                 const payload = { quoteId: reviewQuote.id, comment: reviewComment.trim() };
-                if (reviewMode === "approve") {
+                if (reviewMode === "submit") {
+                  submitReview.mutate(payload);
+                } else if (reviewMode === "approve") {
                   approve.mutate(payload);
                 } else {
                   reject.mutate(payload);
@@ -1796,11 +1906,12 @@ export function QuotePanel({ customerId }: { customerId: string }) {
       <Dialog
         v2
         className="crm-action-dialog"
-        title={`报价状态 · ${statusQuote?.quoteNo ?? ""}`}
+        title={`${statusActionLabel || "报价状态"} · ${statusQuote?.quoteNo ?? ""}`}
         visible={statusOpen}
         onClose={() => {
           setStatusOpen(false);
           setStatusQuote(null);
+          setStatusAction(null);
         }}
         footer={(
           <div className="toolbar crm-dialog-footer">
@@ -1809,6 +1920,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
               onClick={() => {
                 setStatusOpen(false);
                 setStatusQuote(null);
+                setStatusAction(null);
               }}
               type="button"
             >
@@ -1822,48 +1934,34 @@ export function QuotePanel({ customerId }: { customerId: string }) {
             <h4>当前状态</h4>
             <div className="detail-note">{statusQuote ? statusLabel(quoteDisplayStatus(statusQuote), locale) : "-"}</div>
           </section>
-          {statusDisplay === "APPROVED" ? (
+          {statusAction ? (
             <section className="detail-section">
-              <h4>可执行操作</h4>
+              <h4>确认操作</h4>
+              <div className="detail-note">{statusActionDescription}</div>
               <div className="toolbar">
                 <button
-                  className="primary-button"
-                  disabled={sendAction.isPending}
-                  onClick={() => sendAction.mutate(statusQuoteId)}
+                  className={statusAction === "rejectCustomer" ? "secondary-button" : "primary-button"}
+                  disabled={statusActionPending || !statusQuote}
+                  onClick={() => {
+                    if (statusAction === "send") {
+                      sendAction.mutate(statusQuoteId);
+                    } else if (statusAction === "accept") {
+                      acceptAction.mutate(statusQuoteId);
+                    } else {
+                      rejectCustomerAction.mutate(statusQuoteId);
+                    }
+                  }}
                   type="button"
                 >
-                  <Send size={14} />
-                  {sendAction.isPending ? "发送中..." : "发送报价"}
+                  {statusAction === "send" ? <Send size={14} /> : null}
+                  {statusAction === "accept" ? <CheckCircle2 size={14} /> : null}
+                  {statusAction === "rejectCustomer" ? <XCircle size={14} /> : null}
+                  {statusActionPending ? "处理中..." : `确认${statusActionLabel}`}
                 </button>
               </div>
             </section>
           ) : null}
-          {statusDisplay === "SENT" ? (
-            <section className="detail-section">
-              <h4>可执行操作</h4>
-              <div className="toolbar">
-                <button
-                  className="primary-button"
-                  disabled={acceptAction.isPending}
-                  onClick={() => acceptAction.mutate(statusQuoteId)}
-                  type="button"
-                >
-                  <CheckCircle2 size={14} />
-                  {acceptAction.isPending ? "处理中..." : "客户接受"}
-                </button>
-                <button
-                  className="secondary-button"
-                  disabled={rejectCustomerAction.isPending}
-                  onClick={() => rejectCustomerAction.mutate(statusQuoteId)}
-                  type="button"
-                >
-                  <XCircle size={14} />
-                  {rejectCustomerAction.isPending ? "处理中..." : "客户拒绝"}
-                </button>
-              </div>
-            </section>
-          ) : null}
-          {statusQuote && statusDisplay !== "APPROVED" && statusDisplay !== "SENT" ? (
+          {statusQuote && !statusAction ? (
             <div className="empty-state">当前状态没有可执行的快速流转操作。</div>
           ) : null}
         </div>
@@ -1915,6 +2013,6 @@ export function QuotePanel({ customerId }: { customerId: string }) {
           </div>
         ) : null}
       </Dialog>
-    </section>
+    </>
   );
 }

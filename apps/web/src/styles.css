@@ -2274,6 +2274,264 @@ td small {
   flex: 0 0 auto;
 }
 
+.quote-records-panel {
+  margin-bottom: 16px;
+}
+
+.quote-record-table-wrap {
+  overflow-x: auto;
+}
+
+.quote-record-table {
+  min-width: 1060px;
+}
+
+.quote-record-table th,
+.quote-record-table td {
+  padding-top: 9px;
+  padding-bottom: 9px;
+  vertical-align: middle;
+}
+
+.quote-record-table th {
+  background: #f1f3f5;
+  font-size: 14px;
+}
+
+.quote-record-table th:last-child,
+.quote-record-table td:last-child {
+  text-align: right;
+}
+
+.quote-record-link {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+
+.quote-record-product {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.quote-record-product strong,
+.quote-record-product span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quote-record-product strong {
+  color: #24313b;
+  font-size: 14px;
+}
+
+.quote-record-product span {
+  color: #718096;
+  font-size: 12px;
+}
+
+.quote-record-actions {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.quote-record-actions .secondary-button {
+  min-height: 30px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.quote-record-actions .icon-button {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+}
+
+.quote-record-more {
+  position: relative;
+}
+
+.quote-record-more-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: transparent;
+}
+
+.quote-record-more-menu {
+  display: grid;
+  gap: 2px;
+  position: absolute;
+  z-index: 1201;
+  min-width: 138px;
+  border: 1px solid #dfe3dc;
+  border-radius: 8px;
+  background: white;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.14);
+  padding: 6px;
+  text-align: left;
+}
+
+.quote-record-more-menu button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #2f3b45;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 0 9px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.quote-record-more-menu button:hover {
+  background: #eef8f8;
+  color: #0f766e;
+}
+
+.quote-record-more-menu button:disabled,
+.quote-record-more-menu button:disabled:hover {
+  background: transparent;
+  color: #a0acb7;
+  cursor: not-allowed;
+}
+
+.sample-records-panel {
+  margin-bottom: 16px;
+}
+
+.sample-record-table-wrap {
+  overflow-x: auto;
+}
+
+.sample-record-table {
+  min-width: 1120px;
+}
+
+.sample-record-table th,
+.sample-record-table td {
+  padding-top: 9px;
+  padding-bottom: 9px;
+  vertical-align: middle;
+}
+
+.sample-record-table th {
+  background: #f1f3f5;
+  font-size: 14px;
+}
+
+.sample-record-table th:last-child,
+.sample-record-table td:last-child {
+  text-align: right;
+}
+
+.sample-record-link {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+
+.sample-record-actions {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.sample-record-actions .secondary-button {
+  min-height: 30px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.sample-record-actions .icon-button {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+}
+
+.sample-record-more {
+  position: relative;
+}
+
+.sample-record-more-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: transparent;
+}
+
+.sample-record-more-menu {
+  display: grid;
+  gap: 2px;
+  position: absolute;
+  z-index: 1201;
+  min-width: 126px;
+  border: 1px solid #dfe3dc;
+  border-radius: 8px;
+  background: white;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.14);
+  padding: 6px;
+  text-align: left;
+}
+
+.sample-record-more-menu button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #2f3b45;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 0 9px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.sample-record-more-menu button:hover {
+  background: #eef8f8;
+  color: #0f766e;
+}
+
+.sample-record-more-menu button:disabled,
+.sample-record-more-menu button:disabled:hover {
+  background: transparent;
+  color: #a0acb7;
+  cursor: not-allowed;
+}
+
 .task-row strong {
   display: block;
   margin-bottom: 4px;

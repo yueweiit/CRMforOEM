@@ -1,8 +1,9 @@
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog } from "@alifd/next";
 import "@alifd/next/lib/dialog/style.js";
-import { CheckCircle2, Download, History, NotebookTabs, XCircle } from "lucide-react";
+import { CheckCircle2, ChevronDown, Download, History, MoreHorizontal, Send, XCircle } from "lucide-react";
 import "./analysis-edit.css";
 import { quoteFlowStatusLabel } from "@oem-crm/shared";
 import { showClientToast } from "../../../../components/Toast";
@@ -399,11 +400,42 @@ function statusDialogTransitions(status: string) {
   return allowedTransitions(status).filter((nextStatus) => nextStatus !== "VOIDED");
 }
 
-function statusDialogActionLabel(currentStatus: string, nextStatus: string) {
+type SampleStatusAction = {
+  nextStatus: string;
+  label: string;
+};
+
+function sampleStatusActions(status: string): SampleStatusAction[] {
+  if (status === "APPROVING") {
+    return [];
+  }
+  const nextStatuses = statusDialogTransitions(status).filter(
+    (nextStatus) => status !== "DELIVERED" || ["RETURNED", "STORED"].includes(nextStatus)
+  );
+  return nextStatuses.map((nextStatus) => {
+    if ((status === "REQUESTED" || status === "REJECTED") && nextStatus === "APPROVING") {
+      return { nextStatus, label: "发起审核" };
+    }
+    const labels: Record<string, string> = {
+      SHIPPED: "标记已寄出",
+      DELIVERED: "确认签收",
+      RETURNED: "记录归还",
+      STORED: "记录留样",
+      CLOSED: "关闭样品"
+    };
+    return { nextStatus, label: labels[nextStatus] ?? statusLabel(nextStatus) };
+  });
+}
+
+function sampleStatusActionLabel(currentStatus: string, nextStatus: string) {
   if ((currentStatus === "REQUESTED" || currentStatus === "REJECTED") && nextStatus === "APPROVING") {
     return "发起审核";
   }
-  return statusLabel(nextStatus);
+  return sampleStatusActions(currentStatus).find((action) => action.nextStatus === nextStatus)?.label ?? statusLabel(nextStatus);
+}
+
+function usesSampleReturnRecord(currentStatus: string, nextStatus: string): nextStatus is "RETURNED" | "STORED" {
+  return nextStatus === "RETURNED" || (nextStatus === "STORED" && ["DELIVERED", "FEEDBACK_RECEIVED"].includes(currentStatus));
 }
 
 function buildCreatePayload(customerId: string, form: {
@@ -581,6 +613,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [editing, setEditing] = useState<Sample | null>(null);
   const [statusSample, setStatusSample] = useState<Sample | null>(null);
+  const [statusTarget, setStatusTarget] = useState<string | null>(null);
   const [statusForm, setStatusForm] = useState({
     carrier: "",
     trackingNo: "",
@@ -596,6 +629,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   const [approvalMode, setApprovalMode] = useState<"approve" | "reject">("approve");
   const [approvalSample, setApprovalSample] = useState<Sample | null>(null);
   const [approvalComment, setApprovalComment] = useState("");
+  const [moreActionsMenu, setMoreActionsMenu] = useState<{ id: string; top: number; right: number } | null>(null);
   const [editForm, setEditForm] = useState({
     productSummary: "",
     specification: "",
@@ -668,7 +702,9 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   });
   const currentEditingSample = editing ? data.find((item) => item.id === editing.id) ?? editing : null;
   const currentStatusSample = statusSample ? data.find((item) => item.id === statusSample.id) ?? statusSample : null;
-  const statusTransitions = statusDialogTransitions(currentStatusSample?.status ?? "");
+  const selectedStatusAction = sampleStatusActions(currentStatusSample?.status ?? "")
+    .find((action) => action.nextStatus === statusTarget) ?? null;
+  const statusTransitions = selectedStatusAction ? [selectedStatusAction.nextStatus] : [];
 
   const refreshSamples = () => {
     queryClient.invalidateQueries({ queryKey: ["samples", customerId] });
@@ -756,6 +792,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
       refreshSamples();
       setStatusOpen(false);
       setStatusSample(null);
+      setStatusTarget(null);
       setStatusForm({ carrier: "", trackingNo: "", shippedAt: formatDateInput(new Date()), deliveredAt: "", feedback: "" });
       showClientToast({ type: "success", title: "状态已更新", message: "样品状态已保存。" });
     },
@@ -876,6 +913,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
       });
       setStatusOpen(false);
       setStatusSample(null);
+      setStatusTarget(null);
       showClientToast({ type: "success", title: "归还/留样已记录", message: "样品状态已更新。" });
     },
     onError: (error) => {
@@ -925,8 +963,9 @@ export function SamplePanel({ customerId }: { customerId: string }) {
     setEditOpen(true);
   };
 
-  const openStatus = (item: Sample) => {
+  const openStatus = (item: Sample, nextStatus: string) => {
     setStatusSample(item);
+    setStatusTarget(nextStatus);
     setStatusForm({
       carrier: item.carrier ?? "",
       trackingNo: item.trackingNo ?? "",
@@ -1009,8 +1048,6 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   };
 
   const canEdit = (item: Sample) => item.status !== "VOIDED" && item.status !== "CLOSED";
-  const canApprove = (item: Sample) => item.status === "APPROVING";
-  const canReject = (item: Sample) => item.status === "APPROVING";
   const canDelete = (item: Sample) => item.status !== "VOIDED" && item.status !== "CLOSED";
   const currentHistory = historyQuery.data ?? [];
   const createMessage = createSampleValidationMessage(createForm);
@@ -1208,7 +1245,8 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   };
 
   return (
-    <section className="panel">
+    <>
+    <section className="panel sample-records-panel">
       <div className="panel-title">
         <div className="quote-panel-title">
           <h2>样品记录</h2>
@@ -1230,69 +1268,152 @@ export function SamplePanel({ customerId }: { customerId: string }) {
       ) : samplesQuery.isError ? (
         <div className="error-state">样品记录加载失败，请稍后重试。</div>
       ) : data.length === 0 ? (
-        <div className="empty-state">当前还没有样品记录。</div>
+        <div className="empty-state">暂无记录</div>
       ) : (
-        <div className="task-list">
-          {data.map((item) => {
-            const feeTotal = sampleFeeTotal(item);
-            const lastReturn = latestReturnRecord(item);
-            return (
-              <div className="task-row" key={item.id}>
-                <NotebookTabs size={16} />
-                <div>
-                  <strong>
-                    <button
-                      className="table-link"
-                      onClick={() => openSampleDetail(item)}
-                      style={{ background: "transparent", border: 0, cursor: "pointer", padding: 0 }}
-                      type="button"
-                    >
-                      {item.productSummary}
-                    </button>
-                    {item.quote ? (
-                      <>
-                        {" · 关联报价 "}
-                        <button
-                          className="table-link"
-                          onClick={() => openQuoteDetail(item)}
-                          style={{ background: "transparent", border: 0, cursor: "pointer", padding: 0 }}
-                          type="button"
-                        >
+        <div className="sample-record-table-wrap">
+          <table className="sample-record-table">
+            <thead>
+              <tr>
+                <th>样品</th>
+                <th>规格</th>
+                <th>用途</th>
+                <th>状态</th>
+                <th>数量</th>
+                <th>费用</th>
+                <th>关联报价</th>
+                <th>物流</th>
+                <th>创建日期</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((item) => {
+                const feeTotal = sampleFeeTotal(item);
+                const shippingText = item.trackingNo ? `${item.carrier ? `${item.carrier} · ` : ""}${item.trackingNo}` : "未填运单";
+                const nextActions = sampleStatusActions(item.status);
+                return (
+                  <tr key={item.id}>
+                    <td>
+                      <button className="table-link sample-record-link" onClick={() => openSampleDetail(item)} type="button">
+                        {item.productSummary}
+                      </button>
+                    </td>
+                    <td>{item.specification || "未填写"}</td>
+                    <td>{item.samplePurpose ? samplePurposeLabel(item.samplePurpose) : "未填写"}</td>
+                    <td>
+                      <span className={sampleStatusPillClass(item.status)}>
+                        {statusLabel(item.status)}
+                      </span>
+                    </td>
+                    <td>{item.sampleQuantity ?? "-"}</td>
+                    <td>{feeTotal.toFixed(2)}</td>
+                    <td>
+                      {item.quote ? (
+                        <button className="table-link sample-record-link" onClick={() => openQuoteDetail(item)} type="button">
                           {item.quote.quoteNo}
                         </button>
-                      </>
-                    ) : null}
-                    {item.quote?.productName ? ` · ${item.quote.productName}` : ""}
-                  </strong>
-                  <span>
-                    {statusLabel(item.status)} 费用 {formatMoney(feeTotal, item.quote?.currency ?? item.fees?.[0]?.currency)}   | {item.samplePurpose ? `用途 ${samplePurposeLabel(item.samplePurpose)}` : ""} {item.sampleQuantity ? `数量 ${item.sampleQuantity}   | ` : ""}{item.trackingNo ? `运单 ${item.trackingNo}` : "未填运单"} {item.carrier ? `物流 ${item.carrier}` : ""}   |   
-                  </span>
-                  <span>
-                      {item.shippedAt ? `发货 ${new Date(item.shippedAt).toLocaleDateString()}` : "未发货"} {item.deliveredAt ? `签收 ${new Date(item.deliveredAt).toLocaleDateString()}` : ""} {item.deliveryDeadline ? `交付 ${new Date(item.deliveryDeadline).toLocaleDateString()}` : ""} {lastReturn ? `${returnTypeLabel(lastReturn.returnType)} ${new Date(lastReturn.recordedAt).toLocaleDateString()}` : ""} {item.feedback ? `反馈 ${item.feedback}` : ""}
-                  </span>
-                </div>
-                <div className="contact-row-actions">
-                  <EditIconButton disabled={!canEdit(item)} onClick={() => openEdit(item)} />
-                  <button className="secondary-button icon-button" onClick={() => openHistory(item)} title="历史" type="button">
-                    <History size={14} />
-                  </button>
-                  <button className="secondary-button" disabled={item.status === "APPROVING" || !statusDialogTransitions(item.status).length} onClick={() => openStatus(item)} type="button">
-                    状态
-                  </button>
-                  <button className="secondary-button icon-button" disabled={!canApprove(item) || approve.isPending} onClick={() => openApproval(item, "approve")} title="审核通过" type="button">
-                    <CheckCircle2 size={14} />
-                  </button>
-                  <button className="secondary-button icon-button" disabled={!canReject(item) || reject.isPending} onClick={() => openApproval(item, "reject")} title="审核驳回" type="button">
-                    <XCircle size={14} />
-                  </button>
-                  <DeleteIconButton disabled={!canDelete(item)} onClick={() => openDelete(item)} />
-                </div>
-              </div>
-            );
-          })}
+                      ) : "未关联"}
+                    </td>
+                    <td>{shippingText}</td>
+                    <td>{new Date(item.createdAt).toLocaleDateString()}</td>
+                    <td>
+                      <div className="sample-record-actions">
+                        <EditIconButton disabled={!canEdit(item)} onClick={() => openEdit(item)} />
+                        <div className="sample-record-more">
+                          <button
+                            aria-expanded={moreActionsMenu?.id === item.id}
+                            className="secondary-button icon-button"
+                            onClick={(event) => {
+                              const rect = event.currentTarget.getBoundingClientRect();
+                              setMoreActionsMenu((current) => current?.id === item.id ? null : {
+                                id: item.id,
+                                top: rect.bottom + 6,
+                                right: window.innerWidth - rect.right
+                              });
+                            }}
+                            title="更多"
+                            type="button"
+                          >
+                            <MoreHorizontal size={15} />
+                          </button>
+                          {moreActionsMenu?.id === item.id ? createPortal(
+                            <div className="sample-record-more-layer" onMouseDown={() => setMoreActionsMenu(null)}>
+                            <div
+                              className="sample-record-more-menu"
+                              onMouseDown={(event) => event.stopPropagation()}
+                              style={{ top: moreActionsMenu.top, right: moreActionsMenu.right }}
+                            >
+                              <button
+                                onClick={() => {
+                                  setMoreActionsMenu(null);
+                                  openHistory(item);
+                                }}
+                                type="button"
+                              >
+                                <History size={14} />
+                                <span>历史记录</span>
+                              </button>
+                              {item.status === "APPROVING" ? (
+                                <>
+                                  <button
+                                    onClick={() => {
+                                      setMoreActionsMenu(null);
+                                      openApproval(item, "approve");
+                                    }}
+                                    type="button"
+                                  >
+                                    <CheckCircle2 size={14} />
+                                    <span>审核通过</span>
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setMoreActionsMenu(null);
+                                      openApproval(item, "reject");
+                                    }}
+                                    type="button"
+                                  >
+                                    <XCircle size={14} />
+                                    <span>审核驳回</span>
+                                  </button>
+                                </>
+                              ) : null}
+                              {nextActions.map((action) => (
+                                <button
+                                  key={action.nextStatus}
+                                  onClick={() => {
+                                    setMoreActionsMenu(null);
+                                    openStatus(item, action.nextStatus);
+                                  }}
+                                  type="button"
+                                >
+                                  {action.nextStatus === "SHIPPED" ? <Send size={14} /> : <ChevronDown size={14} />}
+                                  <span>{action.label}</span>
+                                </button>
+                              ))}
+                            </div>
+                            </div>,
+                            document.body
+                          ) : null}
+                        </div>
+                        <DeleteIconButton disabled={!canDelete(item)} onClick={() => openDelete(item)} />
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
+    </section>
 
+    <section className="panel sample-create-panel">
+      <div className="panel-title">
+        <div className="quote-panel-title">
+          <h2>新增样品</h2>
+          <span>填写样品信息、附件与费用</span>
+        </div>
+      </div>
       <div className="analysis-edit-form">
         <div className="form-grid compact-form sample-create-grid">
         <Field label={t("sampleFields.sampleProduct")} value={createForm.productSummary} onChange={(value) => setCreateForm({ ...createForm, productSummary: value })} />
@@ -1351,6 +1472,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
         </div>
         </div>
       </div>
+    </section>
 
       <Dialog
         v2
@@ -1798,11 +1920,12 @@ export function SamplePanel({ customerId }: { customerId: string }) {
       <Dialog
         v2
         className="crm-action-dialog"
-        title={`样品状态 · ${currentStatusSample?.productSummary ?? ""}`}
+        title={`${selectedStatusAction?.label ?? "样品状态"} · ${currentStatusSample?.productSummary ?? ""}`}
         visible={statusOpen}
         onClose={() => {
           setStatusOpen(false);
           setStatusSample(null);
+          setStatusTarget(null);
         }}
         footer={(
           <div className="toolbar crm-dialog-footer">
@@ -1811,6 +1934,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
               onClick={() => {
                 setStatusOpen(false);
                 setStatusSample(null);
+                setStatusTarget(null);
               }}
               type="button"
             >
@@ -1898,12 +2022,11 @@ export function SamplePanel({ customerId }: { customerId: string }) {
             </section>
           ) : null}
           <section className="detail-section">
-            <h4>可执行操作</h4>
+            <h4>确认操作</h4>
+            {selectedStatusAction ? <div className="detail-note">确认执行“{selectedStatusAction.label}”吗？</div> : null}
             <div className="toolbar">
               {statusTransitions.length ? (
-                statusTransitions
-                  .filter((nextStatus) => currentStatusSample?.status !== "DELIVERED" || ["RETURNED", "STORED"].includes(nextStatus))
-                  .map((nextStatus) => {
+                statusTransitions.map((nextStatus) => {
                   const requiresShipmentInfo = nextStatus === "SHIPPED";
                   const requiresDeliveryInfo = nextStatus === "DELIVERED";
                   const shipmentMissing = requiresShipmentInfo && (!statusForm.carrier.trim() || !statusForm.trackingNo.trim());
@@ -1914,7 +2037,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                       key={nextStatus}
                       onClick={() => {
                         if (!currentStatusSample) return;
-                        if (nextStatus === "RETURNED" || nextStatus === "STORED") {
+                        if (usesSampleReturnRecord(currentStatusSample.status, nextStatus)) {
                           returnMutation.mutate(nextStatus);
                           return;
                         }
@@ -1928,7 +2051,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                       }}
                       type="button"
                     >
-                      {statusDialogActionLabel(currentStatus, nextStatus)}
+                      {sampleStatusActionLabel(currentStatus, nextStatus)}
                     </button>
                   );
                   })
@@ -2143,6 +2266,6 @@ export function SamplePanel({ customerId }: { customerId: string }) {
       >
         <p>作废后，样品仍保留在历史中，但不再参与后续流转。确定要作废样品 {editing?.productSummary} 吗？</p>
       </Dialog>
-    </section>
+    </>
   );
 }
