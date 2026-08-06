@@ -179,6 +179,7 @@ enum QuoteHistoryAction {
   ACCEPTED
   CUSTOMER_REJECTED
   EXPIRED
+  REVISION_CREATED
   VOIDED
 }
 
@@ -353,6 +354,7 @@ model User {
   emailPromptConfigsCreated EmailPromptConfig[] @relation("EmailPromptConfigCreatedBy")
   emailPromptConfigsUpdated EmailPromptConfig[] @relation("EmailPromptConfigUpdatedBy")
   reviewedQuoteReplyAssessments QuoteReplyAssessment[] @relation("QuoteReplyAssessmentReviewer")
+  revisedQuotes                  Quote[] @relation("QuoteRevisedBy")
 
   @@index([organizationId])
   @@index([teamId])
@@ -503,6 +505,7 @@ model Customer {
   emailDrafts        EmailDraft[]
   followUpTasks      FollowUpTask[]
   quotes             Quote[]
+  quoteRevisionGroups QuoteRevisionGroup[]
   sampleRequests     SampleRequest[]
 
   @@unique([organizationId, normalizedName])
@@ -1056,6 +1059,12 @@ model FollowUpTask {
 model Quote {
   id                   String              @id @default(cuid())
   customerId           String
+  revisionGroupId      String
+  previousRevisionId   String?             @unique
+  revisionNo           Int                 @default(1)
+  revisionReason       String?
+  revisedById          String?
+  revisedAt            DateTime?
   quoteNo              String
   status               QuoteStatus         @default(DRAFT)
   approvalStatus       QuoteApprovalStatus @default(DRAFT)
@@ -1098,6 +1107,10 @@ model Quote {
   updatedAt            DateTime            @updatedAt
 
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  revisionGroup QuoteRevisionGroup @relation(fields: [revisionGroupId], references: [id], onDelete: Cascade)
+  previousRevision Quote? @relation("QuoteRevisionChain", fields: [previousRevisionId], references: [id], onDelete: SetNull)
+  nextRevision Quote? @relation("QuoteRevisionChain")
+  revisedBy User? @relation("QuoteRevisedBy", fields: [revisedById], references: [id], onDelete: SetNull)
   histories QuoteHistory[]
   sampleRequests SampleRequest[]
   emailDrafts EmailDraft[]
@@ -1106,8 +1119,24 @@ model Quote {
   replyAssessments QuoteReplyAssessment[]
 
   @@unique([quoteNo])
+  @@unique([revisionGroupId, revisionNo])
   @@index([customerId])
+  @@index([revisionGroupId, revisionNo])
   @@map("quotes")
+}
+
+model QuoteRevisionGroup {
+  id          String   @id @default(cuid())
+  customerId  String
+  baseQuoteNo String   @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  quotes   Quote[]
+
+  @@index([customerId])
+  @@map("quote_revision_groups")
 }
 
 model QuoteHistory {

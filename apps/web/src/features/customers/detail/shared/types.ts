@@ -167,6 +167,15 @@ export type QuoteReplyAssessment = {
 };
 export type Quote = {
   id: string;
+  revisionGroupId: string;
+  previousRevisionId?: string | null;
+  revisionNo: number;
+  revisionReason?: string | null;
+  revisedById?: string | null;
+  revisedAt?: string | null;
+  revisionGroup?: { id: string; baseQuoteNo: string };
+  previousRevision?: QuoteRevisionSummary | null;
+  nextRevision?: QuoteRevisionSummary | null;
   quoteNo: string;
   amount: string;
   productName: string;
@@ -206,6 +215,7 @@ export type Quote = {
   createdAt: string;
   updatedAt: string;
 };
+export type QuoteRevisionSummary = Pick<Quote, "id" | "quoteNo" | "revisionNo" | "status">;
 export type QuoteHistoryItem = {
   id: string;
   action: string;

@@ -2065,6 +2065,65 @@ td small {
   color: #0b6f73;
 }
 
+.quote-revision-chain {
+  display: grid;
+  gap: 8px;
+}
+
+.quote-revision-chain__item {
+  align-items: center;
+  appearance: none;
+  background: #fbfcfe;
+  border: 1px solid #dfe8ef;
+  border-radius: 6px;
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 52px;
+  padding: 10px 12px;
+  text-align: left;
+  width: 100%;
+}
+
+.quote-revision-chain__item:hover {
+  border-color: #91b8ba;
+}
+
+.quote-revision-chain__item.is-current {
+  background: #eef8f7;
+  border-color: #4f9a9d;
+}
+
+.quote-revision-chain__identity,
+.quote-revision-chain__meta {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+}
+
+.quote-revision-chain__identity > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quote-revision-chain__meta {
+  justify-content: flex-end;
+}
+
+.quote-revision-chain__meta > strong {
+  white-space: nowrap;
+}
+
+.quote-revision-form textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
 .quote-amount-grid {
   grid-template-columns: repeat(12, minmax(0, 1fr));
 }
@@ -3301,6 +3360,15 @@ td small {
 
   .history-timeline__header time {
     white-space: normal;
+  }
+
+  .quote-revision-chain__item {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .quote-revision-chain__meta {
+    flex-wrap: wrap;
+    justify-content: flex-start;
   }
 
   .detail-page-header__top {

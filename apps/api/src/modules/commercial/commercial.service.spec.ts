@@ -1,8 +1,10 @@
 import * as assert from "node:assert/strict";
-import { BadRequestException } from "@nestjs/common";
+import { BadRequestException, ConflictException } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { calculateQuotePricing } from "@oem-crm/shared";
 import * as ExcelJS from "exceljs";
 import { CommercialService } from "./commercial.service";
+import { QuoteWorkflowService } from "./quote-workflow.service";
 import type { RequestUser } from "../../common/auth/current-user.decorator";
 
 const user: RequestUser = {
@@ -13,7 +15,11 @@ const user: RequestUser = {
   dataScope: "ALL"
 };
 
-function buildService(sampleStatus = "PREPARING", quoteState?: { status: string; approvalStatus: string }) {
+function buildService(
+  sampleStatus = "PREPARING",
+  quoteState?: { status: string; approvalStatus: string },
+  revisionConflict = false
+) {
   const calls: {
     quoteCreate?: Record<string, unknown>;
     sampleCreate?: Record<string, unknown>;
@@ -21,6 +27,8 @@ function buildService(sampleStatus = "PREPARING", quoteState?: { status: string;
     sampleFeeDeletes?: Record<string, unknown>[];
     sampleUpdate?: Record<string, unknown>;
     quoteUpdate?: Record<string, unknown>;
+    quoteRevisionGroupCreate?: Record<string, unknown>;
+    quoteHistoryCreates?: Record<string, unknown>[];
   } = {};
 
   const sample = {
@@ -68,6 +76,14 @@ function buildService(sampleStatus = "PREPARING", quoteState?: { status: string;
     ? {
         id: "quote-1",
         customerId: "customer-1",
+        revisionGroupId: "revision-group-1",
+        previousRevisionId: null,
+        revisionNo: 1,
+        revisionReason: null,
+        revisedById: null,
+        revisedAt: null,
+        revisionGroup: { id: "revision-group-1", baseQuoteNo: "Q-1" },
+        nextRevision: null,
         quoteNo: "Q-1",
         productName: "Test quote",
         specification: "Spec Q",
@@ -83,6 +99,19 @@ function buildService(sampleStatus = "PREPARING", quoteState?: { status: string;
         taxCost: "10.00",
         shippingCost: "10.00",
         discountAmount: "0.00",
+        calcMode: "direct",
+        materialItems: null,
+        materialProfitRate: null,
+        processingTime: null,
+        processingHourlyRate: null,
+        processingProfitRate: null,
+        grossWeight: null,
+        packageLength: null,
+        packageWidth: null,
+        packageHeight: null,
+        volumeDivisor: null,
+        shippingUnitPrice: null,
+        vatRate: null,
         validUntil: null,
         fileAssetId: null,
         notes: null,
@@ -99,10 +128,23 @@ function buildService(sampleStatus = "PREPARING", quoteState?: { status: string;
   const tx = {
     quote: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
+        if (revisionConflict && data.previousRevisionId) {
+          throw new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {
+            code: "P2002",
+            clientVersion: "5.21.1",
+            meta: { target: ["previousRevisionId"] }
+          });
+        }
         calls.quoteCreate = data;
         return {
           id: "quote-created",
           customerId: data.customerId,
+          revisionGroupId: data.revisionGroupId,
+          previousRevisionId: data.previousRevisionId ?? null,
+          revisionNo: data.revisionNo ?? 1,
+          revisionReason: data.revisionReason ?? null,
+          revisedById: data.revisedById ?? null,
+          revisedAt: data.revisedAt ?? null,
           quoteNo: data.quoteNo,
           productName: data.productName,
           specification: data.specification ?? null,
@@ -118,6 +160,19 @@ function buildService(sampleStatus = "PREPARING", quoteState?: { status: string;
           taxCost: data.taxCost,
           shippingCost: data.shippingCost,
           discountAmount: data.discountAmount,
+          calcMode: data.calcMode ?? "direct",
+          materialItems: data.materialItems ?? null,
+          materialProfitRate: data.materialProfitRate ?? null,
+          processingTime: data.processingTime ?? null,
+          processingHourlyRate: data.processingHourlyRate ?? null,
+          processingProfitRate: data.processingProfitRate ?? null,
+          grossWeight: data.grossWeight ?? null,
+          packageLength: data.packageLength ?? null,
+          packageWidth: data.packageWidth ?? null,
+          packageHeight: data.packageHeight ?? null,
+          volumeDivisor: data.volumeDivisor ?? null,
+          shippingUnitPrice: data.shippingUnitPrice ?? null,
+          vatRate: data.vatRate ?? null,
           validUntil: data.validUntil ?? null,
           fileAssetId: data.fileAssetId ?? null,
           notes: data.notes ?? null,
@@ -144,6 +199,32 @@ function buildService(sampleStatus = "PREPARING", quoteState?: { status: string;
           ...quoteState,
           ...data,
           updatedAt: new Date("2026-07-06T01:00:00.000Z")
+        };
+      },
+      updateMany: async ({ data }: { data: Record<string, unknown> }) => {
+        calls.quoteUpdate = data;
+        if (!quoteState) return { count: 0 };
+        quoteState = {
+          status: (data.status ?? quoteState.status) as string,
+          approvalStatus: (data.approvalStatus ?? quoteState.approvalStatus) as string
+        };
+        return { count: 1 };
+      },
+      findUnique: async () => quoteState ? {
+        ...quoteBase,
+        ...quoteState,
+        ...calls.quoteUpdate,
+        updatedAt: new Date("2026-07-06T01:00:00.000Z")
+      } : null
+    },
+    quoteRevisionGroup: {
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        calls.quoteRevisionGroupCreate = data;
+        return {
+          id: "revision-group-created",
+          ...data,
+          createdAt: new Date("2026-07-06T00:00:00.000Z"),
+          updatedAt: new Date("2026-07-06T00:00:00.000Z")
         };
       }
     },
@@ -247,7 +328,11 @@ function buildService(sampleStatus = "PREPARING", quoteState?: { status: string;
       create: async () => ({ id: "history-1" })
     },
     quoteHistory: {
-      create: async () => ({ id: "quote-history-1" })
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        calls.quoteHistoryCreates = calls.quoteHistoryCreates ?? [];
+        calls.quoteHistoryCreates.push(data);
+        return { id: "quote-history-1" };
+      }
     }
   };
 
@@ -256,7 +341,17 @@ function buildService(sampleStatus = "PREPARING", quoteState?: { status: string;
       findFirst: async () => ({ id: "customer-1", organizationId: "org-1" })
     },
     quote: {
-      findFirst: async () => quoteBase
+      findFirst: async ({ where }: { where?: Record<string, unknown> } = {}) => {
+        if (where?.previousRevisionId) {
+          return {
+            id: "quote-2",
+            quoteNo: "Q-1-R02",
+            revisionNo: 2,
+            status: "DRAFT"
+          };
+        }
+        return quoteBase;
+      }
     },
     user: {
       findUnique: async () => ({ name: "Tester", email: "tester@example.com" })
@@ -281,7 +376,7 @@ function buildService(sampleStatus = "PREPARING", quoteState?: { status: string;
 
   return {
     calls,
-    service: new CommercialService(prisma as never, customerStageService as never)
+    service: new CommercialService(prisma as never, customerStageService as never, new QuoteWorkflowService())
   };
 }
 
@@ -490,6 +585,9 @@ async function main() {
     assert.equal((calls.quoteCreate?.unitPrice as { toString(): string }).toString(), "4.93");
     assert.equal(calls.quoteCreate?.status, "DRAFT");
     assert.equal(calls.quoteCreate?.approvalStatus, "DRAFT");
+    assert.equal(calls.quoteCreate?.revisionGroupId, "revision-group-created");
+    assert.equal(calls.quoteCreate?.revisionNo, 1);
+    assert.equal(calls.quoteRevisionGroupCreate?.baseQuoteNo, "Q-NEW");
   }
 
   {
@@ -784,7 +882,7 @@ async function main() {
   {
     const { service, calls } = buildService("PREPARING", { status: "SENT", approvalStatus: "APPROVED" });
     const updated = await service.rejectQuoteByCustomer(user, "quote-1", {});
-    assert.equal(calls.quoteUpdate?.status, "REJECTED");
+    assert.equal(calls.quoteUpdate?.status, "CUSTOMER_REJECTED");
     assert.equal(updated.approvalStatus, "APPROVED");
   }
 
@@ -795,25 +893,70 @@ async function main() {
   }
 
   {
-    const { service, calls } = buildService("PREPARING", { status: "REJECTED", approvalStatus: "APPROVED" });
-    const updated = await service.updateQuote(user, "quote-1", { notes: "revised" });
-    assert.equal(calls.quoteUpdate?.notes, "revised");
-    assert.equal(updated.status, "REJECTED");
-    assert.equal(updated.approvalStatus, "APPROVED");
+    const { service, calls } = buildService("PREPARING", { status: "CUSTOMER_REJECTED", approvalStatus: "APPROVED" });
+    await assert.rejects(
+      () => service.updateQuote(user, "quote-1", { notes: "revised" }),
+      /immutable; create a revision/
+    );
+    assert.equal(calls.quoteUpdate, undefined);
   }
 
   {
-    const { service, calls } = buildService("PREPARING", { status: "DRAFT", approvalStatus: "APPROVED" });
-    await service.updateQuote(user, "quote-1", { status: "SENT" });
-    assert.equal(calls.quoteUpdate?.status, "SENT");
-    assert.equal(calls.quoteUpdate?.approvalStatus, "APPROVED");
+    const { service, calls } = buildService("PREPARING", { status: "CUSTOMER_REJECTED", approvalStatus: "APPROVED" });
+    const revised = await service.createQuoteRevision(user, "quote-1", { reason: "客户要求调整价格" });
+
+    assert.equal(revised.quoteNo, "Q-1-R02");
+    assert.equal(calls.quoteCreate?.revisionGroupId, "revision-group-1");
+    assert.equal(calls.quoteCreate?.previousRevisionId, "quote-1");
+    assert.equal(calls.quoteCreate?.revisionNo, 2);
+    assert.equal(calls.quoteCreate?.revisionReason, "客户要求调整价格");
+    assert.equal(calls.quoteCreate?.status, "DRAFT");
+    assert.equal(calls.quoteCreate?.approvalStatus, "DRAFT");
+    assert.equal(calls.quoteCreate?.fileAssetId, null);
+    assert.equal(calls.quoteCreate?.approvalComment, undefined);
+    assert.equal(calls.quoteCreate?.sentAt, undefined);
+    assert.equal(calls.quoteHistoryCreates?.length, 2);
+    assert.deepEqual(calls.quoteHistoryCreates?.map((item) => item.action), ["REVISION_CREATED", "REVISION_CREATED"]);
   }
 
   {
-    const { service, calls } = buildService("PREPARING", { status: "DRAFT", approvalStatus: "APPROVED" });
-    await service.updateQuote(user, "quote-1", { status: "CUSTOMER_REJECTED" });
-    assert.equal(calls.quoteUpdate?.status, "CUSTOMER_REJECTED");
-    assert.equal(calls.quoteUpdate?.approvalStatus, "APPROVED");
+    const { service } = buildService("PREPARING", { status: "SENT", approvalStatus: "APPROVED" });
+    await assert.rejects(
+      () => service.createQuoteRevision(user, "quote-1", { reason: "提前修订" }),
+      /Only customer-rejected quotes/
+    );
+  }
+
+  {
+    const { service } = buildService(
+      "PREPARING",
+      { status: "CUSTOMER_REJECTED", approvalStatus: "APPROVED" },
+      true
+    );
+    await assert.rejects(
+      () => service.createQuoteRevision(user, "quote-1", { reason: "重复提交" }),
+      (error: unknown) => {
+        if (!(error instanceof ConflictException)) return false;
+        const response = error.getResponse() as { code?: string; existingRevision?: { id?: string } };
+        return response.code === "QUOTE_REVISION_ALREADY_EXISTS" && response.existingRevision?.id === "quote-2";
+      }
+    );
+  }
+
+  {
+    const { service } = buildService("PREPARING", { status: "DRAFT", approvalStatus: "APPROVED" });
+    await assert.rejects(
+      () => service.updateQuote(user, "quote-1", { status: "SENT" }),
+      /dedicated command/
+    );
+  }
+
+  {
+    const { service } = buildService("PREPARING", { status: "DRAFT", approvalStatus: "APPROVED" });
+    await assert.rejects(
+      () => service.updateQuote(user, "quote-1", { status: "CUSTOMER_REJECTED" }),
+      /dedicated command/
+    );
   }
 
   {

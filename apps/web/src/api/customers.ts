@@ -155,6 +155,13 @@ export function updateQuote<T = unknown>(quoteId: string, payload: unknown, opti
   return apiPatch<T>(`/quotes/${quoteId}`, payload, options);
 }
 
+export function createQuoteRevision<T = unknown>(quoteId: string, payload: { reason: string }, options?: MutationOptions) {
+  return apiPost<T>(`/quotes/${quoteId}/revisions`, payload, options);
+}
+
+export function getQuoteRevisions<T = unknown>(quoteId: string) {
+  return apiGet<T>(`/quotes/${quoteId}/revisions`);
+}
 
 export function deleteQuote<T = unknown>(quoteId: string, options?: MutationOptions) {
   return apiDelete<T>(`/quotes/${quoteId}`, options);

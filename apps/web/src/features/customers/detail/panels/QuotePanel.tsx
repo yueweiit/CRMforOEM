@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Dialog } from "@alifd/next";
 import "@alifd/next/lib/dialog/style.js";
-import { CheckCircle2, ChevronDown, Download, History, MoreHorizontal, Send, XCircle } from "lucide-react";
+import { CheckCircle2, ChevronDown, CopyPlus, Download, History, MoreHorizontal, Send, XCircle } from "lucide-react";
 import {
   calculateQuotePricing,
   quoteFlowStatusLabel
@@ -13,15 +13,16 @@ import { showClientToast } from "../../../../components/Toast";
 import {
   approveQuote,
   createQuote,
+  createQuoteRevision,
   deleteQuote,
   acceptQuote,
   exportQuote,
   exportQuotes,
   getQuoteHistory,
+  getQuoteRevisions,
   getQuotes,
   rejectQuote,
   rejectCustomerQuote,
-  sendQuote,
   submitQuoteReview,
   updateQuote
 } from "../../../../api/customers";
@@ -154,7 +155,7 @@ function quoteStatusPillClass(status: string) {
   return ["status-pill", "status-pill--detail", toneByStatus[status] ?? "status-pill--neutral"].join(" ");
 }
 
-function historyActionLabel(item: QuoteHistoryItem) {
+function historyActionLabel(item: QuoteHistoryItem, revisionCreatedLabel = "创建修订版") {
   const afterStatus = quoteHistoryField(item, "after", "status");
   const afterApprovalStatus = quoteHistoryField(item, "after", "approvalStatus");
   if (item.action === "REJECTED" && afterStatus === "REJECTED" && afterApprovalStatus === "APPROVED") {
@@ -166,6 +167,7 @@ function historyActionLabel(item: QuoteHistoryItem) {
     SUBMITTED: "提交审批",
     APPROVED: "审批通过",
     REJECTED: "审批驳回",
+    REVISION_CREATED: revisionCreatedLabel,
     VOIDED: "作废"
   };
   return labels[item.action] ?? item.action;
@@ -623,6 +625,9 @@ export function QuotePanel({ customerId }: { customerId: string }) {
   const [reviewQuote, setReviewQuote] = useState<Quote | null>(null);
   const [reviewComment, setReviewComment] = useState("");
   const [statusAction, setStatusAction] = useState<QuoteStatusAction | null>(null);
+  const [revisionOpen, setRevisionOpen] = useState(false);
+  const [revisionSource, setRevisionSource] = useState<Quote | null>(null);
+  const [revisionReason, setRevisionReason] = useState("");
   const [moreActionsMenu, setMoreActionsMenu] = useState<{ id: string; top: number; right: number } | null>(null);
 
   const { data = [] } = useQuery({ queryKey: ["quotes", customerId], queryFn: () => getQuotes<Quote[]>(customerId) });
@@ -634,6 +639,11 @@ export function QuotePanel({ customerId }: { customerId: string }) {
   const detailHistoryQuery = useQuery({
     queryKey: ["quotes", customerId, detailQuote?.id],
     queryFn: () => getQuoteHistory<QuoteHistoryItem[]>(detailQuote?.id ?? ""),
+    enabled: Boolean(detailOpen && detailQuote?.id)
+  });
+  const revisionChainQuery = useQuery({
+    queryKey: ["quote-revisions", customerId, detailQuote?.id],
+    queryFn: () => getQuoteRevisions<Quote[]>(detailQuote?.id ?? ""),
     enabled: Boolean(detailOpen && detailQuote?.id)
   });
 
@@ -725,31 +735,6 @@ export function QuotePanel({ customerId }: { customerId: string }) {
     }
   });
 
-  const sendAction = useMutation({
-    mutationFn: (quoteId: string) => sendQuote(quoteId, {}, { toast: false }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["quotes", customerId] });
-      if (statusQuote) {
-        queryClient.invalidateQueries({ queryKey: ["quotes", customerId, statusQuote.id] });
-      }
-      setStatusOpen(false);
-      setStatusQuote(null);
-      setStatusAction(null);
-      showClientToast({
-        type: "success",
-        title: "发送报价成功",
-        message: "报价已发送给客户。"
-      });
-    },
-    onError: (error) => {
-      showClientToast({
-        type: "error",
-        title: "发送报价失败",
-        message: error instanceof Error ? error.message : "操作失败"
-      });
-    }
-  });
-
   const acceptAction = useMutation({
     mutationFn: (quoteId: string) => acceptQuote(quoteId, {}, { toast: false }),
     onSuccess: () => {
@@ -795,6 +780,36 @@ export function QuotePanel({ customerId }: { customerId: string }) {
       showClientToast({
         type: "error",
         title: "客户拒绝失败",
+        message: error instanceof Error ? error.message : "操作失败"
+      });
+    }
+  });
+
+  const createRevision = useMutation({
+    mutationFn: () => {
+      const reason = revisionReason.trim();
+      if (!reason) {
+        throw new Error(t("quoteFields.revisionReasonRequired"));
+      }
+      return createQuoteRevision<Quote>(revisionSource?.id ?? "", { reason }, { toast: false });
+    },
+    onSuccess: (created) => {
+      queryClient.invalidateQueries({ queryKey: ["quotes", customerId] });
+      queryClient.invalidateQueries({ queryKey: ["quote-revisions", customerId] });
+      setRevisionOpen(false);
+      setRevisionSource(null);
+      setRevisionReason("");
+      showClientToast({
+        type: "success",
+        title: t("quoteFields.revisionCreated"),
+        message: t("quoteFields.revisionCreatedMessage")
+      });
+      openEdit(created);
+    },
+    onError: (error) => {
+      showClientToast({
+        type: "error",
+        title: t("quoteFields.revisionCreateFailed"),
         message: error instanceof Error ? error.message : "操作失败"
       });
     }
@@ -941,6 +956,19 @@ export function QuotePanel({ customerId }: { customerId: string }) {
     setHistoryOpen(true);
   };
 
+  const openRevision = (item: Quote) => {
+    setRevisionSource(item);
+    setRevisionReason("");
+    setRevisionOpen(true);
+  };
+
+  const openNextRevision = (item: Quote) => {
+    const next = item.nextRevision ? data.find((quote) => quote.id === item.nextRevision?.id) : null;
+    if (next) {
+      openDetail(next);
+    }
+  };
+
   const openDetail = (item: Quote) => {
     setDetailQuote(item);
     setExpandedAmountSnapshotKey(null);
@@ -965,7 +993,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
     setReviewComment("");
   };
 
-  const canEditQuote = (item: Quote) => item.status !== "VOIDED";
+  const canEditQuote = (item: Quote) => item.status !== "VOIDED" && item.status !== "CUSTOMER_REJECTED";
   const statusQuoteId = statusQuote?.id ?? "";
   const createSummary = calculateQuotePricing(form);
   const editSummary = calculateQuotePricing(editForm);
@@ -991,6 +1019,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
   const detailQuoteTerminalStatus = QUOTE_TERMINAL_STATUSES.includes(detailQuoteStatus) ? detailQuoteStatus : "";
   const detailQuoteHistory = detailHistoryQuery.data ?? [];
   const quoteHistoryItems = historyQuery.data ?? [];
+  const quoteRevisionItems = revisionChainQuery.data ?? [];
   const detailQuoteSentAt = quoteHistoryStatusTime(detailQuoteHistory, "SENT");
   const detailQuoteAcceptedAt = quoteHistoryStatusTime(detailQuoteHistory, "ACCEPTED");
   const detailQuoteTerminalAt = detailQuoteTerminalStatus ? quoteHistoryStatusTime(detailQuoteHistory, detailQuoteTerminalStatus) : "";
@@ -1038,13 +1067,6 @@ export function QuotePanel({ customerId }: { customerId: string }) {
       current: detailQuoteStatus === "SENT",
       danger: false
     },
-    {
-      label: statusLabel("ACCEPTED", locale),
-      value: detailQuoteStatus === "ACCEPTED" ? quoteTimelineDateValue(detailQuoteAcceptedAt) || detailQuoteHistoryLoadingValue || statusLabel("ACCEPTED", locale) : "未接受",
-      done: detailQuoteStatus === "ACCEPTED",
-      current: detailQuoteStatus === "ACCEPTED",
-      danger: false
-    },
     ...(detailQuoteTerminalStatus && !["REJECTED", "ACCEPTED"].includes(detailQuoteTerminalStatus)
       ? [
           {
@@ -1055,7 +1077,14 @@ export function QuotePanel({ customerId }: { customerId: string }) {
             danger: ["CUSTOMER_REJECTED", "REJECTED"].includes(detailQuoteTerminalStatus)
           }
         ]
-      : [])
+      : []),
+    {
+      label: statusLabel("ACCEPTED", locale),
+      value: detailQuoteStatus === "ACCEPTED" ? quoteTimelineDateValue(detailQuoteAcceptedAt) || detailQuoteHistoryLoadingValue || statusLabel("ACCEPTED", locale) : "未接受",
+      done: detailQuoteStatus === "ACCEPTED",
+      current: detailQuoteStatus === "ACCEPTED",
+      danger: false
+    }
   ];
   const detailQuoteSummary = detailQuote
     ? [
@@ -1165,17 +1194,13 @@ export function QuotePanel({ customerId }: { customerId: string }) {
   const reviewDialogConfirmLabel = reviewMode === "submit" ? "确认提交" : reviewMode === "approve" ? "通过" : "驳回";
   const reviewDialogDescription = reviewMode === "submit" ? "确认提交后，报价将进入待审批状态；备注可留空。" : "备注可留空。";
   const reviewPending = reviewMode === "submit" ? submitReview.isPending : reviewMode === "approve" ? approve.isPending : reject.isPending;
-  const statusActionLabel = statusAction === "send" ? "发送报价" : statusAction === "accept" ? "客户接受" : statusAction === "rejectCustomer" ? "客户拒绝" : "";
-  const statusActionDescription = statusAction === "send"
-    ? "确认后，报价将标记为已发送。"
-    : statusAction === "accept"
+  const statusActionLabel = statusAction === "accept" ? "客户接受" : statusAction === "rejectCustomer" ? "客户拒绝" : "";
+  const statusActionDescription = statusAction === "accept"
       ? "确认后，将记录客户已接受当前报价。"
       : statusAction === "rejectCustomer"
         ? "确认后，将记录客户已拒绝当前报价。"
         : "";
-  const statusActionPending = statusAction === "send"
-    ? sendAction.isPending
-    : statusAction === "accept"
+  const statusActionPending = statusAction === "accept"
       ? acceptAction.isPending
       : statusAction === "rejectCustomer"
         ? rejectCustomerAction.isPending
@@ -1301,6 +1326,22 @@ export function QuotePanel({ customerId }: { customerId: string }) {
                               <History size={14} />
                               <span>历史记录</span>
                             </button>
+                            {item.status === "CUSTOMER_REJECTED" ? (
+                              <button
+                                onClick={() => {
+                                  setMoreActionsMenu(null);
+                                  if (item.nextRevision) {
+                                    openNextRevision(item);
+                                  } else {
+                                    openRevision(item);
+                                  }
+                                }}
+                                type="button"
+                              >
+                                <CopyPlus size={14} />
+                                <span>{t(item.nextRevision ? "quoteFields.viewLatestRevision" : "quoteFields.createRevision")}</span>
+                              </button>
+                            ) : null}
                             {nextActions.map((action) => (
                               <button
                                 key={action.type}
@@ -1464,11 +1505,11 @@ export function QuotePanel({ customerId }: { customerId: string }) {
               </div>
               <div className="quote-formula-grid quote-formula-grid--four">
                 <label>
-                  <span>{t("quoteFields.processingTime")}</span>
+                  <span>{t("quoteFields.processingTimeWithUnit")}</span>
                   <input type="number" value={form.processingTime} onChange={(event) => setForm({ ...form, processingTime: event.target.value })} />
                 </label>
                 <label>
-                  <span>{t("quoteFields.hourlyRate")}</span>
+                  <span>{t("quoteFields.processingHourlyRateWithUnit")}</span>
                   <input type="number" value={form.processingHourlyRate} onChange={(event) => setForm({ ...form, processingHourlyRate: event.target.value })} />
                 </label>
                 <label>
@@ -1490,34 +1531,34 @@ export function QuotePanel({ customerId }: { customerId: string }) {
               <div className="quote-formula-subtitle">{t("quoteFields.volumeWeightFormula")}</div>
               <div className="quote-formula-grid quote-formula-grid--four">
                 <label>
-                  <span>{t("quoteFields.length")}</span>
+                  <span>{t("quoteFields.lengthWithUnit")}</span>
                   <input type="number" value={form.packageLength} onChange={(event) => setForm({ ...form, packageLength: event.target.value })} />
                 </label>
                 <label>
-                  <span>{t("quoteFields.width")}</span>
+                  <span>{t("quoteFields.widthWithUnit")}</span>
                   <input type="number" value={form.packageWidth} onChange={(event) => setForm({ ...form, packageWidth: event.target.value })} />
                 </label>
                 <label>
-                  <span>{t("quoteFields.height")}</span>
+                  <span>{t("quoteFields.heightWithUnit")}</span>
                   <input type="number" value={form.packageHeight} onChange={(event) => setForm({ ...form, packageHeight: event.target.value })} />
                 </label>
                 <label>
-                  <span>{t("quoteFields.volumeDivisor")}</span>
+                  <span>{t("quoteFields.volumeDivisorWithUnit")}</span>
                   <input type="number" value={form.volumeDivisor} onChange={(event) => setForm({ ...form, volumeDivisor: event.target.value })} />
                 </label>
               </div>
               <div className="quote-formula-subtitle">{t("quoteFields.shippingCostFormula")}</div>
               <div className="quote-formula-grid quote-formula-grid--four">
                 <label>
-                  <span>{t("quoteFields.volumeWeight")}</span>
+                  <span>{t("quoteFields.volumeWeightWithUnit")}</span>
                   <input readOnly value={(createSummary.breakdown?.volumeWeight ?? 0).toFixed(2)} />
                 </label>
                 <label>
-                  <span>{t("quoteFields.grossWeight")}</span>
+                  <span>{t("quoteFields.grossWeightWithUnit")}</span>
                   <input type="number" value={form.grossWeight} onChange={(event) => setForm({ ...form, grossWeight: event.target.value })} />
                 </label>
                 <label>
-                  <span>{t("quoteFields.shippingUnitPrice")}</span>
+                  <span>{t("quoteFields.shippingUnitPriceWithUnit")}</span>
                   <input type="number" value={form.shippingUnitPrice} onChange={(event) => setForm({ ...form, shippingUnitPrice: event.target.value })} />
                 </label>
                 <label>
@@ -1626,6 +1667,36 @@ export function QuotePanel({ customerId }: { customerId: string }) {
             <div className="sample-detail-summary__actions">
               <span className={quoteStatusPillClass(detailQuoteStatus)}>{statusLabel(detailQuoteStatus, locale)}</span>
             </div>
+          </section>
+
+          <section className="detail-section sample-detail-section">
+            <div className="sample-detail-section__header">
+              <h4>{t("quoteFields.revisionChainTitle")}</h4>
+              <span>{t("quoteFields.revisionChainDescription")}</span>
+            </div>
+            {revisionChainQuery.isLoading ? <div className="empty-state">{t("quoteFields.revisionChainLoading")}</div> : null}
+            {revisionChainQuery.isError ? <div className="error-state">{t("quoteFields.revisionChainLoadFailed")}</div> : null}
+            {!revisionChainQuery.isLoading && !revisionChainQuery.isError ? (
+              <div className="quote-revision-chain">
+                {quoteRevisionItems.map((revision) => (
+                  <button
+                    className={revision.id === detailQuote?.id ? "quote-revision-chain__item is-current" : "quote-revision-chain__item"}
+                    key={revision.id}
+                    onClick={() => setDetailQuote(revision)}
+                    type="button"
+                  >
+                    <span className="quote-revision-chain__identity">
+                      <strong>R{String(revision.revisionNo).padStart(2, "0")}</strong>
+                      <span>{revision.quoteNo}</span>
+                    </span>
+                    <span className="quote-revision-chain__meta">
+                      <span className={quoteStatusPillClass(quoteDisplayStatus(revision))}>{statusLabel(quoteDisplayStatus(revision), locale)}</span>
+                      <strong>{revision.currency} {revision.amount}</strong>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </section>
 
           <section className="detail-section sample-detail-section">
@@ -2071,9 +2142,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
                   className={statusAction === "rejectCustomer" ? "secondary-button" : "primary-button"}
                   disabled={statusActionPending || !statusQuote}
                   onClick={() => {
-                    if (statusAction === "send") {
-                      sendAction.mutate(statusQuoteId);
-                    } else if (statusAction === "accept") {
+                    if (statusAction === "accept") {
                       acceptAction.mutate(statusQuoteId);
                     } else {
                       rejectCustomerAction.mutate(statusQuoteId);
@@ -2081,7 +2150,6 @@ export function QuotePanel({ customerId }: { customerId: string }) {
                   }}
                   type="button"
                 >
-                  {statusAction === "send" ? <Send size={14} /> : null}
                   {statusAction === "accept" ? <CheckCircle2 size={14} /> : null}
                   {statusAction === "rejectCustomer" ? <XCircle size={14} /> : null}
                   {statusActionPending ? "处理中..." : `确认${statusActionLabel}`}
@@ -2092,6 +2160,63 @@ export function QuotePanel({ customerId }: { customerId: string }) {
           {statusQuote && !statusAction ? (
             <div className="empty-state">当前状态没有可执行的快速流转操作。</div>
           ) : null}
+        </div>
+      </Dialog>
+
+      <Dialog
+        v2
+        className="crm-action-dialog quote-dialog"
+        title={t("quoteFields.revisionDialogTitle")}
+        visible={revisionOpen}
+        onClose={() => {
+          setRevisionOpen(false);
+          setRevisionSource(null);
+          setRevisionReason("");
+        }}
+        footer={(
+          <div className="toolbar crm-dialog-footer">
+            <button
+              className="secondary-button"
+              onClick={() => {
+                setRevisionOpen(false);
+                setRevisionSource(null);
+                setRevisionReason("");
+              }}
+              type="button"
+            >
+              {t("common.cancel")}
+            </button>
+            <button
+              className="primary-button"
+              disabled={createRevision.isPending || !revisionReason.trim()}
+              onClick={() => createRevision.mutate()}
+              type="button"
+            >
+              <CopyPlus size={14} />
+              {createRevision.isPending ? t("quoteFields.creatingRevision") : t("quoteFields.createRevision")}
+            </button>
+          </div>
+        )}
+      >
+        <div className="form-grid compact-form quote-revision-form">
+          <div className="form-field wide-field">
+            <label>
+              <span>{t("quoteFields.revisionSource")}</span>
+              <input readOnly value={revisionSource ? `${revisionSource.quoteNo} · R${String(revisionSource.revisionNo).padStart(2, "0")}` : ""} />
+            </label>
+          </div>
+          <div className="form-field wide-field">
+            <label>
+              <span>{t("quoteFields.revisionReason")}</span>
+              <textarea
+                maxLength={1000}
+                onChange={(event) => setRevisionReason(event.target.value)}
+                placeholder={t("quoteFields.revisionReasonPlaceholder")}
+                rows={4}
+                value={revisionReason}
+              />
+            </label>
+          </div>
         </div>
       </Dialog>
 
@@ -2130,7 +2255,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
                 </div>
                 <div className="history-timeline__content">
                   <div className="history-timeline__header">
-                    <strong>{historyActionLabel(item)}</strong>
+                    <strong>{historyActionLabel(item, t("quoteFields.revisionCreatedAction"))}</strong>
                     <time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleString()}</time>
                   </div>
                   <span className="history-timeline__meta">{historyActorLabel(item)}</span>

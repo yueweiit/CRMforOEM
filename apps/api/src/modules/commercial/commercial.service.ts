@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import * as ExcelJS from "exceljs";
 import { CustomerStage, calculateQuotePricing } from "@oem-crm/shared";
@@ -8,12 +8,14 @@ import { PrismaService } from "../../infrastructure/prisma/prisma.service";
 import { CustomerStageService } from "../customers/customers.public";
 import { CreateSampleFeeDto } from "./dto/create-sample-fee.dto";
 import { CreateQuoteDto } from "./dto/create-quote.dto";
+import { CreateQuoteRevisionDto } from "./dto/create-quote-revision.dto";
 import { CreateSampleRequestDto } from "./dto/create-sample-request.dto";
 import { QuoteReviewDto } from "./dto/quote-review.dto";
 import { RecordSampleReturnDto } from "./dto/record-sample-return.dto";
 import { UpdateSampleFeeDto } from "./dto/update-sample-fee.dto";
 import { UpdateQuoteDto } from "./dto/update-quote.dto";
 import { UpdateSampleRequestDto } from "./dto/update-sample-request.dto";
+import { QuoteWorkflowService } from "./quote-workflow.service";
 
 type QuoteExportRecord = {
   quoteNo: string;
@@ -58,7 +60,8 @@ type QuoteExportRecord = {
 export class CommercialService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly customerStageService: CustomerStageService
+    private readonly customerStageService: CustomerStageService,
+    private readonly quoteWorkflow: QuoteWorkflowService
   ) {}
 
   listQuotes(user: RequestUser, customerId?: string) {
@@ -67,7 +70,12 @@ export class CommercialService {
         ...(customerId ? { customerId } : {}),
         customer: buildCustomerDataScopeWhere(user)
       },
-      include: { customer: { select: { id: true, name: true, stage: true } } },
+      include: {
+        customer: { select: { id: true, name: true, stage: true } },
+        revisionGroup: { select: { id: true, baseQuoteNo: true } },
+        previousRevision: { select: { id: true, quoteNo: true, revisionNo: true, status: true } },
+        nextRevision: { select: { id: true, quoteNo: true, revisionNo: true, status: true } }
+      },
       orderBy: { createdAt: "desc" }
     });
   }
@@ -107,9 +115,17 @@ export class CommercialService {
     }
     const actorName = await this.resolveActorName(user);
     const quote = await this.prisma.$transaction(async (tx) => {
+      const revisionGroup = await tx.quoteRevisionGroup.create({
+        data: {
+          customerId: dto.customerId,
+          baseQuoteNo: dto.quoteNo
+        }
+      });
       const created = await tx.quote.create({
         data: {
           customerId: dto.customerId,
+          revisionGroupId: revisionGroup.id,
+          revisionNo: 1,
           quoteNo: dto.quoteNo,
           productName: dto.productName,
           specification: dto.specification ?? null,
@@ -177,6 +193,161 @@ export class CommercialService {
       },
       orderBy: { createdAt: "desc" }
     });
+  }
+
+  async listQuoteRevisions(user: RequestUser, quoteId: string) {
+    const source = await this.prisma.quote.findFirst({
+      where: { id: quoteId, customer: buildCustomerDataScopeWhere(user) },
+      select: { revisionGroupId: true }
+    });
+    if (!source) {
+      throw new NotFoundException("Quote not found");
+    }
+    return this.prisma.quote.findMany({
+      where: {
+        revisionGroupId: source.revisionGroupId,
+        customer: buildCustomerDataScopeWhere(user)
+      },
+      include: {
+        revisionGroup: { select: { id: true, baseQuoteNo: true } },
+        previousRevision: { select: { id: true, quoteNo: true, revisionNo: true, status: true } },
+        nextRevision: { select: { id: true, quoteNo: true, revisionNo: true, status: true } }
+      },
+      orderBy: { revisionNo: "asc" }
+    });
+  }
+
+  async createQuoteRevision(user: RequestUser, quoteId: string, dto: CreateQuoteRevisionDto) {
+    const revisionReason = this.normalizeOptionalText(dto.reason);
+    if (!revisionReason) {
+      throw new BadRequestException("Quote revision reason is required");
+    }
+    const source = await this.prisma.quote.findFirst({
+      where: { id: quoteId, customer: buildCustomerDataScopeWhere(user) },
+      include: {
+        revisionGroup: { select: { id: true, baseQuoteNo: true } },
+        nextRevision: { select: { id: true, quoteNo: true, revisionNo: true, status: true } }
+      }
+    });
+    if (!source) {
+      throw new NotFoundException("Quote not found");
+    }
+    if (source.status !== "CUSTOMER_REJECTED") {
+      throw new BadRequestException("Only customer-rejected quotes can create a revision");
+    }
+    if (source.nextRevision) {
+      throw this.quoteRevisionConflict(source.nextRevision);
+    }
+
+    const pricing = calculateQuotePricing({
+      calcMode: source.calcMode as "formula" | "direct",
+      materialItems: this.normalizeQuoteMaterialItems(source.materialItems),
+      materialProfitRate: Number(source.materialProfitRate ?? 0),
+      processingTime: Number(source.processingTime ?? 0),
+      processingHourlyRate: Number(source.processingHourlyRate ?? 0),
+      processingProfitRate: Number(source.processingProfitRate ?? 0),
+      grossWeight: Number(source.grossWeight ?? 0),
+      packageLength: Number(source.packageLength ?? 0),
+      packageWidth: Number(source.packageWidth ?? 0),
+      packageHeight: Number(source.packageHeight ?? 0),
+      volumeDivisor: Number(source.volumeDivisor ?? 0),
+      shippingUnitPrice: Number(source.shippingUnitPrice ?? 0),
+      vatRate: Number(source.vatRate ?? 0),
+      materialCost: Number(source.materialCost),
+      processingCost: Number(source.processingCost),
+      taxCost: Number(source.taxCost),
+      shippingCost: Number(source.shippingCost),
+      discountAmount: Number(source.discountAmount),
+      quantity: source.quantity,
+      moq: source.moq
+    });
+    if (!pricing.moqValid || !pricing.nonNegativeItemValid || !pricing.totalValid) {
+      throw new BadRequestException("Source quote pricing is no longer valid for a revision");
+    }
+
+    const actorName = await this.resolveActorName(user);
+    const nextRevisionNo = source.revisionNo + 1;
+    const revisedAt = new Date();
+    const quoteNo = this.buildRevisionQuoteNo(source.revisionGroup.baseQuoteNo, nextRevisionNo);
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const created = await tx.quote.create({
+          data: {
+            customerId: source.customerId,
+            revisionGroupId: source.revisionGroupId,
+            previousRevisionId: source.id,
+            revisionNo: nextRevisionNo,
+            revisionReason,
+            revisedById: user.id,
+            revisedAt,
+            quoteNo,
+            productName: source.productName,
+            specification: source.specification,
+            moq: pricing.moq,
+            quantity: pricing.quantity,
+            unitPrice: new Prisma.Decimal(pricing.unitPrice.toFixed(2)),
+            currency: source.currency,
+            amount: new Prisma.Decimal(pricing.total.toFixed(2)),
+            materialCost: new Prisma.Decimal(pricing.materialCost.toFixed(2)),
+            processingCost: new Prisma.Decimal(pricing.processingCost.toFixed(2)),
+            taxCost: new Prisma.Decimal(pricing.taxCost.toFixed(2)),
+            shippingCost: new Prisma.Decimal(pricing.shippingCost.toFixed(2)),
+            discountAmount: new Prisma.Decimal(pricing.discountAmount.toFixed(2)),
+            calcMode: pricing.calcMode,
+            materialItems: this.toJsonOrNull(this.normalizeQuoteMaterialItems(source.materialItems)),
+            materialProfitRate: source.materialProfitRate,
+            processingTime: source.processingTime,
+            processingHourlyRate: source.processingHourlyRate,
+            processingProfitRate: source.processingProfitRate,
+            grossWeight: source.grossWeight,
+            packageLength: source.packageLength,
+            packageWidth: source.packageWidth,
+            packageHeight: source.packageHeight,
+            volumeDivisor: source.volumeDivisor,
+            shippingUnitPrice: source.shippingUnitPrice,
+            vatRate: source.vatRate,
+            validUntil: source.validUntil && source.validUntil > revisedAt ? source.validUntil : null,
+            fileAssetId: null,
+            notes: source.notes,
+            status: "DRAFT" as never,
+            approvalStatus: "DRAFT" as never
+          }
+        });
+        const sourceSnapshot = this.buildQuoteSnapshot(source);
+        const createdSnapshot = this.buildQuoteSnapshot(created);
+        await tx.quoteHistory.create({
+          data: {
+            quoteId: source.id,
+            action: "REVISION_CREATED" as never,
+            before: sourceSnapshot as never,
+            after: { ...sourceSnapshot, nextRevisionId: created.id, nextRevisionNo } as never,
+            actorId: user.id,
+            actorName,
+            comment: `已创建修订版 ${created.quoteNo}：${revisionReason}`
+          }
+        });
+        await tx.quoteHistory.create({
+          data: {
+            quoteId: created.id,
+            action: "REVISION_CREATED" as never,
+            after: createdSnapshot as never,
+            actorId: user.id,
+            actorName,
+            comment: `由 ${source.quoteNo} 创建修订版：${revisionReason}`
+          }
+        });
+        return created;
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        const existing = await this.prisma.quote.findFirst({
+          where: { previousRevisionId: source.id, customer: buildCustomerDataScopeWhere(user) },
+          select: { id: true, quoteNo: true, revisionNo: true, status: true }
+        });
+        throw this.quoteRevisionConflict(existing);
+      }
+      throw error;
+    }
   }
 
   async getQuoteExport(user: RequestUser, quoteId: string) {
@@ -341,8 +512,10 @@ export class CommercialService {
     if (!quote) {
       throw new NotFoundException("Quote not found");
     }
+    if (dto.status !== undefined) {
+      throw new BadRequestException("Quote lifecycle status must be changed through a dedicated command");
+    }
     this.assertQuoteEditable(quote.status);
-    const quoteStatusPatch = dto.status ? this.resolveQuoteStatusPatch(quote, dto.status, user.id) : {};
     const actorName = await this.resolveActorName(user);
     const mergedPricing = calculateQuotePricing({
       calcMode: (dto.calcMode as "formula" | "direct" | undefined) ?? (quote.calcMode as "formula" | "direct" | undefined),
@@ -406,8 +579,7 @@ export class CommercialService {
           ...(dto.shippingUnitPrice !== undefined ? { shippingUnitPrice: dto.shippingUnitPrice } : {}),
           ...(dto.vatRate !== undefined ? { vatRate: dto.vatRate } : {}),
           ...(dto.notes !== undefined ? { notes: dto.notes } : {}),
-          ...(dto.validUntil !== undefined ? { validUntil: dto.validUntil ? new Date(dto.validUntil) : null } : {}),
-          ...quoteStatusPatch
+          ...(dto.validUntil !== undefined ? { validUntil: dto.validUntil ? new Date(dto.validUntil) : null } : {})
         }
       });
       await tx.quoteHistory.create({
@@ -432,29 +604,12 @@ export class CommercialService {
     if (!quote) {
       throw new NotFoundException("Quote not found");
     }
-    this.assertQuoteSendable(quote.status, quote.approvalStatus);
     const actorName = await this.resolveActorName(user);
-    return this.prisma.$transaction(async (tx) => {
-      const historyComment = this.normalizeOptionalText(dto.comment) ?? "已手动发送报价";
-      const updated = await tx.quote.update({
-        where: { id: quoteId },
-        data: {
-          status: "SENT" as never
-        }
-      });
-      await tx.quoteHistory.create({
-        data: {
-          quoteId,
-          action: "UPDATED" as never,
-          before: this.buildQuoteSnapshot(quote) as never,
-          after: this.buildQuoteSnapshot(updated) as never,
-          actorId: user.id,
-          actorName,
-          comment: historyComment
-        }
-      });
-      return updated;
-    });
+    return this.prisma.$transaction((tx) => this.quoteWorkflow.markSent(tx, {
+      quote,
+      actor: { id: user.id, name: actorName },
+      comment: this.normalizeOptionalText(dto.comment) ?? "已手动发送报价"
+    }));
   }
 
   async acceptQuote(user: RequestUser, quoteId: string, dto: QuoteReviewDto) {
@@ -464,29 +619,13 @@ export class CommercialService {
     if (!quote) {
       throw new NotFoundException("Quote not found");
     }
-    this.assertQuoteCustomerActionable(quote.status);
     const actorName = await this.resolveActorName(user);
-    return this.prisma.$transaction(async (tx) => {
-      const historyComment = this.normalizeOptionalText(dto.comment) ?? "客户已接受报价";
-      const updated = await tx.quote.update({
-        where: { id: quoteId },
-        data: {
-          status: "ACCEPTED" as never
-        }
-      });
-      await tx.quoteHistory.create({
-        data: {
-          quoteId,
-          action: "UPDATED" as never,
-          before: this.buildQuoteSnapshot(quote) as never,
-          after: this.buildQuoteSnapshot(updated) as never,
-          actorId: user.id,
-          actorName,
-          comment: historyComment
-        }
-      });
-      return updated;
-    });
+    return this.prisma.$transaction((tx) => this.quoteWorkflow.resolveCustomerReply(tx, {
+      quote,
+      outcome: "ACCEPTED",
+      actor: { id: user.id, name: actorName },
+      comment: this.normalizeOptionalText(dto.comment) ?? "客户已接受报价"
+    }));
   }
 
   async rejectQuoteByCustomer(user: RequestUser, quoteId: string, dto: QuoteReviewDto) {
@@ -496,29 +635,13 @@ export class CommercialService {
     if (!quote) {
       throw new NotFoundException("Quote not found");
     }
-    this.assertQuoteCustomerActionable(quote.status);
     const actorName = await this.resolveActorName(user);
-    return this.prisma.$transaction(async (tx) => {
-      const historyComment = this.normalizeOptionalText(dto.comment) ?? "客户已拒绝报价";
-      const updated = await tx.quote.update({
-        where: { id: quoteId },
-        data: {
-          status: "REJECTED" as never
-        }
-      });
-      await tx.quoteHistory.create({
-        data: {
-          quoteId,
-          action: "REJECTED" as never,
-          before: this.buildQuoteSnapshot(quote) as never,
-          after: this.buildQuoteSnapshot(updated) as never,
-          actorId: user.id,
-          actorName,
-          comment: historyComment
-        }
-      });
-      return updated;
-    });
+    return this.prisma.$transaction((tx) => this.quoteWorkflow.resolveCustomerReply(tx, {
+      quote,
+      outcome: "CUSTOMER_REJECTED",
+      actor: { id: user.id, name: actorName },
+      comment: this.normalizeOptionalText(dto.comment) ?? "客户已拒绝报价"
+    }));
   }
 
   async expireQuote(user: RequestUser, quoteId: string, dto: QuoteReviewDto) {
@@ -541,7 +664,7 @@ export class CommercialService {
       await tx.quoteHistory.create({
         data: {
           quoteId,
-          action: "UPDATED" as never,
+          action: "EXPIRED" as never,
           before: this.buildQuoteSnapshot(quote) as never,
           after: this.buildQuoteSnapshot(updated) as never,
           actorId: user.id,
@@ -1132,116 +1255,24 @@ export class CommercialService {
   }
 
   private assertQuoteEditable(status: string) {
+    if (status === "CUSTOMER_REJECTED") {
+      throw new BadRequestException("Customer-rejected quote is immutable; create a revision instead");
+    }
     if (status === "VOIDED") {
       throw new BadRequestException("Finalized quote cannot be edited");
     }
   }
 
-  private resolveQuoteStatusPatch(
-    quote: {
-      status: string;
-      approvalStatus: string;
-      approvalComment: string | null;
-      approvalSubmittedAt: Date | null;
-      approvalSubmittedById: string | null;
-      approvalReviewedAt: Date | null;
-      approvalReviewedById: string | null;
-    },
-    status: string,
-    userId: string
-  ) {
-    const now = new Date();
-    switch (status) {
-      case "DRAFT":
-        return {
-          status: "DRAFT" as never,
-          approvalStatus: "DRAFT" as never,
-          approvalComment: null,
-          approvalSubmittedAt: null,
-          approvalSubmittedById: null,
-          approvalReviewedAt: null,
-          approvalReviewedById: null
-        };
-      case "PENDING_APPROVAL":
-        return {
-          status: "DRAFT" as never,
-          approvalStatus: "PENDING_APPROVAL" as never,
-          approvalSubmittedAt: now,
-          approvalSubmittedById: userId,
-          approvalComment: quote.approvalComment
-        };
-      case "APPROVED":
-        return {
-          status: "DRAFT" as never,
-          approvalStatus: "APPROVED" as never,
-          approvalReviewedAt: now,
-          approvalReviewedById: userId
-        };
-      case "REJECTED":
-        if (quote.status === "SENT" || quote.status === "ACCEPTED" || quote.status === "EXPIRED") {
-          return {
-            status: "REJECTED" as never,
-            approvalStatus: "APPROVED" as never,
-            approvalReviewedAt: now,
-            approvalReviewedById: userId
-          };
-        }
-        return {
-          status: "DRAFT" as never,
-          approvalStatus: "REJECTED" as never,
-          approvalReviewedAt: now,
-          approvalReviewedById: userId
-        };
-      case "CUSTOMER_REJECTED":
-        return {
-          status: "CUSTOMER_REJECTED" as never,
-          approvalStatus: "APPROVED" as never,
-          approvalReviewedAt: quote.approvalReviewedAt ?? now,
-          approvalReviewedById: quote.approvalReviewedById ?? userId
-        };
-      case "SENT":
-        return {
-          status: "SENT" as never,
-          approvalStatus: "APPROVED" as never,
-          approvalReviewedAt: quote.approvalReviewedAt ?? now,
-          approvalReviewedById: quote.approvalReviewedById ?? userId
-        };
-      case "ACCEPTED":
-        return {
-          status: "ACCEPTED" as never,
-          approvalStatus: "APPROVED" as never,
-          approvalReviewedAt: quote.approvalReviewedAt ?? now,
-          approvalReviewedById: quote.approvalReviewedById ?? userId
-        };
-      case "EXPIRED":
-        return {
-          status: "EXPIRED" as never,
-          approvalStatus: "APPROVED" as never,
-          approvalReviewedAt: quote.approvalReviewedAt ?? now,
-          approvalReviewedById: quote.approvalReviewedById ?? userId
-        };
-      case "VOIDED":
-        return {
-          status: "VOIDED" as never
-        };
-      default:
-        throw new BadRequestException(`Unsupported quote status: ${status}`);
-    }
+  private buildRevisionQuoteNo(baseQuoteNo: string, revisionNo: number) {
+    return `${baseQuoteNo}-R${String(revisionNo).padStart(2, "0")}`;
   }
 
-  private assertQuoteSendable(status: string, approvalStatus: string) {
-    if (status !== "DRAFT") {
-      throw new BadRequestException("Only draft quotes can be sent");
-    }
-    if (approvalStatus !== "APPROVED") {
-      throw new BadRequestException("Only approved quotes can be sent");
-    }
-  }
-
-  private assertQuoteCustomerActionable(status: string) {
-    if (status !== "SENT") {
-      throw new BadRequestException("Only sent quotes can be accepted or rejected by customer");
-    }
+  private quoteRevisionConflict(existing: { id: string; quoteNo: string; revisionNo: number; status: unknown } | null) {
+    return new ConflictException({
+      code: "QUOTE_REVISION_ALREADY_EXISTS",
+      message: "A later revision already exists for this quote",
+      existingRevision: existing
+    });
   }
 
   private assertQuoteExpirable(status: string) {
@@ -1358,6 +1389,12 @@ export class CommercialService {
   private buildQuoteSnapshot(quote: {
     id: string;
     customerId: string;
+    revisionGroupId?: string;
+    previousRevisionId?: string | null;
+    revisionNo?: number;
+    revisionReason?: string | null;
+    revisedById?: string | null;
+    revisedAt?: Date | null;
     quoteNo: string;
     productName: string;
     specification: string | null;
@@ -1394,12 +1431,19 @@ export class CommercialService {
     approvalSubmittedById: string | null;
     approvalReviewedAt: Date | null;
     approvalReviewedById: string | null;
+    sentAt?: Date | null;
     createdAt: Date;
     updatedAt: Date;
   }) {
     return {
       id: quote.id,
       customerId: quote.customerId,
+      revisionGroupId: quote.revisionGroupId ?? null,
+      previousRevisionId: quote.previousRevisionId ?? null,
+      revisionNo: quote.revisionNo ?? 1,
+      revisionReason: quote.revisionReason ?? null,
+      revisedById: quote.revisedById ?? null,
+      revisedAt: quote.revisedAt ? quote.revisedAt.toISOString() : null,
       quoteNo: quote.quoteNo,
       productName: quote.productName,
       specification: quote.specification,
@@ -1437,6 +1481,7 @@ export class CommercialService {
       approvalSubmittedById: quote.approvalSubmittedById,
       approvalReviewedAt: quote.approvalReviewedAt ? quote.approvalReviewedAt.toISOString() : null,
       approvalReviewedById: quote.approvalReviewedById,
+      sentAt: quote.sentAt ? quote.sentAt.toISOString() : null,
       createdAt: quote.createdAt.toISOString(),
       updatedAt: quote.updatedAt.toISOString()
     };

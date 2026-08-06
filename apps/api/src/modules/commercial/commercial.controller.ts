@@ -1,35 +1,71 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Res } from "@nestjs/common";
 import type { Response } from "express";
 import { CurrentUser, RequestUser } from "../../common/auth/current-user.decorator";
+import { RequireLiveSession } from "../../common/auth/live-session.decorator";
+import { RequirePermissions } from "../../common/auth/permissions.decorator";
 import { CommercialService } from "./commercial.service";
 import { CreateSampleFeeDto } from "./dto/create-sample-fee.dto";
 import { CreateQuoteDto } from "./dto/create-quote.dto";
+import { CreateQuoteRevisionDto } from "./dto/create-quote-revision.dto";
 import { CreateSampleRequestDto } from "./dto/create-sample-request.dto";
 import { QuoteReviewDto } from "./dto/quote-review.dto";
 import { RecordSampleReturnDto } from "./dto/record-sample-return.dto";
 import { UpdateSampleFeeDto } from "./dto/update-sample-fee.dto";
 import { UpdateQuoteDto } from "./dto/update-quote.dto";
 import { UpdateSampleRequestDto } from "./dto/update-sample-request.dto";
+import { QuoteReferenceService } from "./quote-reference.service";
 
 @Controller()
 export class CommercialController {
-  constructor(private readonly commercialService: CommercialService) {}
+  constructor(
+    private readonly commercialService: CommercialService,
+    private readonly quoteReferences: QuoteReferenceService
+  ) {}
 
+  @RequirePermissions("quotes.read")
   @Get("quotes")
   quotes(@CurrentUser() user: RequestUser, @Query("customerId") customerId?: string) {
     return this.commercialService.listQuotes(user, customerId);
   }
 
+  @RequireLiveSession()
+  @RequirePermissions("quotes.write")
   @Post("quotes")
   createQuote(@CurrentUser() user: RequestUser, @Body() dto: CreateQuoteDto) {
     return this.commercialService.createQuote(user, dto);
   }
 
+  @RequirePermissions("quotes.read")
   @Get("quotes/:id/history")
   quoteHistory(@CurrentUser() user: RequestUser, @Param("id") id: string) {
     return this.commercialService.getQuoteHistory(user, id);
   }
 
+  @RequirePermissions("quotes.read")
+  @Get("quotes/:id/revisions")
+  quoteRevisions(@CurrentUser() user: RequestUser, @Param("id") id: string) {
+    return this.commercialService.listQuoteRevisions(user, id);
+  }
+
+  @RequireLiveSession()
+  @RequirePermissions("quotes.write")
+  @Post("quotes/:id/revisions")
+  createQuoteRevision(
+    @CurrentUser() user: RequestUser,
+    @Param("id") id: string,
+    @Body() dto: CreateQuoteRevisionDto
+  ) {
+    return this.commercialService.createQuoteRevision(user, id, dto);
+  }
+
+  @RequirePermissions("quotes.reference.read")
+  @Get("quotes/:id/reference-candidates")
+  quoteReferenceCandidates(@CurrentUser() user: RequestUser, @Param("id") id: string) {
+    return this.quoteReferences.getReferenceContext(user, id);
+  }
+
+  @RequireLiveSession()
+  @RequirePermissions("quotes.export")
   @Get("quotes/:id/export")
   async exportQuote(
     @CurrentUser() user: RequestUser,
@@ -42,6 +78,8 @@ export class CommercialController {
     return res.send(workbook);
   }
 
+  @RequireLiveSession()
+  @RequirePermissions("quotes.export")
   @Get("quotes/export")
   async exportQuotes(
     @CurrentUser() user: RequestUser,
@@ -54,46 +92,64 @@ export class CommercialController {
     return res.send(workbook);
   }
 
+  @RequireLiveSession()
+  @RequirePermissions("quotes.write")
   @Patch("quotes/:id")
   updateQuote(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: UpdateQuoteDto) {
     return this.commercialService.updateQuote(user, id, dto);
   }
 
+  @RequireLiveSession()
+  @RequirePermissions("quotes.write")
   @Post("quotes/:id/submit-review")
   submitQuoteReview(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: QuoteReviewDto) {
     return this.commercialService.submitQuoteReview(user, id, dto);
   }
 
+  @RequireLiveSession()
+  @RequirePermissions("quotes.approve")
   @Post("quotes/:id/approve")
   approveQuote(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: QuoteReviewDto) {
     return this.commercialService.approveQuote(user, id, dto);
   }
 
+  @RequireLiveSession()
+  @RequirePermissions("quotes.approve")
   @Post("quotes/:id/reject")
   rejectQuote(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: QuoteReviewDto) {
     return this.commercialService.rejectQuote(user, id, dto);
   }
 
+  @RequireLiveSession()
+  @RequirePermissions("quotes.send")
   @Post("quotes/:id/send")
   sendQuote(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: QuoteReviewDto) {
     return this.commercialService.sendQuote(user, id, dto);
   }
 
+  @RequireLiveSession()
+  @RequirePermissions("quotes.resolve_reply")
   @Post("quotes/:id/accept")
   acceptQuote(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: QuoteReviewDto) {
     return this.commercialService.acceptQuote(user, id, dto);
   }
 
+  @RequireLiveSession()
+  @RequirePermissions("quotes.resolve_reply")
   @Post("quotes/:id/reject-customer")
   rejectQuoteByCustomer(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: QuoteReviewDto) {
     return this.commercialService.rejectQuoteByCustomer(user, id, dto);
   }
 
+  @RequireLiveSession()
+  @RequirePermissions("quotes.write")
   @Post("quotes/:id/expire")
   expireQuote(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: QuoteReviewDto) {
     return this.commercialService.expireQuote(user, id, dto);
   }
 
+  @RequireLiveSession()
+  @RequirePermissions("quotes.write")
   @Delete("quotes/:id")
   deleteQuote(@CurrentUser() user: RequestUser, @Param("id") id: string) {
     return this.commercialService.deleteQuote(user, id);
