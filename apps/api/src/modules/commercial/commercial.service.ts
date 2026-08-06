@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+import * as ExcelJS from "exceljs";
 import { CustomerStage, calculateQuotePricing } from "@oem-crm/shared";
 import { RequestUser } from "../../common/auth/current-user.decorator";
 import { buildCustomerDataScopeWhere } from "../../common/query/data-scope";
@@ -13,6 +14,45 @@ import { RecordSampleReturnDto } from "./dto/record-sample-return.dto";
 import { UpdateSampleFeeDto } from "./dto/update-sample-fee.dto";
 import { UpdateQuoteDto } from "./dto/update-quote.dto";
 import { UpdateSampleRequestDto } from "./dto/update-sample-request.dto";
+
+type QuoteExportRecord = {
+  quoteNo: string;
+  productName: string;
+  specification: string | null;
+  moq: number;
+  quantity: number;
+  unitPrice: { toString(): string };
+  status: string;
+  approvalStatus: string;
+  currency: string;
+  amount: { toString(): string };
+  materialCost: { toString(): string };
+  processingCost: { toString(): string };
+  taxCost: { toString(): string };
+  shippingCost: { toString(): string };
+  discountAmount: { toString(): string };
+  calcMode: string;
+  materialItems: unknown;
+  materialProfitRate: { toString(): string } | null;
+  processingTime: { toString(): string } | null;
+  processingHourlyRate: { toString(): string } | null;
+  processingProfitRate: { toString(): string } | null;
+  grossWeight: { toString(): string } | null;
+  packageLength: { toString(): string } | null;
+  packageWidth: { toString(): string } | null;
+  packageHeight: { toString(): string } | null;
+  volumeDivisor: { toString(): string } | null;
+  shippingUnitPrice: { toString(): string } | null;
+  vatRate: { toString(): string } | null;
+  validUntil: Date | null;
+  notes: string | null;
+  approvalComment: string | null;
+  approvalSubmittedAt: Date | null;
+  approvalReviewedAt: Date | null;
+  customer: { name: string };
+  createdAt: Date;
+  updatedAt: Date;
+};
 
 @Injectable()
 export class CommercialService {
@@ -148,8 +188,8 @@ export class CommercialService {
       throw new NotFoundException("Quote not found");
     }
     return {
-      csv: this.buildQuoteCsv(quote),
-      fileName: `quote-${quote.quoteNo}.csv`
+      workbook: await this.buildQuotesWorkbook([quote]),
+      fileName: `quote-${quote.quoteNo}.xlsx`
     };
   }
 
@@ -163,8 +203,8 @@ export class CommercialService {
       orderBy: { createdAt: "desc" }
     });
     return {
-      csv: this.buildQuotesCsv(quotes),
-      fileName: customerId ? `quotes-${customerId}.csv` : `quotes.csv`
+      workbook: await this.buildQuotesWorkbook(quotes),
+      fileName: customerId ? `quotes-${customerId}.xlsx` : "quotes.xlsx"
     };
   }
 
@@ -1463,6 +1503,204 @@ export class CommercialService {
     return this.normalizeQuoteMaterialItems(value)
       .map((item) => `${item.name}: ${item.usage} × ${item.unitPrice}, 损耗率 ${item.lossRate}`)
       .join("; ");
+  }
+
+  private async buildQuotesWorkbook(quotes: QuoteExportRecord[]) {
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = "OEM Customer Development CRM";
+    workbook.created = new Date();
+
+    const summarySheet = workbook.addWorksheet("报价汇总", { views: [{ state: "frozen", ySplit: 1 }] });
+    summarySheet.columns = [
+      { header: "报价编号", key: "quoteNo", width: 22 },
+      { header: "客户名称", key: "customerName", width: 22 },
+      { header: "产品名", key: "productName", width: 24 },
+      { header: "规格", key: "specification", width: 20 },
+      { header: "MOQ", key: "moq", width: 12 },
+      { header: "报价数量", key: "quantity", width: 12 },
+      { header: "单价", key: "unitPrice", width: 14 },
+      { header: "报价总额", key: "amount", width: 14 },
+      { header: "币种", key: "currency", width: 10 },
+      { header: "报价状态", key: "status", width: 14 },
+      { header: "审批状态", key: "approvalStatus", width: 14 },
+      { header: "有效期", key: "validUntil", width: 14 },
+      { header: "创建时间", key: "createdAt", width: 22 },
+      { header: "更新时间", key: "updatedAt", width: 22 },
+      { header: "备注", key: "notes", width: 30 }
+    ];
+    summarySheet.addRows(quotes.map((quote) => ({
+      quoteNo: quote.quoteNo,
+      customerName: quote.customer.name,
+      productName: quote.productName,
+      specification: quote.specification ?? "",
+      moq: quote.moq,
+      quantity: quote.quantity,
+      unitPrice: this.toExportNumber(quote.unitPrice),
+      amount: this.toExportNumber(quote.amount),
+      currency: quote.currency,
+      status: quote.status,
+      approvalStatus: quote.approvalStatus,
+      validUntil: quote.validUntil ? quote.validUntil.toISOString().slice(0, 10) : "",
+      createdAt: quote.createdAt.toISOString(),
+      updatedAt: quote.updatedAt.toISOString(),
+      notes: quote.notes ?? ""
+    })));
+    this.styleExportSheet(summarySheet);
+
+    const detailSheet = workbook.addWorksheet("价格明细", { views: [{ state: "frozen", ySplit: 1 }] });
+    detailSheet.columns = [
+      { header: "报价编号", key: "quoteNo", width: 22 },
+      { header: "客户名称", key: "customerName", width: 22 },
+      { header: "产品名", key: "productName", width: 24 },
+      { header: "币种", key: "currency", width: 10 },
+      { header: "分类", key: "category", width: 14 },
+      { header: "项目", key: "item", width: 20 },
+      { header: "用量", key: "usage", width: 12 },
+      { header: "单价", key: "unitPrice", width: 14 },
+      { header: "损耗率", key: "lossRate", width: 12 },
+      { header: "利润率", key: "profitRate", width: 12 },
+      { header: "金额", key: "amount", width: 14 },
+      { header: "计算说明", key: "description", width: 46 }
+    ];
+    detailSheet.addRows(quotes.flatMap((quote) => this.buildQuotePriceDetailRows(quote)));
+    this.styleExportSheet(detailSheet);
+
+    return Buffer.from(await workbook.xlsx.writeBuffer());
+  }
+
+  private buildQuotePriceDetailRows(quote: QuoteExportRecord) {
+    const base = {
+      quoteNo: quote.quoteNo,
+      customerName: quote.customer.name,
+      productName: quote.productName,
+      currency: quote.currency
+    };
+    const priceRows: Array<Record<string, string | number>> = [];
+    const formulaPricing = quote.calcMode === "formula"
+      ? calculateQuotePricing({
+          calcMode: "formula",
+          materialItems: this.normalizeQuoteMaterialItems(quote.materialItems),
+          materialProfitRate: quote.materialProfitRate?.toString(),
+          processingTime: quote.processingTime?.toString(),
+          processingHourlyRate: quote.processingHourlyRate?.toString(),
+          processingProfitRate: quote.processingProfitRate?.toString(),
+          grossWeight: quote.grossWeight?.toString(),
+          packageLength: quote.packageLength?.toString(),
+          packageWidth: quote.packageWidth?.toString(),
+          packageHeight: quote.packageHeight?.toString(),
+          volumeDivisor: quote.volumeDivisor?.toString(),
+          shippingUnitPrice: quote.shippingUnitPrice?.toString(),
+          vatRate: quote.vatRate?.toString(),
+          discountAmount: quote.discountAmount.toString(),
+          quantity: quote.quantity,
+          moq: quote.moq
+        })
+      : undefined;
+
+    for (const material of formulaPricing?.breakdown?.materialItems ?? []) {
+      priceRows.push({
+        ...base,
+        category: "物料",
+        item: material.name,
+        usage: material.usage,
+        unitPrice: material.unitPrice,
+        lossRate: material.lossRate,
+        profitRate: "",
+        amount: material.cost,
+        description: "用量 × 单价 × (1 + 损耗率)"
+      });
+    }
+
+    const detailMode = quote.calcMode === "formula" ? "按公式计算" : "直接录入";
+    priceRows.push(
+      {
+        ...base,
+        category: "报价构成",
+        item: "物料价",
+        usage: "",
+        unitPrice: "",
+        lossRate: "",
+        profitRate: quote.materialProfitRate?.toString() ?? "",
+        amount: this.toExportNumber(quote.materialCost),
+        description: quote.calcMode === "formula" ? "物料成本（含损耗）× (1 + 物料利润率)" : detailMode
+      },
+      {
+        ...base,
+        category: "报价构成",
+        item: "加工费",
+        usage: quote.processingTime?.toString() ?? "",
+        unitPrice: quote.processingHourlyRate?.toString() ?? "",
+        lossRate: "",
+        profitRate: quote.processingProfitRate?.toString() ?? "",
+        amount: this.toExportNumber(quote.processingCost),
+        description: quote.calcMode === "formula" ? "加工时间 × 工时费率 × (1 + 加工利润率)" : detailMode
+      },
+      {
+        ...base,
+        category: "报价构成",
+        item: "税费",
+        usage: "",
+        unitPrice: "",
+        lossRate: "",
+        profitRate: quote.vatRate?.toString() ?? "",
+        amount: this.toExportNumber(quote.taxCost),
+        description: quote.calcMode === "formula" ? "（物料价 + 加工费 + 运费）× 增值税率" : detailMode
+      },
+      {
+        ...base,
+        category: "报价构成",
+        item: "运费",
+        usage: formulaPricing?.breakdown?.chargeableWeight ?? "",
+        unitPrice: quote.shippingUnitPrice?.toString() ?? "",
+        lossRate: "",
+        profitRate: "",
+        amount: this.toExportNumber(quote.shippingCost),
+        description: quote.calcMode === "formula" ? "计费重量 × 运输单位价格" : detailMode
+      },
+      {
+        ...base,
+        category: "报价构成",
+        item: "优惠金额",
+        usage: "",
+        unitPrice: "",
+        lossRate: "",
+        profitRate: "",
+        amount: this.toExportNumber(quote.discountAmount),
+        description: "从报价总额中扣减"
+      },
+      {
+        ...base,
+        category: "报价构成",
+        item: "报价总额",
+        usage: "",
+        unitPrice: "",
+        lossRate: "",
+        profitRate: "",
+        amount: this.toExportNumber(quote.amount),
+        description: "物料价 + 加工费 + 税费 + 运费 - 优惠金额"
+      }
+    );
+    return priceRows;
+  }
+
+  private styleExportSheet(sheet: ExcelJS.Worksheet) {
+    const headerRow = sheet.getRow(1);
+    headerRow.alignment = { vertical: "middle" };
+    for (let columnNumber = 1; columnNumber <= sheet.columnCount; columnNumber += 1) {
+      const headerCell = headerRow.getCell(columnNumber);
+      headerCell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+      headerCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF007F73" } };
+    }
+    sheet.autoFilter = { from: "A1", to: { row: 1, column: sheet.columnCount } };
+    sheet.eachRow((row, rowNumber) => {
+      if (rowNumber > 1) {
+        row.alignment = { vertical: "top", wrapText: true };
+      }
+    });
+  }
+
+  private toExportNumber(value: { toString(): string }) {
+    return Number(value.toString());
   }
 
   private buildQuoteCsv(quote: {

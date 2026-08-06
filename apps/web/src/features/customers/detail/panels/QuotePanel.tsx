@@ -856,7 +856,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
   const exportMutation = useMutation({
     mutationFn: (quoteId: string) => exportQuote(quoteId),
     onSuccess: async ({ blob, fileName }) => {
-      downloadBlob(blob, fileName ?? "quote.csv");
+      downloadBlob(blob, fileName ?? "quote.xlsx");
       showClientToast({
         type: "success",
         title: "导出成功",
@@ -875,7 +875,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
   const exportAllMutation = useMutation({
     mutationFn: () => exportQuotes(customerId),
     onSuccess: async ({ blob, fileName }) => {
-      downloadBlob(blob, fileName ?? `quotes-${customerId}.csv`);
+      downloadBlob(blob, fileName ?? `quotes-${customerId}.xlsx`);
       showClientToast({
         type: "success",
         title: "批量导出成功",

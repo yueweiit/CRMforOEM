@@ -1,6 +1,7 @@
 import * as assert from "node:assert/strict";
 import { BadRequestException } from "@nestjs/common";
 import { calculateQuotePricing } from "@oem-crm/shared";
+import * as ExcelJS from "exceljs";
 import { CommercialService } from "./commercial.service";
 import type { RequestUser } from "../../common/auth/current-user.decorator";
 
@@ -813,6 +814,74 @@ async function main() {
     await service.updateQuote(user, "quote-1", { status: "CUSTOMER_REJECTED" });
     assert.equal(calls.quoteUpdate?.status, "CUSTOMER_REJECTED");
     assert.equal(calls.quoteUpdate?.approvalStatus, "APPROVED");
+  }
+
+  {
+    const { service } = buildService();
+    const quote = {
+      quoteNo: "Q-EXPORT-1",
+      productName: "导出测试产品",
+      specification: "白色",
+      moq: 50,
+      quantity: 50,
+      unitPrice: "0.98",
+      status: "DRAFT",
+      approvalStatus: "DRAFT",
+      currency: "USD",
+      amount: "48.83",
+      materialCost: "23.10",
+      processingCost: "11.00",
+      taxCost: "5.73",
+      shippingCost: "10.00",
+      discountAmount: "1.00",
+      calcMode: "formula",
+      materialItems: [
+        { name: "物料A", usage: 6, unitPrice: 2, lossRate: 0.05 },
+        { name: "物料B", usage: 4, unitPrice: 2, lossRate: 0.05 }
+      ],
+      materialProfitRate: "0.10",
+      processingTime: "2",
+      processingHourlyRate: "5",
+      processingProfitRate: "0.10",
+      grossWeight: "3",
+      packageLength: "10",
+      packageWidth: "10",
+      packageHeight: "10",
+      volumeDivisor: "200",
+      shippingUnitPrice: "2",
+      vatRate: "0.13",
+      validUntil: null,
+      notes: null,
+      approvalComment: null,
+      approvalSubmittedAt: null,
+      approvalReviewedAt: null,
+      customer: { name: "测试客户" },
+      createdAt: new Date("2026-08-05T00:00:00.000Z"),
+      updatedAt: new Date("2026-08-05T01:00:00.000Z")
+    };
+    const exportService = service as unknown as {
+      buildQuotesWorkbook(quotes: typeof quote[]): Promise<Buffer>;
+    };
+    const output = await exportService.buildQuotesWorkbook([quote]);
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(output as never);
+
+    assert.deepEqual(workbook.worksheets.map((sheet) => sheet.name), ["报价汇总", "价格明细"]);
+    const summarySheet = workbook.getWorksheet("报价汇总");
+    const detailSheet = workbook.getWorksheet("价格明细");
+    assert.equal(summarySheet?.getRow(2).getCell(1).value, "Q-EXPORT-1");
+    assert.equal(summarySheet?.getRow(2).getCell(8).value, 48.83);
+    const fillColor = (columnNumber: number) => (
+      summarySheet?.getRow(1).getCell(columnNumber).fill as { fgColor?: { argb?: string } }
+    ).fgColor?.argb;
+    assert.equal(fillColor(1), "FF007F73");
+    assert.equal(fillColor(12), "FF007F73");
+    assert.equal(fillColor(15), "FF007F73");
+    assert.equal(fillColor(16), undefined);
+    assert.equal(detailSheet?.getRow(2).getCell(5).value, "物料");
+    assert.equal(detailSheet?.getRow(2).getCell(6).value, "物料A");
+    assert.equal(detailSheet?.getRow(9).getCell(6).value, "报价总额");
+    assert.equal(detailSheet?.getRow(9).getCell(11).value, 48.83);
   }
 
   console.log("commercial.service.spec.ts OK");

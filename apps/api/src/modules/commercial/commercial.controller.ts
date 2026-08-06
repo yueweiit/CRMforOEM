@@ -34,24 +34,24 @@ export class CommercialController {
   async exportQuote(
     @CurrentUser() user: RequestUser,
     @Param("id") id: string,
-    @Res({ passthrough: true }) res: Response
+    @Res() res: Response
   ) {
-    const { csv, fileName } = await this.commercialService.getQuoteExport(user, id);
-    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    const { workbook, fileName } = await this.commercialService.getQuoteExport(user, id);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-    return csv;
+    return res.send(workbook);
   }
 
   @Get("quotes/export")
   async exportQuotes(
     @CurrentUser() user: RequestUser,
     @Query("customerId") customerId: string | undefined,
-    @Res({ passthrough: true }) res: Response
+    @Res() res: Response
   ) {
-    const { csv, fileName } = await this.commercialService.getQuotesExport(user, customerId);
-    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    const { workbook, fileName } = await this.commercialService.getQuotesExport(user, customerId);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-    return csv;
+    return res.send(workbook);
   }
 
   @Patch("quotes/:id")

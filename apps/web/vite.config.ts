@@ -1,4 +1,5 @@
 import path from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
@@ -47,6 +48,7 @@ export default defineConfig(({ mode }) => {
   return {
     root: __dirname,
     envDir: workspaceRoot,
+    cacheDir: path.join(tmpdir(), "oem-crm-vite"),
     plugins: [react()],
     base: basePath,
     resolve: {
