@@ -9,6 +9,7 @@ export const zhCN = {
     allTeams: "全部团队",
     allOwners: "全部业务员",
     cancel: "取消",
+    confirm: "确认",
     save: "保存",
     edit: "编辑",
     delete: "删除",
@@ -327,7 +328,28 @@ export const zhCN = {
     sampleSentSuccessTitle: "样品跟进邮件已发送",
     sentSuccessMessage: "邮件已成功发送给客户。",
     sampleSentSuccessMessage: "请前往样品页更新样品状态，并继续跟进客户。",
-    sendFailed: "邮件发送失败"
+    sendFailed: "邮件发送失败",
+    linkedQuote: "关联报价",
+    selectApprovedQuote: "选择已审批报价",
+    historicalQuoteReference: "参考历史报价",
+    historicalQuoteReferenceHint: "最多参考 5 条同币种历史记录，最终价格仍以所选报价为准。",
+    quoteReplySuggestions: "报价回复建议",
+    quoteReplySuggestionsHint: "AI 只提供判断建议，状态变更必须由操作员确认",
+    loadingSuggestions: "正在加载报价回复建议...",
+    loadSuggestionsError: "报价回复建议加载失败。",
+    noQuoteReplySuggestions: "暂无待确认的报价回复建议。",
+    confirmCustomerAccepted: "确认客户接受",
+    confirmCustomerRejected: "确认客户拒绝",
+    dismissSuggestion: "忽略建议",
+    confirmAcceptedTitle: "确认客户接受报价",
+    confirmRejectedTitle: "确认客户拒绝报价",
+    confirmingReply: "确认中...",
+    confirmReplyWarning: "确认后将立即更改报价状态并写入报价历史。请核对客户原文证据后再操作。",
+    replyIntentAccept: "接受",
+    replyIntentReject: "拒绝",
+    replyIntentNegotiate: "议价",
+    replyIntentQuestion: "询问",
+    replyIntentUncertain: "不确定"
   },
   reports: {
     salesEmpty: "暂无业务员绩效数据。",
@@ -584,7 +606,6 @@ export const zhCN = {
     confirmOemDescription: "系统会基于客户资料、官网分析、背调报告和我方资料重新计算 OEM 适配评分。当前评分会继续保留。",
     confirmOemAction: "生成评分",
     confirmDefault: "确认",
-    submitting: "提交中...",
     processing: "处理中...",
     loadingDetail: "正在加载客户详情...",
     loadDetailError: "客户详情加载失败，请重新登录或刷新页面。",
@@ -675,7 +696,6 @@ export const zhCN = {
     total: "计算总价",
     validUntil: "有效期",
     createQuote: "新增报价",
-    submitting: "提交中..."
   },
   sampleFields: {
     sampleProduct: "样品/产品",
@@ -742,6 +762,7 @@ export const zhCN = {
     secondFollowUpTask: "首封邮件已发送，已创建二次跟进任务。",
     thirdFollowUpTask: "二次跟进已过期，已创建三次跟进任务。",
     customTask: "已创建后续跟进任务，请及时处理。",
-    inboundMailReceived: "收到客户回复"
+    inboundMailReceived: "收到客户回复",
+    quoteReplyAssessed: "收到报价回复，等待人工确认"
   }
 } as const;

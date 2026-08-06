@@ -9,6 +9,7 @@ export const esES = {
     allTeams: "Todos los equipos",
     allOwners: "Todos los vendedores",
     cancel: "Cancelar",
+    confirm: "Confirmar",
     save: "Guardar",
     edit: "Editar",
     delete: "Eliminar",
@@ -327,7 +328,28 @@ export const esES = {
     sampleSentSuccessTitle: "Email de seguimiento de muestra enviado",
     sentSuccessMessage: "El email se envio al cliente.",
     sampleSentSuccessMessage: "Ve a la pagina de muestras para actualizar el estado y seguir el cliente.",
-    sendFailed: "Error al enviar email"
+    sendFailed: "Error al enviar email",
+    linkedQuote: "Cotizacion vinculada",
+    selectApprovedQuote: "Seleccionar una cotizacion aprobada",
+    historicalQuoteReference: "Usar referencias historicas",
+    historicalQuoteReferenceHint: "Usa hasta 5 registros con la misma moneda. El precio procede de la cotizacion seleccionada.",
+    quoteReplySuggestions: "Sugerencias de respuesta a cotizacion",
+    quoteReplySuggestionsHint: "La IA solo sugiere; un operador debe confirmar cada cambio de estado",
+    loadingSuggestions: "Cargando sugerencias...",
+    loadSuggestionsError: "No se pudieron cargar las sugerencias.",
+    noQuoteReplySuggestions: "No hay sugerencias pendientes de confirmacion.",
+    confirmCustomerAccepted: "Confirmar aceptacion",
+    confirmCustomerRejected: "Confirmar rechazo",
+    dismissSuggestion: "Ignorar",
+    confirmAcceptedTitle: "Confirmar aceptacion del cliente",
+    confirmRejectedTitle: "Confirmar rechazo del cliente",
+    confirmingReply: "Confirmando...",
+    confirmReplyWarning: "Esto cambia inmediatamente el estado y registra el historial. Verifica primero la evidencia del cliente.",
+    replyIntentAccept: "Acepta",
+    replyIntentReject: "Rechaza",
+    replyIntentNegotiate: "Negocia",
+    replyIntentQuestion: "Pregunta",
+    replyIntentUncertain: "Incierto"
   },
   reports: {
     salesEmpty: "No hay datos de rendimiento comercial.",
@@ -584,7 +606,6 @@ export const esES = {
     confirmOemDescription: "El sistema recalculara el ajuste OEM con datos del cliente, analisis web, informes de investigacion y base de empresa. Las puntuaciones existentes se conservaran.",
     confirmOemAction: "Generar puntuacion",
     confirmDefault: "Confirmar",
-    submitting: "Enviando...",
     processing: "Procesando...",
     loadingDetail: "Cargando detalle del cliente...",
     loadDetailError: "Error al cargar detalle del cliente. Inicia sesion de nuevo o actualiza.",
@@ -675,7 +696,6 @@ export const esES = {
     total: "Total calculado",
     validUntil: "Valido hasta",
     createQuote: "Agregar cotizacion",
-    submitting: "Enviando..."
   },
   sampleFields: {
     sampleProduct: "Muestra/producto",
@@ -742,6 +762,7 @@ export const esES = {
     secondFollowUpTask: "Se envio el primer email y se creo una tarea de segundo seguimiento.",
     thirdFollowUpTask: "El segundo seguimiento vencio y se creo una tarea de tercer seguimiento.",
     customTask: "Se creo una tarea de seguimiento. Gestionela a tiempo.",
-    inboundMailReceived: "Respuesta del cliente recibida"
+    inboundMailReceived: "Respuesta del cliente recibida",
+    quoteReplyAssessed: "Respuesta a cotizacion recibida; requiere confirmacion"
   }
 } as const;

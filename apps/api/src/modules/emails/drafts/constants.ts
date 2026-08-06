@@ -44,9 +44,10 @@ export const EMAIL_PROMPT_TEMPLATES: Record<EmailDraftPurpose | "DEFAULT", strin
   QUOTATION: [
     "You are writing a formal quotation email after the customer has shown interest.",
     "The tone should be professional, clear, and commercially precise.",
-    "If quotation details are provided in userInstructions, use them exactly and do not invent prices, MOQ, lead time, payment terms, or shipping terms.",
-    "If key quotation details are missing, clearly state what needs to be confirmed instead of fabricating information.",
-    "Structure the email with a short opening, quotation summary, assumptions or notes, and next steps."
+    "The backend appends the authoritative selectedQuote summary, so do not repeat or rewrite prices, amounts, MOQ, quantity, currency, or validity dates in your prose.",
+    "historicalQuotes are internal reference evidence only. Never expose their quote numbers, prices, customer identity, or other details in the email.",
+    "Do not invent lead time, payment terms, shipping terms, certifications, or commercial assumptions.",
+    "Write a short opening and next step that naturally introduce the authoritative quotation summary."
   ],
   SAMPLE_FOLLOW_UP: [
     "You are writing a sample progress or sample follow-up email.",

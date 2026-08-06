@@ -111,7 +111,7 @@ export function getCustomerEmailThreads<T = unknown>(customerId: string) {
   return apiGet<T>(`/customers/${customerId}/email-threads`);
 }
 
-export function generateEmailDraft<T = unknown>(customerId: string, payload: Record<string, string | undefined>) {
+export function generateEmailDraft<T = unknown>(customerId: string, payload: Record<string, string | boolean | undefined>) {
   return apiPost<T>(`/customers/${customerId}/email-drafts/generate`, payload);
 }
 
@@ -154,6 +154,7 @@ export function expireQuote<T = unknown>(quoteId: string, payload: { comment?: s
 export function updateQuote<T = unknown>(quoteId: string, payload: unknown, options?: MutationOptions) {
   return apiPatch<T>(`/quotes/${quoteId}`, payload, options);
 }
+
 
 export function deleteQuote<T = unknown>(quoteId: string, options?: MutationOptions) {
   return apiDelete<T>(`/quotes/${quoteId}`, options);

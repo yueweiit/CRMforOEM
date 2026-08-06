@@ -9,6 +9,7 @@ export const enUS = {
     allTeams: "All teams",
     allOwners: "All owners",
     cancel: "Cancel",
+    confirm: "Confirm",
     save: "Save",
     edit: "Edit",
     delete: "Delete",
@@ -327,7 +328,28 @@ export const enUS = {
     sampleSentSuccessTitle: "Sample follow-up email sent",
     sentSuccessMessage: "Email was sent to the customer.",
     sampleSentSuccessMessage: "Go to the sample page to update the sample status and keep following up.",
-    sendFailed: "Failed to send email"
+    sendFailed: "Failed to send email",
+    linkedQuote: "Linked quote",
+    selectApprovedQuote: "Select an approved quote",
+    historicalQuoteReference: "Use historical quote references",
+    historicalQuoteReferenceHint: "Uses up to 5 same-currency records. The selected quote remains the price source.",
+    quoteReplySuggestions: "Quote reply suggestions",
+    quoteReplySuggestionsHint: "AI only suggests an interpretation; an operator must confirm any status change",
+    loadingSuggestions: "Loading quote reply suggestions...",
+    loadSuggestionsError: "Failed to load quote reply suggestions.",
+    noQuoteReplySuggestions: "No quote reply suggestions awaiting confirmation.",
+    confirmCustomerAccepted: "Confirm accepted",
+    confirmCustomerRejected: "Confirm rejected",
+    dismissSuggestion: "Dismiss",
+    confirmAcceptedTitle: "Confirm customer acceptance",
+    confirmRejectedTitle: "Confirm customer rejection",
+    confirmingReply: "Confirming...",
+    confirmReplyWarning: "This immediately changes the quote status and writes quote history. Verify the customer's evidence first.",
+    replyIntentAccept: "Accept",
+    replyIntentReject: "Reject",
+    replyIntentNegotiate: "Negotiate",
+    replyIntentQuestion: "Question",
+    replyIntentUncertain: "Uncertain"
   },
   reports: {
     salesEmpty: "No sales performance data.",
@@ -584,7 +606,6 @@ export const enUS = {
     confirmOemDescription: "The system will recalculate OEM fit based on customer data, website analysis, research reports, and our company knowledge. Existing scores remain available.",
     confirmOemAction: "Generate score",
     confirmDefault: "Confirm",
-    submitting: "Submitting...",
     processing: "Processing...",
     loadingDetail: "Loading customer detail...",
     loadDetailError: "Failed to load customer detail. Please log in again or refresh.",
@@ -675,7 +696,6 @@ export const enUS = {
     total: "Calculated total",
     validUntil: "Valid until",
     createQuote: "Add quote",
-    submitting: "Submitting..."
   },
   sampleFields: {
     sampleProduct: "Sample/product",
@@ -742,6 +762,7 @@ export const enUS = {
     secondFollowUpTask: "The first email was sent and a second follow-up task was created.",
     thirdFollowUpTask: "The second follow-up is overdue and a third follow-up task was created.",
     customTask: "A follow-up task was created. Please handle it in time.",
-    inboundMailReceived: "Customer reply received"
+    inboundMailReceived: "Customer reply received",
+    quoteReplyAssessed: "Quote reply received; operator confirmation required"
   }
 } as const;

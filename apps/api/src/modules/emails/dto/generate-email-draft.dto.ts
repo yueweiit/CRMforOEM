@@ -1,5 +1,5 @@
 import { EMAIL_DRAFT_ALLOWED_PURPOSES } from "@oem-crm/shared";
-import { IsArray, IsEmail, IsIn, IsOptional, IsString } from "class-validator";
+import { IsArray, IsBoolean, IsEmail, IsIn, IsOptional, IsString } from "class-validator";
 
 export class GenerateEmailDraftDto {
   @IsOptional()
@@ -31,5 +31,12 @@ export class GenerateEmailDraftDto {
   @IsOptional()
   @IsString()
   userInstructions?: string;
-}
 
+  @IsOptional()
+  @IsString()
+  quoteId?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  useHistoricalQuoteReferences?: boolean;
+}

@@ -99,5 +99,26 @@ export type EmailGenerationContext = {
     }>;
   } | null;
 
+  quotation?: {
+    selectedQuote: QuotationContextQuote;
+    historicalQuotes: QuotationContextQuote[];
+  };
+
   userInstructions?: string;
+};
+
+export type QuotationContextQuote = {
+  id: string;
+  quoteNo: string;
+  productName: string;
+  specification: string | null;
+  moq: number;
+  quantity: number;
+  unitPrice: string;
+  currency: string;
+  amount: string;
+  validUntil: string | null;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
 };

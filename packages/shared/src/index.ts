@@ -23,7 +23,31 @@ export enum AiGenerationType {
   WebsiteAnalysis = "WEBSITE_ANALYSIS",
   ResearchReport = "RESEARCH_REPORT",
   OemFitScore = "OEM_FIT_SCORE",
-  EmailDraft = "EMAIL_DRAFT"
+  EmailDraft = "EMAIL_DRAFT",
+  QuoteReplyClassification = "QUOTE_REPLY_CLASSIFICATION"
+}
+
+export enum QuoteEmailDispatchStatus {
+  Pending = "PENDING",
+  Sending = "SENDING",
+  Sent = "SENT",
+  Failed = "FAILED",
+  AcknowledgedPendingReconcile = "ACKED_PENDING_RECONCILE"
+}
+
+export enum QuoteReplyIntent {
+  Accept = "ACCEPT",
+  Reject = "REJECT",
+  Negotiate = "NEGOTIATE",
+  Question = "QUESTION",
+  Uncertain = "UNCERTAIN"
+}
+
+export enum QuoteReplyAssessmentStatus {
+  Pending = "PENDING",
+  Confirmed = "CONFIRMED",
+  Dismissed = "DISMISSED",
+  Stale = "STALE"
 }
 
 export enum AiContentVersionType {

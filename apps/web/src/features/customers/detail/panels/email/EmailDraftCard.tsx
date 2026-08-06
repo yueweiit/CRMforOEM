@@ -100,12 +100,20 @@ export function EmailDraftCard({
           <div className="empty-state">{t("emailCenter.loadContentError")}</div>
         ) : (
           <div className="email-draft-detail-window">
+            {editableDraft.quoteId ? (
+              <div className="email-linked-quote">
+                <strong>{t("emailCenter.linkedQuote")}</strong>
+                <span>{editableDraft.quoteSnapshot?.quoteNo ?? editableDraft.quoteId} · {editableDraft.quoteSnapshot?.productName ?? ""}</span>
+              </div>
+            ) : null}
             <input
+              disabled={editableDraft.status === "SENT"}
               value={editDraft.subject ?? editableDraft.subject}
               onChange={(event) => setEditDraft({ ...editDraft, subject: event.target.value })}
             />
             {editableDraft.body ? (
               <textarea
+                disabled={editableDraft.status === "SENT"}
                 className="email-draft-body-editor"
                 value={editDraft.body ?? editableDraft.body}
                 onChange={(event) => setEditDraft({ ...editDraft, body: event.target.value })}
@@ -114,10 +122,10 @@ export function EmailDraftCard({
               <div className="loading-state">{t("emailCenter.generatingDraftBody")}</div>
             )}
             <div className="toolbar">
-              <button className="secondary-button" disabled={update.isPending || !editableDraft.body} onClick={() => update.mutate()}>
+              <button className="secondary-button" disabled={update.isPending || !editableDraft.body || editableDraft.status === "SENT"} onClick={() => update.mutate()}>
                 {update.isPending ? t("common.saving") : t("common.saveChanges")}
               </button>
-              <button className="secondary-button" disabled={approve.isPending || !editableDraft.body} onClick={() => approve.mutate()}>
+              <button className="secondary-button" disabled={approve.isPending || !editableDraft.body || editableDraft.status === "SENT"} onClick={() => approve.mutate()}>
                 {approve.isPending ? t("emailCenter.approving") : t("emailCenter.approve")}
               </button>
               <button

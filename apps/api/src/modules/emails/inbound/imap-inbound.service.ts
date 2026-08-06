@@ -3,6 +3,7 @@ import { PrismaService } from "../../../infrastructure/prisma/prisma.service";
 import { FollowUpsService } from "../../follow-ups/follow-ups.public";
 
 export type InboundMessageInput = {
+  organizationId: string;
   accountId: string;
   messageId: string;
   inReplyTo?: string;
@@ -10,6 +11,8 @@ export type InboundMessageInput = {
   toEmails: string[];
   subject: string;
   receivedAt: Date;
+  bodyText?: string;
+  referencesHeader?: string;
 };
 
 @Injectable()
@@ -19,19 +22,25 @@ export class ImapInboundService {
     private readonly followUps: FollowUpsService
   ) {}
 
-  async findThreadForInbound(fromEmail: string, inReplyTo?: string) {
-    if (inReplyTo) {
+  async findThreadForInbound(organizationId: string, fromEmail: string, inReplyTo?: string, referencesHeader?: string) {
+    const referencedIds = [inReplyTo, ...(referencesHeader?.match(/<[^>]+>/g) ?? [])].filter(
+      (value): value is string => Boolean(value)
+    );
+    if (referencedIds.length) {
       const message = await this.prisma.emailMessage.findFirst({
-        where: { messageId: inReplyTo },
+        where: {
+          messageId: { in: referencedIds },
+          thread: { customer: { organizationId } }
+        },
         include: { thread: true }
       });
       if (message?.thread) {
-        return message.thread;
+        return { thread: message.thread, quoteId: message.quoteId };
       }
     }
 
     const contact = await this.prisma.contact.findFirst({
-      where: { email: fromEmail },
+      where: { email: fromEmail, customer: { organizationId } },
       include: {
         customer: {
           include: { emailThreads: { take: 1, orderBy: { updatedAt: "desc" } } }
@@ -39,12 +48,25 @@ export class ImapInboundService {
       }
     });
 
-    return contact?.customer.emailThreads[0];
+    const thread = contact?.customer.emailThreads[0];
+    if (!thread) return null;
+    const outbound = await this.prisma.emailMessage.findFirst({
+      where: { threadId: thread.id, direction: "OUTBOUND", quoteId: { not: null } },
+      orderBy: { createdAt: "desc" },
+      select: { quoteId: true }
+    });
+    return { thread, quoteId: outbound?.quoteId ?? null };
   }
 
   async handleInboundMessage(input: InboundMessageInput) {
+    const account = await this.prisma.emailAccount.findFirst({
+      where: { id: input.accountId, user: { organizationId: input.organizationId } },
+      select: { id: true }
+    });
+    if (!account) return null;
+
     const existing = await this.prisma.emailMessage.findUnique({
-      where: { messageId: input.messageId },
+      where: { emailAccountId_messageId: { emailAccountId: input.accountId, messageId: input.messageId } },
       include: {
         thread: true
       }
@@ -71,14 +93,16 @@ export class ImapInboundService {
       };
     }
 
-    const thread = await this.findThreadForInbound(input.fromEmail, input.inReplyTo);
-    if (!thread) {
+    const matched = await this.findThreadForInbound(input.organizationId, input.fromEmail, input.inReplyTo, input.referencesHeader);
+    if (!matched) {
       return null;
     }
+    const { thread, quoteId } = matched;
 
-    await this.prisma.emailMessage.create({
+    const inboundMessage = await this.prisma.emailMessage.create({
       data: {
         threadId: thread.id,
+        quoteId,
         emailAccountId: input.accountId,
         direction: "INBOUND",
         status: "RECEIVED",
@@ -87,6 +111,8 @@ export class ImapInboundService {
         fromEmail: input.fromEmail,
         toEmails: input.toEmails,
         subject: input.subject,
+        bodyText: input.bodyText,
+        referencesHeader: input.referencesHeader,
         receivedAt: input.receivedAt
       }
     });
@@ -121,6 +147,8 @@ export class ImapInboundService {
     return {
       thread,
       customer,
+      inboundMessage,
+      quoteId,
       created: true,
       duplicate: false
     };

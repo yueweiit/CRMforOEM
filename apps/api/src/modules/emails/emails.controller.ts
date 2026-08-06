@@ -7,6 +7,7 @@ import { CreateEmailAccountDto } from "./dto/create-email-account.dto";
 import { GenerateEmailDraftDto } from "./dto/generate-email-draft.dto";
 import { UpdateEmailAccountDto } from "./dto/update-email-account.dto";
 import { UpdateEmailDraftDto } from "./dto/update-email-draft.dto";
+import { ResolveQuoteReplyAssessmentDto } from "./dto/resolve-quote-reply-assessment.dto";
 import { EmailsService } from "./emails.service";
 
 @Controller()
@@ -42,6 +43,7 @@ export class EmailsController {
   }
 
   @Post("customers/:customerId/email-drafts/generate")
+  @RequireAnyPermissions("emails.generate", "settings.manage")
   generateDraft(
     @CurrentUser() user: RequestUser,
     @Param("customerId") customerId: string,
@@ -123,5 +125,33 @@ export class EmailsController {
   @Post("email-sync/run")
   runSync(@CurrentUser() user: RequestUser) {
     return this.emailsService.runSync(user);
+  }
+
+  @RequireAnyPermissions("quotes.read", "settings.manage")
+  @Get("quote-reply-assessments")
+  quoteReplyAssessments(
+    @CurrentUser() user: RequestUser,
+    @Query("customerId") customerId?: string,
+    @Query("status") status?: string
+  ) {
+    return this.emailsService.listQuoteReplyAssessments(user, { customerId, status });
+  }
+
+  @RequireLiveSession()
+  @RequireAnyPermissions("quotes.resolve_reply", "settings.manage")
+  @Post("quote-reply-assessments/:id/confirm")
+  confirmQuoteReplyAssessment(
+    @CurrentUser() user: RequestUser,
+    @Param("id") id: string,
+    @Body() dto: ResolveQuoteReplyAssessmentDto
+  ) {
+    return this.emailsService.confirmQuoteReplyAssessment(user, id, dto);
+  }
+
+  @RequireLiveSession()
+  @RequireAnyPermissions("quotes.resolve_reply", "settings.manage")
+  @Post("quote-reply-assessments/:id/dismiss")
+  dismissQuoteReplyAssessment(@CurrentUser() user: RequestUser, @Param("id") id: string) {
+    return this.emailsService.dismissQuoteReplyAssessment(user, id);
   }
 }

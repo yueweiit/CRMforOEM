@@ -3,6 +3,7 @@ import { Module } from "@nestjs/common";
 import { AiModule } from "../ai/ai.module";
 import { CustomersModule } from "../customers/customers.module";
 import { FollowUpsModule } from "../follow-ups/follow-ups.module";
+import { CommercialModule } from "../commercial/commercial.module";
 import { SettingsModule } from "../settings/settings.module";
 import { EMAIL_DRAFT_QUEUE } from "./drafts/email-draft.constants";
 import { EmailDraftProcessor } from "./drafts/email-draft.processor";
@@ -30,12 +31,14 @@ import { EmailDraftGenerationService } from "./generation/email-draft-generation
 import { EmailDraftSubmissionService } from "./generation/email-draft-submission.service";
 import { SmtpService } from "./generation/smtp.service";
 import { IMAP_INBOUND_QUEUE } from "./inbound/imap-inbound.constants";
+import { QuoteReplyAssessmentService } from "./inbound/quote-reply-assessment.service";
 
 @Module({
   imports: [
     AiModule,
     CustomersModule,
     FollowUpsModule,
+    CommercialModule,
     SettingsModule,
     BullModule.registerQueue({ name: EMAIL_DRAFT_QUEUE }),
     BullModule.registerQueue({ name: IMAP_INBOUND_QUEUE })
@@ -63,6 +66,7 @@ import { IMAP_INBOUND_QUEUE } from "./inbound/imap-inbound.constants";
     ImapReconnectService,
     ImapManualSyncService,
     ImapInboundService,
+    QuoteReplyAssessmentService,
     EmailDraftProcessor,
     ImapInboundProcessor
   ],

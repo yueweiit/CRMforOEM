@@ -51,3 +51,15 @@ export function sendEmailDraft<T = unknown>(draftId: string, options?: { toast?:
 export function getEmailThreads<T = unknown>() {
   return apiGet<T>("/email-threads");
 }
+
+export function getQuoteReplyAssessments<T = unknown>(customerId: string, status = "PENDING") {
+  return apiGet<T>(`/quote-reply-assessments?customerId=${encodeURIComponent(customerId)}&status=${encodeURIComponent(status)}`);
+}
+
+export function confirmQuoteReplyAssessment<T = unknown>(assessmentId: string, outcome: "ACCEPTED" | "CUSTOMER_REJECTED") {
+  return apiPost<T>(`/quote-reply-assessments/${assessmentId}/confirm`, { outcome });
+}
+
+export function dismissQuoteReplyAssessment<T = unknown>(assessmentId: string) {
+  return apiPost<T>(`/quote-reply-assessments/${assessmentId}/dismiss`);
+}

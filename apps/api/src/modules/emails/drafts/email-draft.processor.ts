@@ -6,6 +6,7 @@ import { SettingsService } from "../../settings/settings.public";
 import { buildEmailSystemPrompt } from "../generation/email-prompt-builder";
 import { EMAIL_DRAFT_QUEUE } from "./email-draft.constants";
 import type { EmailGenerationContext } from "../generation/types";
+import { composeGeneratedEmailBody } from "../generation/quotation-email";
 
 type LegacyDraftContext = {
   purpose?: string;
@@ -76,11 +77,14 @@ export class EmailDraftProcessor extends WorkerHost {
         completion.tokenUsage,
         Date.now() - startedAt
       );
-      await this.aiGeneration.addRawAiVersion(draft.aiGenerationRunId, completion.content);
+      const body = isLegacy
+        ? completion.content
+        : composeGeneratedEmailBody(completion.content, context as EmailGenerationContext);
+      await this.aiGeneration.addRawAiVersion(draft.aiGenerationRunId, body);
 
       await this.prisma.emailDraft.update({
         where: { id: draftId },
-        data: { body: completion.content, subject: draft.subject }
+        data: { body, subject: draft.subject }
       });
     } catch (error) {
       const message =

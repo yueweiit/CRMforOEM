@@ -101,6 +101,21 @@ export function AppShell() {
     });
   });
 
+  useSse("quote-reply.assessed", (data: { assessmentId: string; quoteNo: string; intent: "ACCEPT" | "REJECT"; customerName: string; customerId: string; targetUserIds: string[] }) => {
+    if (!data.targetUserIds?.includes(userId)) return;
+    queryClient.invalidateQueries({ queryKey: ["quote-reply-assessments", data.customerId] });
+    const config = getEmailEventToastConfig(t)["quote-reply.assessed"];
+    showServerToast({
+      type: config.type,
+      title: typeof config.title === "function" ? config.title(data) : config.title,
+      message: typeof config.message === "function" ? config.message(data) : config.message,
+      persistent: true,
+      dedupeKey: config.dedupeKey?.(data),
+      actionHref: config.actionHref?.(data),
+      actionLabel: config.actionLabel
+    });
+  });
+
   const { data: followUpSummary } = useQuery({
     queryKey: ["nav-follow-up-overdue-count"],
     queryFn: () => apiGet<NavFollowUpSummary>("/follow-up-tasks/overdue-count"),

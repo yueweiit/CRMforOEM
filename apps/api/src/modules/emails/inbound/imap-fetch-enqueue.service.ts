@@ -4,6 +4,7 @@ import { Queue } from "bullmq";
 import { PrismaService } from "../../../infrastructure/prisma/prisma.service";
 import { IMAP_INBOUND_QUEUE } from "./imap-inbound.constants";
 import type { FetchContext } from "./types";
+import { MAX_INBOUND_SOURCE_BYTES } from "./email-mime-parser";
 
 @Injectable()
 export class ImapFetchEnqueueService {
@@ -21,7 +22,11 @@ export class ImapFetchEnqueueService {
         ? { seen: false }
         : { since: await this.resolveManualSyncSince(context.account.id) };
 
-      for await (const raw of context.client.fetch(query, { envelope: true, source: false })) {
+      for await (const raw of context.client.fetch(query, {
+        envelope: true,
+        size: true,
+        source: { maxLength: MAX_INBOUND_SOURCE_BYTES + 1 }
+      })) {
         scanned++;
         const msg = raw as any;
         const messageId = msg.envelope.messageId;
@@ -36,7 +41,10 @@ export class ImapFetchEnqueueService {
           toEmails: msg.envelope.to?.map((item: { address?: string }) => item.address ?? "").filter(Boolean) ?? [],
           subject: msg.envelope.subject ?? "(no subject)",
           receivedAt: (msg.envelope.date ?? new Date()).toISOString(),
-          orgId: context.account.user.organizationId
+          orgId: context.account.user.organizationId,
+          sourceBase64: msg.size <= MAX_INBOUND_SOURCE_BYTES && Buffer.isBuffer(msg.source)
+            ? msg.source.toString("base64")
+            : undefined
         }, { jobId: this.buildInboundJobId(context.account.id, messageId) });
 
         enqueued++;

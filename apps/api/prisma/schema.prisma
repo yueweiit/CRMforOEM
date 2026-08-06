@@ -44,6 +44,7 @@ enum AiGenerationType {
   RESEARCH_REPORT
   OEM_FIT_SCORE
   EMAIL_DRAFT
+  QUOTE_REPLY_CLASSIFICATION
 }
 
 enum AiRunStatus {
@@ -174,7 +175,34 @@ enum QuoteHistoryAction {
   SUBMITTED
   APPROVED
   REJECTED
+  SENT
+  ACCEPTED
+  CUSTOMER_REJECTED
+  EXPIRED
   VOIDED
+}
+
+enum QuoteEmailDispatchStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+  ACKED_PENDING_RECONCILE
+}
+
+enum QuoteReplyIntent {
+  ACCEPT
+  REJECT
+  NEGOTIATE
+  QUESTION
+  UNCERTAIN
+}
+
+enum QuoteReplyAssessmentStatus {
+  PENDING
+  CONFIRMED
+  DISMISSED
+  STALE
 }
 
 enum SampleStatus {
@@ -241,6 +269,7 @@ model Organization {
   permissions       Permission[]
   oemScoringConfig   OemScoringConfig?
   emailPromptConfigs EmailPromptConfig[]
+  quoteReplyAssessments QuoteReplyAssessment[]
 
   @@map("organizations")
 }
@@ -323,6 +352,7 @@ model User {
   permissionGrants           UserPermissionGrant[]
   emailPromptConfigsCreated EmailPromptConfig[] @relation("EmailPromptConfigCreatedBy")
   emailPromptConfigsUpdated EmailPromptConfig[] @relation("EmailPromptConfigUpdatedBy")
+  reviewedQuoteReplyAssessments QuoteReplyAssessment[] @relation("QuoteReplyAssessmentReviewer")
 
   @@index([organizationId])
   @@index([teamId])
@@ -840,6 +870,7 @@ model AiGenerationRun {
   researchReports  ResearchReport[]
   oemFitScores     OemFitScore[]
   emailDrafts      EmailDraft[]
+  quoteReplyAssessments QuoteReplyAssessment[]
 
   @@index([organizationId, type, createdAt])
   @@index([customerId])
@@ -914,6 +945,7 @@ model EmailThread {
 model EmailDraft {
   id                String           @id @default(cuid())
   customerId        String
+  quoteId           String?
   emailAccountId    String?
   aiGenerationRunId String?
   purpose           String?
@@ -930,22 +962,29 @@ model EmailDraft {
   reviewedAt        DateTime?
   reviewComment     String?
   sentMessageId     String?
+  quoteSnapshot     Json?
+  quoteUpdatedAtSnapshot DateTime?
+  historicalQuoteIds String[]        @default([])
   createdById       String?
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
 
   customer        Customer         @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  quote           Quote?           @relation(fields: [quoteId], references: [id], onDelete: SetNull)
   emailAccount    EmailAccount?    @relation(fields: [emailAccountId], references: [id])
   aiGenerationRun AiGenerationRun? @relation(fields: [aiGenerationRunId], references: [id])
+  quoteEmailDispatch QuoteEmailDispatch?
 
   @@index([customerId, status])
   @@index([customerId, purpose])
+  @@index([quoteId])
   @@map("email_drafts")
 }
 
 model EmailMessage {
   id              String             @id @default(cuid())
   threadId         String?
+  quoteId         String?
   emailAccountId   String?
   direction        EmailDirection
   status           EmailMessageStatus @default(DRAFT)
@@ -964,11 +1003,16 @@ model EmailMessage {
   createdAt        DateTime           @default(now())
 
   thread       EmailThread?     @relation(fields: [threadId], references: [id], onDelete: SetNull)
+  quote        Quote?           @relation(fields: [quoteId], references: [id], onDelete: SetNull)
   emailAccount EmailAccount?    @relation(fields: [emailAccountId], references: [id])
   attachments  EmailAttachment[]
+  quoteEmailDispatch QuoteEmailDispatch?
+  quoteReplyAssessment QuoteReplyAssessment?
 
-  @@unique([messageId])
+  @@unique([emailAccountId, messageId])
   @@index([threadId, createdAt])
+  @@index([quoteId])
+  @@index([messageId])
   @@index([fromEmail])
   @@map("email_messages")
 }
@@ -1049,12 +1093,17 @@ model Quote {
   approvalSubmittedById String?
   approvalReviewedAt   DateTime?
   approvalReviewedById String?
+  sentAt               DateTime?
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
 
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
   histories QuoteHistory[]
   sampleRequests SampleRequest[]
+  emailDrafts EmailDraft[]
+  emailMessages EmailMessage[]
+  emailDispatches QuoteEmailDispatch[]
+  replyAssessments QuoteReplyAssessment[]
 
   @@unique([quoteNo])
   @@index([customerId])
@@ -1076,6 +1125,56 @@ model QuoteHistory {
 
   @@index([quoteId, createdAt])
   @@map("quote_histories")
+}
+
+model QuoteEmailDispatch {
+  id                String                   @id @default(cuid())
+  quoteId           String
+  emailDraftId      String                   @unique
+  emailMessageId    String?                  @unique
+  idempotencyKey    String                   @unique
+  status            QuoteEmailDispatchStatus @default(PENDING)
+  providerMessageId String?
+  errorMessage      String?
+  attemptedAt       DateTime?
+  sentAt            DateTime?
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+
+  quote        Quote         @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  emailDraft   EmailDraft    @relation(fields: [emailDraftId], references: [id], onDelete: Cascade)
+  emailMessage EmailMessage? @relation(fields: [emailMessageId], references: [id], onDelete: SetNull)
+
+  @@index([quoteId, createdAt])
+  @@index([status, updatedAt])
+  @@map("quote_email_dispatches")
+}
+
+model QuoteReplyAssessment {
+  id                    String                     @id @default(cuid())
+  organizationId        String
+  quoteId               String
+  inboundEmailMessageId String                     @unique
+  aiGenerationRunId     String?
+  intent                QuoteReplyIntent
+  confidence            Float
+  evidence              String
+  reason                String
+  status                QuoteReplyAssessmentStatus @default(PENDING)
+  reviewedById          String?
+  reviewedAt            DateTime?
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
+
+  organization        Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  quote               Quote           @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  inboundEmailMessage EmailMessage    @relation(fields: [inboundEmailMessageId], references: [id], onDelete: Cascade)
+  aiGenerationRun     AiGenerationRun? @relation(fields: [aiGenerationRunId], references: [id], onDelete: SetNull)
+  reviewedBy          User?           @relation("QuoteReplyAssessmentReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status, createdAt])
+  @@index([quoteId, status, createdAt])
+  @@map("quote_reply_assessments")
 }
 
 model SampleRequest {

@@ -1,14 +1,18 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { normalizeEmailDraftPurpose } from "@oem-crm/shared";
 import { RequestUser } from "../../../common/auth/current-user.decorator";
 import { buildCustomerDataScopeWhere } from "../../../common/query/data-scope";
 import { PrismaService } from "../../../infrastructure/prisma/prisma.service";
+import { QuoteReferenceService } from "../../commercial/quote-reference.service";
 import type { GenerateEmailDraftDto } from "../dto/generate-email-draft.dto";
-import type { EmailGenerationContext } from "./types";
+import type { EmailGenerationContext, QuotationContextQuote } from "./types";
 
 @Injectable()
 export class EmailContextBuilder {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly quoteReferences: QuoteReferenceService
+  ) {}
 
   async build(user: RequestUser, customerId: string, dto: GenerateEmailDraftDto) {
     const customer = await this.prisma.customer.findFirst({
@@ -32,8 +36,22 @@ export class EmailContextBuilder {
       })
     ]);
 
+    const purpose = normalizeEmailDraftPurpose(dto.purpose);
+    if (purpose !== "QUOTATION" && dto.quoteId) {
+      throw new BadRequestException("Only quotation emails can be linked to a quote");
+    }
+    if (purpose === "QUOTATION" && !dto.quoteId) {
+      throw new BadRequestException("Quotation email requires quoteId");
+    }
+    const quotation = dto.quoteId
+      ? await this.quoteReferences.getReferenceContext(user, dto.quoteId, {
+          customerId,
+          includeHistorical: dto.useHistoricalQuoteReferences === true
+        })
+      : null;
+
     return {
-      purpose: normalizeEmailDraftPurpose(dto.purpose),
+      purpose,
       customer,
       bestContact: contacts[0],
       contacts,
@@ -41,6 +59,7 @@ export class EmailContextBuilder {
       researchReport,
       oemFitScore,
       companyProfile,
+      quotation,
       userInstructions: dto.userInstructions
     };
   }
@@ -75,6 +94,10 @@ export function assembleGenerationContext(params: {
     caseStudies?: Array<{ title: string; market?: string | null; category?: string | null; summary: string; result?: string | null }>;
     emailMaterials?: Array<{ name: string; materialType: string; content: string; tags?: string[] }>;
   } | null;
+  quotation?: {
+    selectedQuote: QuotationContextQuote;
+    historicalQuotes: QuotationContextQuote[];
+  } | null;
   userInstructions?: string;
 }): EmailGenerationContext {
   const intendedRecipient = params.selectedContact?.email
@@ -103,6 +126,7 @@ export function assembleGenerationContext(params: {
     customer: { name: params.customer.name, sourceName: params.customer.source?.name, typeName: params.customer.type?.name, websiteUrl: params.customer.websiteUrl, websiteDomain: params.customer.websiteDomain, country: params.customer.country, language: params.customer.language, stage: params.customer.stage, riskLevel: params.customer.riskLevel, tags: params.customer.tags, notes: params.customer.notes },
     customerInsights,
     ourCompany: params.companyProfile ? { displayName: params.companyProfile.displayName, legalName: params.companyProfile.legalName, summary: params.companyProfile.summary, markets: params.companyProfile.markets, productionScale: params.companyProfile.productionScale, factoryAddress: params.companyProfile.factoryAddress, capabilities: pickDiverseByCategory(params.companyProfile.capabilities, 8), products: pickDiverseByCategory(params.companyProfile.products, 8), certificates: (params.companyProfile.certificates ?? []).slice(0, 5), caseStudies: (params.companyProfile.caseStudies ?? []).slice(0, 5), emailMaterials: (params.companyProfile.emailMaterials ?? []).slice(0, 10) } : null,
+    ...(params.quotation ? { quotation: params.quotation } : {}),
     userInstructions: params.userInstructions
   };
 }

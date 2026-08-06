@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { Dialog } from "@alifd/next";
 import "@alifd/next/lib/dialog/style.js";
 import { CheckCircle2, ChevronDown, Download, History, MoreHorizontal, Send, XCircle } from "lucide-react";
@@ -574,6 +575,7 @@ function CalcModeSelect({
 
 export function QuotePanel({ customerId }: { customerId: string }) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { locale, t } = useI18n();
   const [detailOpen, setDetailOpen] = useState(false);
   const [form, setForm] = useState({
@@ -925,6 +927,10 @@ export function QuotePanel({ customerId }: { customerId: string }) {
   };
 
   const openStatus = (item: Quote, action: QuoteStatusAction) => {
+    if (action === "send") {
+      navigate(`/customers/${customerId}/email?quoteId=${encodeURIComponent(item.id)}`);
+      return;
+    }
     setStatusQuote(item);
     setStatusAction(action);
     setStatusOpen(true);

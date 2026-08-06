@@ -12,7 +12,11 @@ export class SmtpService {
     await transport.verify();
   }
 
-  async send(account: SmtpAccount, draft: { subject: string; body: string; toEmail: string; ccEmails: string[]; bccEmails: string[] }) {
+  async send(
+    account: SmtpAccount,
+    draft: { subject: string; body: string; toEmail: string; ccEmails: string[]; bccEmails: string[] },
+    options: { messageId?: string } = {}
+  ) {
     const transport = await this.createTransport(account);
     const result = await transport.sendMail({
       from: account.email,
@@ -20,7 +24,8 @@ export class SmtpService {
       cc: draft.ccEmails,
       bcc: draft.bccEmails,
       subject: draft.subject,
-      text: draft.body
+      text: draft.body,
+      ...(options.messageId ? { messageId: options.messageId } : {})
     });
     return { messageId: result.messageId };
   }
@@ -69,4 +74,3 @@ async function resolveSmtpHost(host: string) {
 function isIpAddress(value: string) {
   return /^(\d{1,3}\.){3}\d{1,3}$/.test(value.trim());
 }
-

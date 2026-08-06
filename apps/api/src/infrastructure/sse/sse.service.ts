@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
 import { Subject } from "rxjs";
-import { SSE_EVENTS, InboundMailReceivedPayload, FollowUpTaskChangedPayload } from "../../common/events/event-types";
+import { SSE_EVENTS, InboundMailReceivedPayload, FollowUpTaskChangedPayload, QuoteReplyAssessedPayload } from "../../common/events/event-types";
 
 type SseConnection = {
   subject: Subject<MessageEvent>;
@@ -41,6 +41,11 @@ export class SseService {
   @OnEvent(SSE_EVENTS.INBOUND_MAIL_RECEIVED)
   onInboundMailReceived(payload: InboundMailReceivedPayload) {
     this.pushToOrg(payload.orgId, SSE_EVENTS.INBOUND_MAIL_RECEIVED, payload, payload.targetUserIds);
+  }
+
+  @OnEvent(SSE_EVENTS.QUOTE_REPLY_ASSESSED)
+  onQuoteReplyAssessed(payload: QuoteReplyAssessedPayload) {
+    this.pushToOrg(payload.orgId, SSE_EVENTS.QUOTE_REPLY_ASSESSED, payload, payload.targetUserIds);
   }
 
   @OnEvent(SSE_EVENTS.FOLLOW_UP_TASK_CREATED)

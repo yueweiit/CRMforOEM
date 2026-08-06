@@ -10,6 +10,8 @@ import type { CreateEmailAccountDto } from "./dto/create-email-account.dto";
 import type { GenerateEmailDraftDto } from "./dto/generate-email-draft.dto";
 import type { UpdateEmailAccountDto } from "./dto/update-email-account.dto";
 import type { UpdateEmailDraftDto } from "./dto/update-email-draft.dto";
+import type { ResolveQuoteReplyAssessmentDto } from "./dto/resolve-quote-reply-assessment.dto";
+import { QuoteReplyAssessmentService } from "./inbound/quote-reply-assessment.service";
 
 @Injectable()
 export class EmailsService {
@@ -18,7 +20,8 @@ export class EmailsService {
     private readonly draftGeneration: EmailDraftGenerationService,
     private readonly draftService: EmailDraftService,
     private readonly threads: EmailThreadService,
-    private readonly manualSync: ImapManualSyncService
+    private readonly manualSync: ImapManualSyncService,
+    private readonly quoteReplyAssessments: QuoteReplyAssessmentService
   ) {}
 
   // ── Account management ──
@@ -53,4 +56,16 @@ export class EmailsService {
 
   syncStatus(user: RequestUser) { return this.manualSync.getConnectionStatusesForUser(user); }
   runSync(user: RequestUser) { return this.manualSync.manualSyncForUser(user); }
+
+  listQuoteReplyAssessments(user: RequestUser, filters: { customerId?: string; status?: string }) {
+    return this.quoteReplyAssessments.list(user, filters);
+  }
+
+  confirmQuoteReplyAssessment(user: RequestUser, id: string, dto: ResolveQuoteReplyAssessmentDto) {
+    return this.quoteReplyAssessments.confirm(user, id, dto);
+  }
+
+  dismissQuoteReplyAssessment(user: RequestUser, id: string) {
+    return this.quoteReplyAssessments.dismiss(user, id);
+  }
 }

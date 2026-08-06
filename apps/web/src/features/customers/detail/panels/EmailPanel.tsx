@@ -4,6 +4,8 @@ import type { CustomerDetail, EmailThread } from "../shared/types";
 import { SimpleRows } from "../shared/ui";
 import { EmailDraftGenerationForm } from "./email/EmailDraftGenerationForm";
 import { EmailDraftHistory } from "./email/EmailDraftHistory";
+import { QuoteReplySuggestions } from "./email/QuoteReplySuggestions";
+import { useI18n } from "../../../../i18n";
 
 export function EmailPanel({
   customer,
@@ -14,6 +16,7 @@ export function EmailPanel({
   customerId: string;
   onChanged: () => void;
 }) {
+  const { t } = useI18n();
   const { data: threads = [] } = useQuery({
     queryKey: ["email-threads", customerId],
     queryFn: () => getCustomerEmailThreads<EmailThread[]>(customerId)
@@ -22,11 +25,12 @@ export function EmailPanel({
   return (
     <div className="page-stack">
       <EmailDraftGenerationForm contacts={customer.contacts} customerId={customerId} onChanged={onChanged} />
+      <QuoteReplySuggestions customerId={customerId} onChanged={onChanged} />
       <EmailDraftHistory customerId={customerId} onChanged={onChanged} />
       <section className="table-panel">
         <div className="panel-title">
-          <h2>邮件线程</h2>
-          <span>{threads.length} 条</span>
+          <h2>{t("emailCenter.threadsTitle")}</h2>
+          <span>{threads.length} {t("emailCenter.threadUnit")}</span>
         </div>
         <SimpleRows
           rows={threads.map((thread) => ({
@@ -36,7 +40,7 @@ export function EmailPanel({
               thread.lastMessageAt ? new Date(thread.lastMessageAt).toLocaleString() : "-"
             }`
           }))}
-          empty="暂无邮件往来。"
+          empty={t("emailCenter.emptyThreads")}
         />
       </section>
     </div>

@@ -41,6 +41,7 @@ export class EmailDraftCreationService {
       researchReport: context.researchReport,
       oemFitScore: context.oemFitScore,
       companyProfile: context.companyProfile,
+      quotation: context.quotation,
       userInstructions: context.userInstructions
     });
     const run = await this.aiGeneration.createRun({
@@ -58,7 +59,9 @@ export class EmailDraftCreationService {
         emailAccountId: account.id,
         aiGenerationRunId: run.id,
         purpose: context.purpose,
-        subject: dto.subject ?? buildSubject(context.customer.name),
+        subject: dto.subject ?? (context.quotation
+          ? `Quotation ${context.quotation.selectedQuote.quoteNo} for ${context.customer.name}`
+          : buildSubject(context.customer.name)),
         body: "",
         toEmail,
         toNameSnapshot: selectedContact?.name,
@@ -66,6 +69,10 @@ export class EmailDraftCreationService {
         fromNameSnapshot: account.name,
         ccEmails: dto.ccEmails ?? [],
         bccEmails: dto.bccEmails ?? [],
+        quoteId: context.quotation?.selectedQuote.id,
+        quoteSnapshot: context.quotation?.selectedQuote as never,
+        quoteUpdatedAtSnapshot: context.quotation ? new Date(context.quotation.quoteUpdatedAt) : undefined,
+        historicalQuoteIds: context.quotation?.historicalQuoteIds ?? [],
         status: EmailDraftStatus.Draft as never,
         createdById: user.id
       }

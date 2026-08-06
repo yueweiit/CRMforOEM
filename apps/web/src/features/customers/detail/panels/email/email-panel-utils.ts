@@ -1,7 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 
-export function cleanPayload(input: Record<string, string | undefined>) {
-  return Object.fromEntries(Object.entries(input).filter(([, value]) => value));
+export function cleanPayload(input: Record<string, string | boolean | undefined>) {
+  return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== "" && value !== undefined));
 }
 
 export function invalidateEmailData(queryClient: QueryClient, customerId: string, onChanged: () => void) {

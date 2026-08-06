@@ -149,11 +149,22 @@ export type OemScore = {
 export type OemScoreHistoryItem = Pick<OemScore, "id" | "score" | "grade" | "createdAt"> & Partial<OemScore>;
 export type AiRun = { id?: string; status?: string; versions?: Array<{ id: string; versionType: string; content: string; createdAt: string; editReason?: string }> };
 export type FollowUpTask = { id: string; title: string; status: string; dueAt: string; type: string };
-export type EmailDraft = { id: string; purpose?: string; subject: string; body: string; toEmail: string; toNameSnapshot?: string; fromEmailSnapshot?: string; fromNameSnapshot?: string; status: string; emailAccountId?: string; emailAccount?: EmailAccount; customer?: { id?: string; name: string }; aiGenerationRun?: AiRun; updatedAt: string };
+export type EmailDraft = { id: string; quoteId?: string; quoteSnapshot?: { quoteNo?: string; productName?: string; currency?: string; amount?: string }; purpose?: string; subject: string; body: string; toEmail: string; toNameSnapshot?: string; fromEmailSnapshot?: string; fromNameSnapshot?: string; status: string; emailAccountId?: string; emailAccount?: EmailAccount; customer?: { id?: string; name: string }; aiGenerationRun?: AiRun; updatedAt: string };
 export type EmailDraftListItem = Omit<EmailDraft, "body"> & { body?: never };
 export type EmailDraftPage = { items: EmailDraftListItem[]; nextCursor?: string | null };
 export type EmailThread = { id: string; subject: string; lastMessageAt?: string; messages?: Array<{ subject: string; direction: string; status: string; createdAt: string }> };
 export type EmailAccount = { id: string; name: string; email: string; scope?: string };
+export type QuoteReplyAssessment = {
+  id: string;
+  intent: "ACCEPT" | "REJECT" | "NEGOTIATE" | "QUESTION" | "UNCERTAIN";
+  confidence: number;
+  evidence: string;
+  reason: string;
+  status: string;
+  createdAt: string;
+  quote: { id: string; quoteNo: string; productName: string; currency: string; amount: string; status: string; customerId: string };
+  inboundEmailMessage: { id: string; fromEmail: string; subject: string; receivedAt?: string; bodyText?: string };
+};
 export type Quote = {
   id: string;
   quoteNo: string;

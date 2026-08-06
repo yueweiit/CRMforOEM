@@ -1,5 +1,6 @@
 export const SSE_EVENTS = {
   INBOUND_MAIL_RECEIVED: "inbound-mail.received",
+  QUOTE_REPLY_ASSESSED: "quote-reply.assessed",
   FOLLOW_UP_TASK_CREATED: "follow-up.task.created",
   FOLLOW_UP_TASK_COMPLETED: "follow-up.task.completed",
   FOLLOW_UP_TASK_CANCELLED: "follow-up.task.cancelled"
@@ -22,4 +23,16 @@ export interface FollowUpTaskChangedPayload {
   customerId: string;
   type: string;
   overdueCount: number;
+}
+
+export interface QuoteReplyAssessedPayload {
+  orgId: string;
+  targetUserIds: string[];
+  assessmentId: string;
+  quoteId: string;
+  customerId: string;
+  customerName: string;
+  quoteNo: string;
+  intent: "ACCEPT" | "REJECT";
+  confidence: number;
 }
