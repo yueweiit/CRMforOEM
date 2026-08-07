@@ -10,6 +10,8 @@ import { AddIconButton } from "../../../../components/AddIconButton";
 import { DeleteIconButton } from "../../../../components/DeleteIconButton";
 import { EditIconButton } from "../../../../components/EditIconButton";
 import { Field } from "../../../../components/ui/Field";
+import { customerSourceLabel } from "../../../../i18n/customer-sources";
+import { customerTypeLabel } from "../../../../i18n/customer-types";
 import { useI18n } from "../../../../i18n";
 import { splitList } from "../../../../shared/utils/string";
 import type { CustomerOptions } from "../../../../shared/types/customer";
@@ -246,7 +248,7 @@ export function OverviewPanel({ customer, customerId, onChanged }: { customer: C
                 onChange={(sourceId) => setEditForm({ ...editForm, sourceId })}
                 options={[
                   { value: "", label: t("common.notSelected") },
-                  ...(options?.sources.map((item) => ({ value: item.id, label: item.name })) ?? [])
+                  ...(options?.sources.map((item) => ({ value: item.id, label: customerSourceLabel(item.name, t) })) ?? [])
                 ]}
               />
             </label>
@@ -257,7 +259,7 @@ export function OverviewPanel({ customer, customerId, onChanged }: { customer: C
                 onChange={(typeId) => setEditForm({ ...editForm, typeId })}
                 options={[
                   { value: "", label: t("common.notSelected") },
-                  ...(options?.types.map((item) => ({ value: item.id, label: item.name })) ?? [])
+                  ...(options?.types.map((item) => ({ value: item.id, label: customerTypeLabel(item.name, t) })) ?? [])
                 ]}
               />
             </label>

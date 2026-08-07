@@ -143,7 +143,7 @@ export function FileUpload(props: FileUploadProps) {
 
       props.onChange(Array.from(new Set(created)));
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "上传失败");
+      setMessage(error instanceof Error ? error.message : t("common.uploadFailed"));
     } finally {
       setBusy(false);
     }
@@ -156,7 +156,7 @@ export function FileUpload(props: FileUploadProps) {
       await apiDelete(`/upload/${id}`);
       props.onChange(props.fileIds.filter((item) => item !== id));
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "删除失败");
+      setMessage(error instanceof Error ? error.message : t("common.deleteFailed"));
     } finally {
       setBusy(false);
     }
@@ -199,7 +199,7 @@ export function FileUpload(props: FileUploadProps) {
       {!props.readOnly ? (
         <div className="file-upload-toolbar">
           <button className="secondary-button file-upload-button" disabled={busy} onClick={() => fileInputRef.current?.click()} type="button">
-            {busy ? "处理中..." : props.multiple ? "上传文件" : "上传文件/图片"}
+            {busy ? t("common.processing") : props.multiple ? t("common.uploadFile") : t("common.uploadFileOrImage")}
           </button>
           <input
             ref={fileInputRef}
@@ -242,7 +242,7 @@ export function FileUpload(props: FileUploadProps) {
           ))}
         </div>
       ) : (
-        <div className="empty-state">暂无已上传文件。</div>
+        <div className="empty-state">{t("common.noUploadedFiles")}</div>
       )}
 
       {preview ? (

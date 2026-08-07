@@ -104,6 +104,57 @@ input {
   font: inherit;
 }
 
+.next-date-picker2.localized-date-picker {
+  display: block;
+  min-width: 0;
+  width: 100% !important;
+}
+
+.localized-date-picker .next-date-picker-trigger,
+.localized-date-picker .next-date-picker2-input,
+.localized-date-picker .next-input {
+  width: 100%;
+}
+
+.localized-date-picker .next-date-picker2-input {
+  height: 38px !important;
+  border: 1px solid #dce3dd;
+  border-radius: 8px;
+  background: #fbfcfa;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+}
+
+.localized-date-picker .next-date-picker2-input:hover {
+  border-color: #c8d4cc;
+  background: white;
+}
+
+.localized-date-picker .next-date-picker2-input.next-date-picker2-input-focus {
+  border-color: #0f766e;
+  background: white;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+}
+
+.localized-date-picker .next-date-picker2-input .next-input {
+  height: 100%;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+}
+
+.localized-date-picker .next-date-picker2-input .next-input input,
+.localized-date-picker .next-date-picker2-input .next-input input:hover,
+.localized-date-picker .next-date-picker2-input .next-input input:focus {
+  width: auto !important;
+  min-height: 0 !important;
+  height: 36px !important;
+  border: 0 !important;
+  border-radius: 0;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 8px !important;
+}
+
 select,
 textarea {
   font: inherit;
@@ -2053,6 +2104,10 @@ td small {
 
 .sample-detail-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.sample-detail-cost-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .sample-detail-card {

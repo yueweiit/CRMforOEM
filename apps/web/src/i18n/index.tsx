@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { DEFAULT_LOCALE, normalizeLocale, type Locale } from "@oem-crm/shared";
 import { LOCALE_OPTIONS, persistLocale, readInitialLocale } from "./locale";
 import { resources, type TranslationKey } from "./resources";
@@ -14,6 +14,10 @@ const I18nContext = createContext<I18nContextValue | null>(null);
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>(() => readInitialLocale());
+
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
 
   const setLocale = useCallback((nextLocale: string) => {
     const normalized = normalizeLocale(nextLocale);

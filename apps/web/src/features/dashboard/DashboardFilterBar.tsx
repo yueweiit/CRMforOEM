@@ -1,5 +1,6 @@
 import { STAGE_LABELS, stageLabel } from "@oem-crm/shared";
 import { AppSelect } from "../../components/AppSelect";
+import { customerTypeLabel } from "../../i18n/customer-types";
 import { useI18n } from "../../i18n";
 
 export type DashboardFilterOptions = {
@@ -45,7 +46,7 @@ export function DashboardFilterBar(props: {
           onChange={(customer_type_id) => props.onChange({ ...props.filters, customer_type_id })}
           options={[
             { value: "", label: t("common.allTypes") },
-            ...(props.options?.customer_types?.map((type) => ({ value: type.id, label: type.name })) ?? [])
+            ...(props.options?.customer_types?.map((type) => ({ value: type.id, label: customerTypeLabel(type.name, t) })) ?? [])
           ]}
         />
       </label>

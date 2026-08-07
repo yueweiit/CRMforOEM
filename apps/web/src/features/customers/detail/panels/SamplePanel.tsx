@@ -554,10 +554,10 @@ function createSampleValidationMessage(form: {
   deliveryDeadline: string;
 }) {
   const quantity = Number(form.sampleQuantity);
-  if (!form.productSummary.trim()) return "请填写样品/产品名称。";
-  if (!form.specification.trim()) return "请填写规格。";
-  if (!form.sampleQuantity.trim() || !Number.isInteger(quantity) || quantity < 1) return "请填写有效的样品数量。";
-  if (!form.samplePurpose.trim()) return "请选择样品用途。";
+  if (!form.productSummary.trim()) return "sampleFields.validationSampleProductRequired";
+  if (!form.specification.trim()) return "sampleFields.validationSpecificationRequired";
+  if (!form.sampleQuantity.trim() || !Number.isInteger(quantity) || quantity < 1) return "sampleFields.validationSampleQuantityRequired";
+  if (!form.samplePurpose.trim()) return "sampleFields.validationSamplePurposeRequired";
   return "";
 }
 
@@ -571,7 +571,7 @@ function createFeeValidationMessage(forms: Array<{
     const amount = Number(form.amount);
     return !form.feeType.trim() || !form.amount.trim() || !Number.isFinite(amount) || amount < 0 || !form.currency.trim();
   })) {
-    return "请把所有样品费用记录填写完整。";
+    return "sampleFields.validationFeeRecordsComplete";
   }
   return "";
 }
@@ -1269,8 +1269,8 @@ export function SamplePanel({ customerId }: { customerId: string }) {
     <section className="panel sample-records-panel">
       <div className="panel-title">
         <div className="quote-panel-title">
-          <h2>样品记录</h2>
-          <span>{data.length} 条</span>
+          <h2>{t("sampleFields.sampleRecordsTitle")}</h2>
+          <span>{t("sampleFields.sampleCount").replace("{count}", String(data.length))}</span>
         </div>
         <button
           className="secondary-button"
@@ -1279,7 +1279,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
           type="button"
         >
           <Download size={14} />
-          {exportAllMutation.isPending ? "导出中..." : "批量导出"}
+          {exportAllMutation.isPending ? t("sampleFields.exporting") : t("sampleFields.batchExport")}
         </button>
       </div>
 
@@ -1435,8 +1435,8 @@ export function SamplePanel({ customerId }: { customerId: string }) {
     <section className="panel sample-create-panel">
       <div className="panel-title">
         <div className="quote-panel-title">
-          <h2>新增样品</h2>
-          <span>填写样品信息、附件与费用</span>
+          <h2>{t("sampleFields.newSampleTitle")}</h2>
+          <span>{t("sampleFields.newSampleDescription")}</span>
         </div>
       </div>
       <div className="analysis-edit-form">
@@ -1461,7 +1461,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
         </label>
         <label>
           <span>{t("sampleFields.deliveryDeadlineOptional")}</span>
-          <input type="date" value={createForm.deliveryDeadline} onChange={(e) => setCreateForm({ ...createForm, deliveryDeadline: e.target.value })} />
+          <LocalizedDateInput value={createForm.deliveryDeadline} onChange={(value) => setCreateForm({ ...createForm, deliveryDeadline: value })} />
         </label>
         <label>
           <span>{t("sampleFields.relatedQuote")}</span>
@@ -1492,7 +1492,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
             {createFeeMessage ? t("sampleFields.feeMissing") : t("sampleFields.feeFilled").replace("{count}", String(createFeeForms.length))}
           </div>
         </div>
-        {visibleCreateMessage ? <div className="error-state wide-field">{visibleCreateMessage}</div> : null}
+        {visibleCreateMessage ? <div className="error-state wide-field">{t(visibleCreateMessage)}</div> : null}
         <div className="wide-field">
           <AddIconButton disabled={create.isPending} label={create.isPending ? t("quoteFields.submitting") : t("sampleFields.addSample")} onClick={handleCreateSample} />
         </div>
@@ -1575,7 +1575,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                   </div>
                   <div className="form-field">
                     <label>{t("sampleFields.incurredAt")}</label>
-                    <input type="date" value={feeItem.incurredAt} onChange={(e) => setCreateFeeForms(createFeeForms.map((item, currentIndex) => currentIndex === index ? { ...item, incurredAt: e.target.value } : item))} />
+                    <LocalizedDateInput value={feeItem.incurredAt} onChange={(value) => setCreateFeeForms(createFeeForms.map((item, currentIndex) => currentIndex === index ? { ...item, incurredAt: value } : item))} />
                   </div>
                 </div>
                 <div className="form-field wide-field sample-fee-card__note">
@@ -1584,7 +1584,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                 </div>
               </div>
             ))}
-            {createFeeMessage ? <div className="error-state">{createFeeMessage}</div> : null}
+            {createFeeMessage ? <div className="error-state">{t(createFeeMessage)}</div> : null}
           </div>
         </div>
       </Dialog>
@@ -1860,7 +1860,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
           </div>
           <div className="form-field">
             <label>{t("sampleFields.deliveryDeadline")}</label>
-            <input type="date" value={editForm.deliveryDeadline} onChange={(e) => setEditForm({ ...editForm, deliveryDeadline: e.target.value })} />
+            <LocalizedDateInput value={editForm.deliveryDeadline} onChange={(value) => setEditForm({ ...editForm, deliveryDeadline: value })} />
           </div>
           <div className="form-field">
             <label>{t("sampleFields.relatedQuote")}</label>
@@ -1989,7 +1989,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                 </div>
                 <div className="form-field sample-status-field">
                   <label>{t("sampleFields.shippedAt")}</label>
-                  <input type="date" value={statusForm.shippedAt} onChange={(e) => setStatusForm({ ...statusForm, shippedAt: e.target.value })} />
+                  <LocalizedDateInput value={statusForm.shippedAt} onChange={(value) => setStatusForm({ ...statusForm, shippedAt: value })} />
                 </div>
               </div>
               <div className="empty-state" style={{ marginTop: 12 }}>
@@ -2005,7 +2005,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                 <input
                   type="date"
                   value={statusForm.deliveredAt}
-                  onChange={(e) => setStatusForm({ ...statusForm, deliveredAt: e.target.value })}
+                  onChange={(value) => setStatusForm({ ...statusForm, deliveredAt: value })}
                 />
               </div>
               <div className="empty-state" style={{ marginTop: 12 }}>
@@ -2039,7 +2039,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                 </div>
                 <div className="form-field">
                   <label>{t("sampleFields.recordDate")}</label>
-                  <input type="date" value={returnForm.recordedAt} onChange={(e) => setReturnForm({ ...returnForm, recordedAt: e.target.value })} />
+                  <LocalizedDateInput value={returnForm.recordedAt} onChange={(value) => setReturnForm({ ...returnForm, recordedAt: value })} />
                 </div>
                 <div className="form-field wide-field">
                   <label>{t("common.notes")}</label>
@@ -2172,7 +2172,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
       <Dialog
         v2
         className="crm-action-dialog sample-dialog"
-        title={feeMode === "edit" ? "编辑费用记录" : "填写费用记录"}
+        title={feeMode === "edit" ? t("sampleFields.editFeeRecordTitle") : t("sampleFields.feeRecordTitle")}
         visible={feeOpen}
         onClose={() => setFeeOpen(false)}
         footer={
@@ -2189,14 +2189,14 @@ export function SamplePanel({ customerId }: { customerId: string }) {
         <div className="analysis-edit-form sample-fee-dialog">
           <div className="sample-fee-dialog__summary">
             <div>
-              <strong>{feeMode === "edit" ? "编辑费用记录" : "填写费用记录"}</strong>
-              <span>{feeSample?.productSummary ? `样品 ${feeSample.productSummary}` : "请补充费用信息"}</span>
+              <strong>{feeMode === "edit" ? t("sampleFields.editFeeRecordTitle") : t("sampleFields.feeRecordTitle")}</strong>
+              <span>{feeSample?.productSummary ? t("sampleFields.feeRecordForSample").replace("{sample}", feeSample.productSummary) : t("sampleFields.feeRecordPrompt")}</span>
             </div>
-            <span>{feeMode === "edit" ? "修改后将同步更新历史" : "支持记录单条费用"}</span>
+            <span>{feeMode === "edit" ? t("sampleFields.feeRecordEditHint") : t("sampleFields.feeRecordCreateHint")}</span>
           </div>
           <div className="analysis-edit-gap sample-fee-card">
             <div className="sample-fee-card__header">
-              <strong>费用信息</strong>
+              <strong>{t("sampleFields.feeInfo")}</strong>
             </div>
             <div className="sample-fee-card__fields">
               <div className="form-field">
@@ -2219,7 +2219,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
               </div>
               <div className="form-field">
                 <label>{t("sampleFields.incurredAt")}</label>
-                <input type="date" value={feeForm.incurredAt} onChange={(e) => setFeeForm({ ...feeForm, incurredAt: e.target.value })} />
+                <LocalizedDateInput value={feeForm.incurredAt} onChange={(value) => setFeeForm({ ...feeForm, incurredAt: value })} />
               </div>
             </div>
             <div className="form-field wide-field sample-fee-card__note">

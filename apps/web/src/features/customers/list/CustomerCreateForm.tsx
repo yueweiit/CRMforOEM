@@ -1,6 +1,8 @@
 import { Link } from "react-router-dom";
 import { AppSelect } from "../../../components/AppSelect";
 import { Field } from "../../../components/ui/Field";
+import { customerSourceLabel } from "../../../i18n/customer-sources";
+import { customerTypeLabel } from "../../../i18n/customer-types";
 import { useI18n } from "../../../i18n";
 import type { CustomerOptions } from "../../../shared/types/customer";
 
@@ -58,7 +60,7 @@ export function CustomerCreateForm({
             onChange={(sourceId) => onFieldChange("sourceId", sourceId)}
             options={[
               { value: "", label: hasSources ? t("common.notSelected") : t("customers.noSource") },
-              ...(options?.sources.map((item) => ({ value: item.id, label: item.name })) ?? [])
+              ...(options?.sources.map((item) => ({ value: item.id, label: customerSourceLabel(item.name, t) })) ?? [])
             ]}
           />
         </label>
@@ -69,7 +71,7 @@ export function CustomerCreateForm({
             onChange={(typeId) => onFieldChange("typeId", typeId)}
             options={[
               { value: "", label: hasTypes ? t("common.notSelected") : t("customers.noType") },
-              ...(options?.types.map((item) => ({ value: item.id, label: item.name })) ?? [])
+              ...(options?.types.map((item) => ({ value: item.id, label: customerTypeLabel(item.name, t) })) ?? [])
             ]}
           />
         </label>
