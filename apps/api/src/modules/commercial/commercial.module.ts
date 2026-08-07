@@ -5,11 +5,12 @@ import { CommercialController } from "./commercial.controller";
 import { CommercialService } from "./commercial.service";
 import { QuoteReferenceService } from "./quote-reference.service";
 import { QuoteWorkflowService } from "./quote-workflow.service";
+import { SampleWorkflowService } from "./sample-workflow.service";
 
 @Module({
   imports: [CustomersModule, FollowUpsModule],
   controllers: [CommercialController],
-  providers: [CommercialService, QuoteReferenceService, QuoteWorkflowService],
+  providers: [CommercialService, QuoteReferenceService, QuoteWorkflowService, SampleWorkflowService],
   exports: [QuoteReferenceService, QuoteWorkflowService]
 })
 export class CommercialModule {}

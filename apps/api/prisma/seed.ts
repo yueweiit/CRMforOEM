@@ -29,6 +29,10 @@ const permissionDefs: Array<[string, string, string, string, string[]]> = [
   ["quotes.send", "Send approved quotes", "quotes", "报价管理", ["quotes.read", "emails.send"]],
   ["quotes.reference.read", "Reference historical quotes", "quotes", "报价管理", ["quotes.read"]],
   ["quotes.resolve_reply", "Resolve customer quote replies", "quotes", "报价管理", ["quotes.read"]],
+  ["samples.read", "View sample requests and rounds", "samples", "样品管理", ["customers.read"]],
+  ["samples.write", "Create and operate sample rounds", "samples", "样品管理", ["samples.read"]],
+  ["samples.approve", "Approve sample rounds", "samples", "样品管理", ["samples.read"]],
+  ["samples.export", "Export sample costs and rounds", "samples", "样品管理", ["samples.read"]],
   // 数据看板
   ["dashboards.personal.view", "View personal workbench", "dashboards", "数据看板", []],
   ["dashboards.view", "View team/management dashboards", "dashboards", "数据看板", ["customers.read"]],
@@ -98,6 +102,7 @@ async function main() {
         "settings.scoring_weights.manage",
         "settings.blacklist.manage",
         "settings.customer_dictionaries.manage",
+        "samples.read", "samples.write", "samples.approve", "samples.export",
         "scoring.generate"
       ]
     },
@@ -120,6 +125,7 @@ async function main() {
         "quotes.send",
         "quotes.reference.read",
         "quotes.resolve_reply",
+        "samples.read", "samples.write", "samples.approve", "samples.export",
         "dashboards.personal.view",
         "dashboards.view",
         "dashboards.personal", "dashboards.team"
@@ -142,6 +148,7 @@ async function main() {
         "quotes.send",
         "quotes.reference.read",
         "quotes.resolve_reply",
+        "samples.read", "samples.write", "samples.export",
         "dashboards.personal.view",
         "dashboards.personal"
       ]
@@ -151,7 +158,8 @@ async function main() {
       permissionCodes: [
         "knowledge.write",
         "customers.read",
-        "settings.customer_dictionaries.manage"
+        "settings.customer_dictionaries.manage",
+        "samples.read", "samples.write"
       ]
     }
   ] as const;

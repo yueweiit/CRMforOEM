@@ -16,61 +16,15 @@ const user: RequestUser = {
 };
 
 function buildService(
-  sampleStatus = "PREPARING",
   quoteState?: { status: string; approvalStatus: string },
   revisionConflict = false
 ) {
   const calls: {
     quoteCreate?: Record<string, unknown>;
-    sampleCreate?: Record<string, unknown>;
-    sampleFeeCreates?: Record<string, unknown>[];
-    sampleFeeDeletes?: Record<string, unknown>[];
-    sampleUpdate?: Record<string, unknown>;
     quoteUpdate?: Record<string, unknown>;
     quoteRevisionGroupCreate?: Record<string, unknown>;
     quoteHistoryCreates?: Record<string, unknown>[];
   } = {};
-
-  const sample = {
-    id: "sample-1",
-    customerId: "customer-1",
-    quoteId: null,
-    quote: null,
-    productSummary: "Test sample",
-    specification: "Spec A",
-    material: "ABS",
-    process: "Injection molding",
-    sampleQuantity: 2,
-    samplePurpose: "CUSTOMER_TEST",
-    deliveryDeadline: new Date("2026-07-10T00:00:00.000Z"),
-    status: sampleStatus,
-    fileAssetIds: ["file-a"],
-    trackingNo: null,
-    carrier: null,
-    shippedAt: null,
-    deliveredAt: null,
-    approvedAt: null,
-    approvalComment: null,
-    returnedAt: null,
-    storedAt: null,
-    voidedAt: null,
-    closedAt: null,
-    feedback: null,
-    fees: [
-      {
-        id: "fee-1",
-        feeType: "SAMPLE_MAKING",
-        amount: "88.00",
-        currency: "USD",
-        note: "旧备注",
-        incurredAt: new Date("2026-07-07T00:00:00.000Z"),
-        createdAt: new Date("2026-07-07T00:00:00.000Z")
-      }
-    ],
-    returnRecords: [],
-    createdAt: new Date("2026-07-06T00:00:00.000Z"),
-    updatedAt: new Date("2026-07-06T00:00:00.000Z")
-  };
 
   const quoteBase = quoteState
     ? {
@@ -228,105 +182,6 @@ function buildService(
         };
       }
     },
-    sampleRequest: {
-      create: async ({ data }: { data: Record<string, unknown> }) => {
-        calls.sampleCreate = data;
-        return {
-          id: "sample-created",
-          customerId: "customer-1",
-          quoteId: data.quoteId ?? null,
-          productSummary: data.productSummary,
-          specification: data.specification,
-          material: data.material,
-          process: data.process,
-          sampleQuantity: data.sampleQuantity,
-          samplePurpose: data.samplePurpose,
-          deliveryDeadline: data.deliveryDeadline,
-          status: data.status,
-          fileAssetIds: data.fileAssetIds ?? [],
-          trackingNo: data.trackingNo ?? null,
-          carrier: data.carrier ?? null,
-          shippedAt: null,
-          deliveredAt: null,
-          approvedAt: null,
-          approvalComment: null,
-          returnedAt: null,
-          storedAt: null,
-          voidedAt: null,
-          closedAt: null,
-          feedback: null,
-          createdAt: new Date("2026-07-06T00:00:00.000Z"),
-          updatedAt: new Date("2026-07-06T00:00:00.000Z")
-        };
-      },
-      update: async ({ data }: { data: Record<string, unknown> }) => {
-        calls.sampleUpdate = data;
-        return {
-          ...sample,
-          ...data,
-          fileAssetIds: data.fileAssetIds ?? sample.fileAssetIds,
-          trackingNo: data.trackingNo ?? sample.trackingNo,
-          carrier: data.carrier ?? sample.carrier,
-          approvalComment: data.approvalComment ?? sample.approvalComment,
-          status: data.status ?? sample.status,
-          updatedAt: new Date("2026-07-06T01:00:00.000Z")
-        };
-      }
-    },
-    sampleFee: {
-      create: async ({ data }: { data: Record<string, unknown> }) => {
-        calls.sampleFeeCreates = calls.sampleFeeCreates ?? [];
-        calls.sampleFeeCreates.push(data);
-        return {
-          id: "fee-1",
-          sampleRequestId: "sample-created",
-          feeType: data.feeType,
-          amount: data.amount,
-          currency: data.currency,
-          note: data.note ?? null,
-          incurredAt: data.incurredAt,
-          createdById: data.createdById ?? null,
-          createdAt: new Date("2026-07-06T00:00:00.000Z")
-        };
-      },
-      findFirst: async ({ where }: { where: Record<string, unknown> }) => {
-        if (where.id === "fee-1") {
-          return sample.fees[0];
-        }
-        return null;
-      },
-      update: async ({ data }: { data: Record<string, unknown> }) => {
-        return {
-          id: "fee-1",
-          sampleRequestId: "sample-1",
-          feeType: data.feeType ?? "SAMPLE_MAKING",
-          amount: data.amount ?? "88.00",
-          currency: data.currency ?? "USD",
-          note: data.note ?? "旧备注",
-          incurredAt: data.incurredAt ?? new Date("2026-07-07T00:00:00.000Z"),
-          createdById: "user-1",
-          createdAt: new Date("2026-07-07T00:00:00.000Z")
-        };
-      },
-      delete: async ({ where }: { where: Record<string, unknown> }) => {
-        calls.sampleFeeDeletes = calls.sampleFeeDeletes ?? [];
-        calls.sampleFeeDeletes.push(where);
-        return {
-          id: "fee-1",
-          sampleRequestId: "sample-1",
-          feeType: "SAMPLE_MAKING",
-          amount: "88.00",
-          currency: "USD",
-          note: "旧备注",
-          incurredAt: new Date("2026-07-07T00:00:00.000Z"),
-          createdById: "user-1",
-          createdAt: new Date("2026-07-07T00:00:00.000Z")
-        };
-      }
-    },
-    sampleHistory: {
-      create: async () => ({ id: "history-1" })
-    },
     quoteHistory: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
         calls.quoteHistoryCreates = calls.quoteHistoryCreates ?? [];
@@ -355,17 +210,6 @@ function buildService(
     },
     user: {
       findUnique: async () => ({ name: "Tester", email: "tester@example.com" })
-    },
-    sampleRequest: {
-      findFirst: async () => sample
-    },
-    sampleFee: {
-      findFirst: async ({ where }: { where: Record<string, unknown> }) => {
-        if (where.id === "fee-1") {
-          return sample.fees[0];
-        }
-        return null;
-      }
     },
     $transaction: async <T>(callback: (trx: typeof tx) => Promise<T>) => callback(tx)
   };
@@ -630,7 +474,7 @@ async function main() {
   }
 
   {
-    const { service } = buildService("PREPARING", { status: "DRAFT", approvalStatus: "DRAFT" });
+    const { service } = buildService({ status: "DRAFT", approvalStatus: "DRAFT" });
 
     await assert.rejects(
       () => service.updateQuote(user, "quote-1", { discountAmount: 200 }),
@@ -662,7 +506,7 @@ async function main() {
   }
 
   {
-    const { service } = buildService("PREPARING", { status: "DRAFT", approvalStatus: "DRAFT" });
+    const { service } = buildService({ status: "DRAFT", approvalStatus: "DRAFT" });
 
     await assert.rejects(
       () => service.updateQuote(user, "quote-1", { processingCost: -50 }),
@@ -693,207 +537,58 @@ async function main() {
   }
 
   {
-    const { service, calls } = buildService();
-
-    await service.createSample(user, {
-      customerId: "customer-1",
-      productSummary: "New sample",
-      specification: "Spec B",
-      material: "PP",
-      process: "3D printing",
-      sampleQuantity: 3,
-      samplePurpose: "EXHIBITION",
-      deliveryDeadline: "2026-07-20",
-      fileAssetIds: ["file-1", "file-2"],
-      initialFees: [
-        {
-          feeType: "SAMPLE_MAKING",
-          amount: 88,
-          currency: "USD"
-        },
-        {
-          feeType: "COURIER",
-          amount: 12,
-          currency: "USD",
-          note: "首单快递"
-        }
-      ]
-    });
-
-    assert.equal(calls.sampleCreate?.status, "APPROVING");
-    assert.deepEqual(calls.sampleCreate?.fileAssetIds, ["file-1", "file-2"]);
-    assert.equal(calls.sampleFeeCreates?.length, 2);
-    assert.equal(calls.sampleFeeCreates?.[0]?.feeType, "SAMPLE_MAKING");
-    assert.equal(calls.sampleFeeCreates?.[1]?.feeType, "COURIER");
-  }
-
-  {
-    const { service, calls } = buildService();
-
-    await service.createSample(user, {
-      customerId: "customer-1",
-      productSummary: "No fee sample",
-      specification: "Spec D",
-      material: "ABS",
-      process: "Molding",
-      sampleQuantity: 2,
-      samplePurpose: "APPEARANCE_CONFIRMATION",
-      fileAssetIds: [],
-      initialFees: []
-    });
-
-    assert.equal(calls.sampleCreate?.status, "APPROVING");
-    assert.equal(calls.sampleFeeCreates?.length ?? 0, 0);
-  }
-
-  {
-    const { service, calls } = buildService();
-
-    await service.createSample(user, {
-      customerId: "customer-1",
-      productSummary: "No deadline sample",
-      specification: "Spec C",
-      material: "ABS",
-      process: "Molding",
-      sampleQuantity: 1,
-      samplePurpose: "CUSTOMER_TEST",
-      fileAssetIds: [],
-      initialFees: [
-        {
-          feeType: "SAMPLE_MAKING",
-          amount: 15,
-          currency: "USD"
-        }
-      ]
-    });
-
-    assert.equal(calls.sampleCreate?.deliveryDeadline, undefined);
-  }
-
-  {
-    const { service } = buildService();
-
-    await assert.rejects(
-      () =>
-        service.updateSample(user, "sample-1", {
-          status: "SHIPPED",
-          carrier: "",
-          trackingNo: ""
-        }),
-      BadRequestException
-    );
-  }
-
-  {
-    const { service, calls } = buildService("APPROVING");
-
-    await service.updateSample(user, "sample-1", {
-      status: "PREPARING",
-      comment: "样品审核通过"
-    });
-
-    assert.equal(calls.sampleUpdate?.status, "PREPARING");
-    assert.equal(calls.sampleUpdate?.approvalComment, "样品审核通过");
-  }
-
-  {
-    const { service, calls } = buildService("APPROVING");
-
-    await service.updateSample(user, "sample-1", {
-      status: "REJECTED",
-      comment: "资料还不完整"
-    });
-
-    assert.equal(calls.sampleUpdate?.status, "REJECTED");
-    assert.equal(calls.sampleUpdate?.approvalComment, "资料还不完整");
-  }
-
-  {
-    const { service, calls } = buildService("APPROVING");
-
-    await service.updateSample(user, "sample-1", {
-      status: "PREPARING",
-      comment: ""
-    });
-
-    assert.equal(calls.sampleUpdate?.approvalComment, null);
-  }
-
-  {
-    const { service } = buildService();
-
-    const updatedFee = await service.updateSampleFee(user, "sample-1", "fee-1", {
-      feeType: "COURIER",
-      amount: 18,
-      currency: "USD",
-      note: "补充快递费"
-    });
-
-    assert.equal(updatedFee.feeType, "COURIER");
-  }
-
-  {
-    const { service, calls } = buildService();
-
-    const deletedFee = await service.deleteSampleFee(user, "sample-1", "fee-1");
-
-    assert.equal(deletedFee.id, "fee-1");
-    assert.equal(calls.sampleFeeDeletes?.length, 1);
-  }
-
-  {
-    const { service, calls } = buildService("PREPARING", { status: "DRAFT", approvalStatus: "DRAFT" });
+    const { service, calls } = buildService({ status: "DRAFT", approvalStatus: "DRAFT" });
     await service.submitQuoteReview(user, "quote-1", {});
     assert.equal(calls.quoteUpdate?.approvalStatus, "PENDING_APPROVAL");
   }
 
   {
-    const { service, calls } = buildService("PREPARING", { status: "DRAFT", approvalStatus: "DRAFT" });
+    const { service, calls } = buildService({ status: "DRAFT", approvalStatus: "DRAFT" });
     await service.submitQuoteReview(user, "quote-1", { comment: "" });
     assert.equal(calls.quoteUpdate?.approvalComment, null);
   }
 
   {
-    const { service, calls } = buildService("PREPARING", { status: "DRAFT", approvalStatus: "PENDING_APPROVAL" });
+    const { service, calls } = buildService({ status: "DRAFT", approvalStatus: "PENDING_APPROVAL" });
     await service.approveQuote(user, "quote-1", { comment: "审批通过，建议继续发送" });
     assert.equal(calls.quoteUpdate?.approvalStatus, "APPROVED");
     assert.equal(calls.quoteUpdate?.approvalComment, "审批通过，建议继续发送");
   }
 
   {
-    const { service, calls } = buildService("PREPARING", { status: "DRAFT", approvalStatus: "PENDING_APPROVAL" });
+    const { service, calls } = buildService({ status: "DRAFT", approvalStatus: "PENDING_APPROVAL" });
     await service.rejectQuote(user, "quote-1", { comment: "报价参数需要调整" });
     assert.equal(calls.quoteUpdate?.approvalStatus, "REJECTED");
     assert.equal(calls.quoteUpdate?.approvalComment, "报价参数需要调整");
   }
 
   {
-    const { service, calls } = buildService("PREPARING", { status: "DRAFT", approvalStatus: "APPROVED" });
+    const { service, calls } = buildService({ status: "DRAFT", approvalStatus: "APPROVED" });
     await service.sendQuote(user, "quote-1", {});
     assert.equal(calls.quoteUpdate?.status, "SENT");
   }
 
   {
-    const { service, calls } = buildService("PREPARING", { status: "SENT", approvalStatus: "APPROVED" });
+    const { service, calls } = buildService({ status: "SENT", approvalStatus: "APPROVED" });
     await service.acceptQuote(user, "quote-1", {});
     assert.equal(calls.quoteUpdate?.status, "ACCEPTED");
   }
 
   {
-    const { service, calls } = buildService("PREPARING", { status: "SENT", approvalStatus: "APPROVED" });
+    const { service, calls } = buildService({ status: "SENT", approvalStatus: "APPROVED" });
     const updated = await service.rejectQuoteByCustomer(user, "quote-1", {});
     assert.equal(calls.quoteUpdate?.status, "CUSTOMER_REJECTED");
     assert.equal(updated.approvalStatus, "APPROVED");
   }
 
   {
-    const { service, calls } = buildService("PREPARING", { status: "SENT", approvalStatus: "APPROVED" });
+    const { service, calls } = buildService({ status: "SENT", approvalStatus: "APPROVED" });
     await service.expireQuote(user, "quote-1", {});
     assert.equal(calls.quoteUpdate?.status, "EXPIRED");
   }
 
   {
-    const { service, calls } = buildService("PREPARING", { status: "CUSTOMER_REJECTED", approvalStatus: "APPROVED" });
+    const { service, calls } = buildService({ status: "CUSTOMER_REJECTED", approvalStatus: "APPROVED" });
     await assert.rejects(
       () => service.updateQuote(user, "quote-1", { notes: "revised" }),
       /immutable; create a revision/
@@ -902,7 +597,7 @@ async function main() {
   }
 
   {
-    const { service, calls } = buildService("PREPARING", { status: "CUSTOMER_REJECTED", approvalStatus: "APPROVED" });
+    const { service, calls } = buildService({ status: "CUSTOMER_REJECTED", approvalStatus: "APPROVED" });
     const revised = await service.createQuoteRevision(user, "quote-1", { reason: "客户要求调整价格" });
 
     assert.equal(revised.quoteNo, "Q-1-R02");
@@ -920,7 +615,7 @@ async function main() {
   }
 
   {
-    const { service } = buildService("PREPARING", { status: "SENT", approvalStatus: "APPROVED" });
+    const { service } = buildService({ status: "SENT", approvalStatus: "APPROVED" });
     await assert.rejects(
       () => service.createQuoteRevision(user, "quote-1", { reason: "提前修订" }),
       /Only customer-rejected quotes/
@@ -929,7 +624,6 @@ async function main() {
 
   {
     const { service } = buildService(
-      "PREPARING",
       { status: "CUSTOMER_REJECTED", approvalStatus: "APPROVED" },
       true
     );
@@ -944,7 +638,7 @@ async function main() {
   }
 
   {
-    const { service } = buildService("PREPARING", { status: "DRAFT", approvalStatus: "APPROVED" });
+    const { service } = buildService({ status: "DRAFT", approvalStatus: "APPROVED" });
     await assert.rejects(
       () => service.updateQuote(user, "quote-1", { status: "SENT" }),
       /dedicated command/
@@ -952,7 +646,7 @@ async function main() {
   }
 
   {
-    const { service } = buildService("PREPARING", { status: "DRAFT", approvalStatus: "APPROVED" });
+    const { service } = buildService({ status: "DRAFT", approvalStatus: "APPROVED" });
     await assert.rejects(
       () => service.updateQuote(user, "quote-1", { status: "CUSTOMER_REJECTED" }),
       /dedicated command/

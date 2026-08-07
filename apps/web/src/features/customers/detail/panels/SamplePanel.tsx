@@ -3,12 +3,13 @@ import { createPortal } from "react-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog } from "@alifd/next";
 import "@alifd/next/lib/dialog/style.js";
-import { CheckCircle2, ChevronDown, Download, History, MoreHorizontal, Send, XCircle } from "lucide-react";
+import { CheckCircle2, ChevronDown, CopyPlus, Download, History, MoreHorizontal, Send, XCircle } from "lucide-react";
 import "./analysis-edit.css";
 import { quoteFlowStatusLabel } from "@oem-crm/shared";
 import { showClientToast } from "../../../../components/Toast";
 import {
   createSample,
+  createSampleResampleDraft,
   exportSamples,
   deleteSample,
   deleteSampleFee,
@@ -17,7 +18,14 @@ import {
   getQuotes,
   getSamples,
   recordSampleFee,
-  recordSampleReturn,
+  submitSampleApproval,
+  approveSampleRound,
+  rejectSampleRound,
+  retainSampleRound,
+  shipSampleRound,
+  deliverSampleRound,
+  recordSampleFeedback,
+  recordSampleDisposition,
   updateSampleFee,
   updateSample
 } from "../../../../api/customers";
@@ -26,6 +34,7 @@ import { DeleteIconButton } from "../../../../components/DeleteIconButton";
 import { EditIconButton } from "../../../../components/EditIconButton";
 import { FileUpload } from "../../../../components/FileUpload";
 import { AppSelect } from "../../../../components/AppSelect";
+import { LocalizedDateInput } from "../../../../components/LocalizedDateInput";
 import { Field } from "../../../../components/ui/Field";
 import { useI18n } from "../../../../i18n";
 import type { TranslationKey } from "../../../../i18n/resources";
@@ -43,18 +52,33 @@ function downloadBlob(blob: Blob, fileName: string) {
   URL.revokeObjectURL(url);
 }
 
-const RETURN_TYPES = [
-  { value: "RETURNED", label: "已归还" },
-  { value: "STORED", label: "已留样" }
+const COST_NATURES = [
+  { value: "ACTUAL_COST", label: "实际成本", labelKey: "sampleFields.actualCost" },
+  { value: "CUSTOMER_CHARGE", label: "客户收费", labelKey: "sampleFields.customerCharge" }
+] as const;
+
+const FEE_RESPONSIBILITIES = [
+  { value: "FACTORY", label: "企业承担", labelKey: "sampleFields.factoryResponsibility" },
+  { value: "CUSTOMER", label: "客户承担", labelKey: "sampleFields.customerResponsibility" },
+  { value: "SUPPLIER", label: "供应商承担", labelKey: "sampleFields.supplierResponsibility" },
+  { value: "NEGOTIATED", label: "协商承担", labelKey: "sampleFields.negotiatedResponsibility" }
+] as const;
+
+const PAYMENT_STATUSES = [
+  { value: "NOT_APPLICABLE", label: "不适用", labelKey: "sampleFields.notApplicable" },
+  { value: "PENDING", label: "待收款", labelKey: "sampleFields.paymentPending" },
+  { value: "RECEIVED", label: "已收款", labelKey: "sampleFields.paymentReceived" },
+  { value: "WAIVED", label: "已免收", labelKey: "sampleFields.paymentWaived" },
+  { value: "REFUNDED", label: "已退款", labelKey: "sampleFields.paymentRefunded" }
 ] as const;
 
 const FEE_TYPES = [
-  { value: "SAMPLE_MAKING", label: "打样费" },
-  { value: "MOLD", label: "模具费" },
-  { value: "COURIER", label: "快递费" },
-  { value: "PACKAGING", label: "包装费" },
-  { value: "RETURN", label: "返还费" },
-  { value: "OTHER", label: "其他费用" }
+  { value: "SAMPLE_MAKING", label: "打样费", labelKey: "sampleFields.sampleMakingFee" },
+  { value: "MOLD", label: "模具费", labelKey: "sampleFields.moldFee" },
+  { value: "COURIER", label: "快递费", labelKey: "sampleFields.courierFee" },
+  { value: "PACKAGING", label: "包装费", labelKey: "sampleFields.packagingFee" },
+  { value: "RETURN", label: "返还费", labelKey: "sampleFields.returnFee" },
+  { value: "OTHER", label: "其他费用", labelKey: "sampleFields.otherFee" }
 ] as const;
 
 const SAMPLE_PURPOSES = [
@@ -64,39 +88,61 @@ const SAMPLE_PURPOSES = [
 ] as const;
 
 const SAMPLE_STATUS_TRANSLATION_KEYS: Record<string, TranslationKey> = {
-  REQUESTED: "sampleStatus.requested",
-  APPROVING: "sampleStatus.approving",
-  REJECTED: "sampleStatus.rejected",
+  DRAFT: "sampleStatus.requested",
+  PENDING_APPROVAL: "sampleStatus.approving",
+  APPROVAL_REJECTED: "sampleStatus.rejected",
   PREPARING: "sampleStatus.preparing",
+  RETAINED: "sampleStatus.stored",
   SHIPPED: "sampleStatus.shipped",
   DELIVERED: "sampleStatus.delivered",
   FEEDBACK_RECEIVED: "sampleStatus.feedbackReceived",
-  RETURNED: "sampleStatus.returned",
-  STORED: "sampleStatus.stored",
-  VOIDED: "sampleStatus.voided",
-  CLOSED: "sampleStatus.closed"
+  VOIDED: "sampleStatus.voided"
 };
 
 function localizedSampleStatusLabel(status: string, t: (key: TranslationKey) => string) {
   const key = SAMPLE_STATUS_TRANSLATION_KEYS[status];
-  return key ? t(key) : status;
+  return key ? t(key) : statusLabel(status);
 }
 
 function statusLabel(status: string) {
   const labels: Record<string, string> = {
-    REQUESTED: "待申请",
-    APPROVING: "待审核",
-    REJECTED: "审批驳回",
+    DRAFT: "待申请",
+    PENDING_APPROVAL: "待审核",
+    APPROVAL_REJECTED: "审批驳回",
+    RETAINED: "已留样",
+    COMPLETED: "已关闭",
     PREPARING: "打样中",
     SHIPPED: "已寄出",
     DELIVERED: "已签收",
     FEEDBACK_RECEIVED: "已反馈",
-    RETURNED: "已归还",
-    STORED: "已留样",
     VOIDED: "已作废",
-    CLOSED: "已关闭"
+    PASSED: "已通过",
+    TERMINATED: "已终止"
   };
   return labels[status] ?? status;
+}
+
+function feedbackResultLabel(result?: string | null) {
+  return ({ ACCEPTED: "客户确认通过", RESAMPLE_REQUIRED: "客户要求重打", CUSTOMER_REJECTED: "客户终止" } as Record<string, string>)[result ?? ""] ?? result ?? "-";
+}
+
+function dispositionLabel(status?: string | null) {
+  return ({ PENDING: "待处置", RETURNED: "已归还", CUSTOMER_KEPT: "客户保留", DISPOSED: "已报废" } as Record<string, string>)[status ?? ""] ?? status ?? "-";
+}
+
+function sampleTaskOutcome(sample?: Pick<Sample, "currentRoundId" | "terminationReason" | "rounds" | "currentRound"> | null) {
+  const currentRound = sample?.currentRound ?? sample?.rounds?.find((item) => item.id === sample.currentRoundId) ?? sample?.rounds?.[sample.rounds.length - 1] ?? null;
+  if (sample?.terminationReason) return "TERMINATED";
+  if (currentRound?.status === "VOIDED") return "VOIDED";
+  if (currentRound?.feedbackResult === "CUSTOMER_REJECTED") return "TERMINATED";
+  if (currentRound?.feedbackResult === "ACCEPTED") return "PASSED";
+  return "IN_PROGRESS";
+}
+
+function sampleTaskStatus(sample?: Sample | null) {
+  const currentRound = sample?.currentRound ?? sample?.rounds?.find((item) => item.id === sample.currentRoundId) ?? sample?.rounds?.[sample.rounds.length - 1] ?? null;
+  const outcome = sampleTaskOutcome(sample);
+  return outcome === "IN_PROGRESS" ? currentRound?.status ?? "DRAFT" : outcome;
 }
 
 function historyActionLabel(item: SampleHistoryItem) {
@@ -104,17 +150,16 @@ function historyActionLabel(item: SampleHistoryItem) {
     const beforeStatus = typeof item.before?.status === "string" ? item.before.status : "";
     const afterStatus = typeof item.after?.status === "string" ? item.after.status : "";
     const statusLabels: Record<string, string> = {
-      APPROVING: "发起审核",
-      PREPARING: beforeStatus === "APPROVING" ? "审核通过" : "打样中",
-      REJECTED: "审核驳回",
-      REQUESTED: "待申请",
+      DRAFT: "轮次草稿",
+      PENDING_APPROVAL: "提交审批",
+      APPROVAL_REJECTED: "审批驳回",
+      PREPARING: beforeStatus === "PENDING_APPROVAL" ? "审核通过" : "进入打样",
+      RETAINED: "完成我方留样",
       SHIPPED: "已寄出",
       DELIVERED: "已签收",
-      FEEDBACK_RECEIVED: "已反馈",
-      RETURNED: "已归还",
-      STORED: "已留样",
-      VOIDED: "已作废",
-      CLOSED: "已关闭"
+      FEEDBACK_RECEIVED: "记录客户反馈",
+      COMPLETED: "完成本轮",
+      VOIDED: "作废本轮"
     };
     return statusLabels[afterStatus] ?? "状态变更";
   }
@@ -126,39 +171,62 @@ function historyActionLabel(item: SampleHistoryItem) {
     FEE_UPDATED: "费用更新",
     FEE_DELETED: "费用删除",
     QUOTE_LINKED: "关联报价",
+    RETAINED: "我方留样",
+    SHIPPED: "样品寄出",
+    DELIVERED: "客户签收",
+    FEEDBACK_RECORDED: "客户反馈",
+    RESAMPLE_CREATED: "创建重打轮次",
+    CUSTOMER_KEPT: "客户保留",
     RETURNED: "归还",
-    STORED: "留样",
     VOIDED: "作废",
-    CLOSED: "关闭"
   };
   return labels[item.action] ?? item.action;
 }
 
-function feeTypeLabel(type: string) {
-  return FEE_TYPES.find((item) => item.value === type)?.label ?? type;
+function feeTypeLabel(type: string, t?: (key: TranslationKey) => string) {
+  const item = FEE_TYPES.find((candidate) => candidate.value === type);
+  return item ? (t ? t(item.labelKey) : item.label) : type;
+}
+
+function costNatureLabel(value?: string | null, t?: (key: TranslationKey) => string) {
+  const item = COST_NATURES.find((candidate) => candidate.value === value);
+  return item ? (t ? t(item.labelKey) : item.label) : value ?? "-";
+}
+
+function responsibilityLabel(value?: string | null, t?: (key: TranslationKey) => string) {
+  const item = FEE_RESPONSIBILITIES.find((candidate) => candidate.value === value);
+  return item ? (t ? t(item.labelKey) : item.label) : value ?? "-";
+}
+
+function paymentStatusLabel(value?: string | null, t?: (key: TranslationKey) => string) {
+  const item = PAYMENT_STATUSES.find((candidate) => candidate.value === value);
+  return item ? (t ? t(item.labelKey) : item.label) : value ?? "-";
+}
+
+function sampleRoundLabel(sample: Sample | null | undefined, roundId?: string | null) {
+  if (!roundId) return "公共费用";
+  const round = sample?.rounds?.find((item) => item.id === roundId);
+  return round ? `R${round.roundNo}` : "未知轮次";
 }
 
 function samplePurposeLabel(purpose?: string | null) {
   return SAMPLE_PURPOSES.find((item) => item.value === purpose)?.label ?? purpose;
 }
 
-function returnTypeLabel(type: string) {
-  return RETURN_TYPES.find((item) => item.value === type)?.label ?? type;
-}
+function dispositionTypeLabel(type: string) { return dispositionLabel(type); }
 
 function statusCodeLabel(status: string) {
   const labels: Record<string, string> = {
-    REQUESTED: "待申请",
-    APPROVING: "待审核",
-    REJECTED: "审批驳回",
+    DRAFT: "草稿",
+    PENDING_APPROVAL: "待审批",
+    APPROVAL_REJECTED: "审批驳回",
     PREPARING: "打样中",
+    RETAINED: "已完成我方留样",
     SHIPPED: "已寄出",
     DELIVERED: "已签收",
-    FEEDBACK_RECEIVED: "已反馈",
-    RETURNED: "已归还",
-    STORED: "已留样",
-    VOIDED: "已作废",
-    CLOSED: "已关闭"
+    FEEDBACK_RECEIVED: "已记录反馈",
+    COMPLETED: "本轮已完成",
+    VOIDED: "已作废"
   };
   return labels[status] ?? status;
 }
@@ -351,30 +419,29 @@ function formatMoney(amount: number, currency?: string) {
   return `${currency ?? ""} ${amount.toFixed(2)}`.trim();
 }
 
-function sampleFeeTotal(sample: Sample) {
-  return (sample.fees ?? []).reduce((total, fee) => total + Number(fee.amount || 0), 0);
+function sampleCostLabel(sample: Sample) {
+  const summary = sample.costSummary?.byCurrency ?? [];
+  if (summary.length) return summary.map((item) => `${item.currency} ${item.totalActualCost.toFixed(2)}`).join(" / ");
+  const byCurrency = new Map<string, number>();
+  for (const fee of sample.fees ?? []) byCurrency.set(fee.currency, (byCurrency.get(fee.currency) ?? 0) + Number(fee.amount || 0));
+  return [...byCurrency.entries()].map(([currency, amount]) => `${currency} ${amount.toFixed(2)}`).join(" / ") || "-";
 }
 
 function sampleAttachmentCount(sample: Sample) {
   return sample.fileAssetIds?.length ?? 0;
 }
 
-function latestReturnRecord(sample: Sample) {
-  return sample.returnRecords?.[0] ?? null;
-}
-
-const SAMPLE_CORE_STATUS_ORDER = ["REQUESTED", "APPROVING", "PREPARING", "SHIPPED", "DELIVERED"] as const;
-const SAMPLE_AFTER_DELIVERY_STATUSES = ["FEEDBACK_RECEIVED", "RETURNED", "STORED", "CLOSED"];
-const SAMPLE_TERMINAL_STATUSES = ["REJECTED", "FEEDBACK_RECEIVED", "RETURNED", "STORED", "VOIDED", "CLOSED"];
+const SAMPLE_CORE_STATUS_ORDER = ["DRAFT", "PENDING_APPROVAL", "PREPARING", "RETAINED", "SHIPPED", "DELIVERED"] as const;
+const SAMPLE_AFTER_FEEDBACK_STATUSES = ["FEEDBACK_RECEIVED", "COMPLETED"];
 
 function sampleCoreStatusReached(currentStatus: string, targetStatus: (typeof SAMPLE_CORE_STATUS_ORDER)[number]) {
   if (currentStatus === "VOIDED") {
-    return targetStatus === "REQUESTED";
+    return targetStatus === "DRAFT";
   }
-  if (currentStatus === "REJECTED") {
-    return targetStatus === "REQUESTED" || targetStatus === "APPROVING";
+  if (currentStatus === "APPROVAL_REJECTED") {
+    return targetStatus === "DRAFT" || targetStatus === "PENDING_APPROVAL";
   }
-  if (SAMPLE_AFTER_DELIVERY_STATUSES.includes(currentStatus)) {
+  if (SAMPLE_AFTER_FEEDBACK_STATUSES.includes(currentStatus)) {
     return true;
   }
   const currentIndex = SAMPLE_CORE_STATUS_ORDER.indexOf(currentStatus as (typeof SAMPLE_CORE_STATUS_ORDER)[number]);
@@ -384,34 +451,34 @@ function sampleCoreStatusReached(currentStatus: string, targetStatus: (typeof SA
 
 function sampleStatusPillClass(status: string) {
   const toneByStatus: Record<string, string> = {
-    REQUESTED: "status-pill--neutral",
-    APPROVING: "status-pill--warning",
-    REJECTED: "status-pill--danger",
+    DRAFT: "status-pill--neutral",
+    PENDING_APPROVAL: "status-pill--warning",
+    APPROVAL_REJECTED: "status-pill--danger",
     PREPARING: "status-pill--info",
+    RETAINED: "status-pill--success",
     SHIPPED: "status-pill--info",
     DELIVERED: "status-pill--success",
     FEEDBACK_RECEIVED: "status-pill--success",
-    RETURNED: "status-pill--success",
-    STORED: "status-pill--muted",
+    COMPLETED: "status-pill--success",
     VOIDED: "status-pill--danger",
-    CLOSED: "status-pill--muted"
+    PASSED: "status-pill--success",
+    TERMINATED: "status-pill--danger"
   };
   return ["status-pill", "status-pill--detail", toneByStatus[status] ?? "status-pill--neutral"].join(" ");
 }
 
 function allowedTransitions(status: string) {
   const transitions: Record<string, string[]> = {
-    REQUESTED: ["APPROVING", "VOIDED"],
-    APPROVING: ["PREPARING", "VOIDED"],
-    REJECTED: ["APPROVING", "VOIDED"],
-    PREPARING: ["SHIPPED", "VOIDED"],
+    DRAFT: ["PENDING_APPROVAL"],
+    APPROVAL_REJECTED: ["PENDING_APPROVAL"],
+    PENDING_APPROVAL: ["PREPARING", "APPROVAL_REJECTED"],
+    PREPARING: ["RETAINED"],
+    RETAINED: ["SHIPPED"],
     SHIPPED: ["DELIVERED", "VOIDED"],
-    DELIVERED: ["FEEDBACK_RECEIVED", "RETURNED", "STORED", "CLOSED", "VOIDED"],
-    FEEDBACK_RECEIVED: ["RETURNED", "STORED", "CLOSED", "VOIDED"],
-    RETURNED: ["STORED", "CLOSED", "VOIDED"],
-    STORED: ["CLOSED", "VOIDED"],
+    DELIVERED: ["FEEDBACK_RECEIVED"],
+    FEEDBACK_RECEIVED: ["RETURNED", "CUSTOMER_KEPT", "DISPOSED"],
     VOIDED: [],
-    CLOSED: []
+    COMPLETED: []
   };
   return transitions[status] ?? [];
 }
@@ -426,36 +493,27 @@ type SampleStatusAction = {
 };
 
 function sampleStatusActions(status: string): SampleStatusAction[] {
-  if (status === "APPROVING") {
+  if (status === "PENDING_APPROVAL") {
     return [];
   }
-  const nextStatuses = statusDialogTransitions(status).filter(
-    (nextStatus) => status !== "DELIVERED" || ["RETURNED", "STORED"].includes(nextStatus)
-  );
+  const nextStatuses = statusDialogTransitions(status);
   return nextStatuses.map((nextStatus) => {
-    if ((status === "REQUESTED" || status === "REJECTED") && nextStatus === "APPROVING") {
-      return { nextStatus, label: "发起审核" };
-    }
     const labels: Record<string, string> = {
+      PENDING_APPROVAL: "提交审批",
+      RETAINED: "完成留样",
       SHIPPED: "标记已寄出",
       DELIVERED: "确认签收",
+      FEEDBACK_RECEIVED: "记录客户反馈",
       RETURNED: "记录归还",
-      STORED: "记录留样",
-      CLOSED: "关闭样品"
+      CUSTOMER_KEPT: "记录客户保留",
+      DISPOSED: "记录报废"
     };
     return { nextStatus, label: labels[nextStatus] ?? statusLabel(nextStatus) };
   });
 }
 
 function sampleStatusActionLabel(currentStatus: string, nextStatus: string) {
-  if ((currentStatus === "REQUESTED" || currentStatus === "REJECTED") && nextStatus === "APPROVING") {
-    return "发起审核";
-  }
   return sampleStatusActions(currentStatus).find((action) => action.nextStatus === nextStatus)?.label ?? statusLabel(nextStatus);
-}
-
-function usesSampleReturnRecord(currentStatus: string, nextStatus: string): nextStatus is "RETURNED" | "STORED" {
-  return nextStatus === "RETURNED" || (nextStatus === "STORED" && ["DELIVERED", "FEEDBACK_RECEIVED"].includes(currentStatus));
 }
 
 function buildCreatePayload(customerId: string, form: {
@@ -474,6 +532,9 @@ function buildCreatePayload(customerId: string, form: {
   currency: string;
   note: string;
   incurredAt: string;
+  costNature: "ACTUAL_COST" | "CUSTOMER_CHARGE";
+  responsibility: "FACTORY" | "CUSTOMER" | "SUPPLIER" | "NEGOTIATED";
+  paymentStatus: "NOT_APPLICABLE" | "PENDING" | "RECEIVED" | "WAIVED" | "REFUNDED";
 }>) {
   return {
     customerId,
@@ -491,7 +552,10 @@ function buildCreatePayload(customerId: string, form: {
       amount: Number(feeForm.amount),
       currency: feeForm.currency,
       note: feeForm.note || undefined,
-      incurredAt: feeForm.incurredAt || undefined
+      incurredAt: feeForm.incurredAt || undefined,
+      costNature: feeForm.costNature,
+      responsibility: feeForm.responsibility,
+      paymentStatus: feeForm.paymentStatus
     }))
   };
 }
@@ -506,45 +570,21 @@ function buildUpdatePayload(form: {
   deliveryDeadline: string;
   quoteId: string;
   fileAssetIds: string[];
-  carrier: string;
-  trackingNo: string;
-  shippedAt: string;
-  deliveredAt: string;
-  feedback: string;
 }) {
   return {
     productSummary: form.productSummary,
     specification: form.specification,
     material: form.material,
     process: form.process,
-    sampleQuantity: Number(form.sampleQuantity),
+    requestedQuantity: Number(form.sampleQuantity),
     samplePurpose: form.samplePurpose,
     deliveryDeadline: form.deliveryDeadline || undefined,
     quoteId: form.quoteId || undefined,
-    fileAssetIds: form.fileAssetIds,
-    carrier: form.carrier || undefined,
-    trackingNo: form.trackingNo || undefined,
-    shippedAt: form.shippedAt || undefined,
-    deliveredAt: form.deliveredAt || undefined,
-    feedback: form.feedback || undefined
+    fileAssetIds: form.fileAssetIds
   };
 }
 
-function shippingValidationMessage(form: {
-  carrier: string;
-  trackingNo: string;
-  shippedAt: string;
-}, sampleStatus: string) {
-  if (sampleStatus !== "SHIPPED") {
-    return "";
-  }
-  if (!form.carrier.trim() || !form.trackingNo.trim() || !form.shippedAt.trim()) {
-    return "样品寄出时必须填写物流商、运单号和发货日期。";
-  }
-  return "";
-}
-
-function createSampleValidationMessage(form: {
+function createSampleValidationKey(form: {
   productSummary: string;
   specification: string;
   material: string;
@@ -558,22 +598,25 @@ function createSampleValidationMessage(form: {
   if (!form.specification.trim()) return "sampleFields.validationSpecificationRequired";
   if (!form.sampleQuantity.trim() || !Number.isInteger(quantity) || quantity < 1) return "sampleFields.validationSampleQuantityRequired";
   if (!form.samplePurpose.trim()) return "sampleFields.validationSamplePurposeRequired";
-  return "";
+  return null;
 }
 
-function createFeeValidationMessage(forms: Array<{
+function createFeeValidationKey(forms: Array<{
   feeType: string;
   amount: string;
   currency: string;
+  costNature: string;
+  responsibility: string;
+  paymentStatus: string;
 }>) {
-  if (!forms.length) return "";
+  if (!forms.length) return null;
   if (forms.some((form) => {
     const amount = Number(form.amount);
-    return !form.feeType.trim() || !form.amount.trim() || !Number.isFinite(amount) || amount < 0 || !form.currency.trim();
+    return !form.feeType.trim() || !form.amount.trim() || !Number.isFinite(amount) || amount < 0 || !form.currency.trim() || !form.costNature || !form.responsibility || !form.paymentStatus;
   })) {
     return "sampleFields.validationFeeRecordsComplete";
   }
-  return "";
+  return null;
 }
 
 function detailValue(value: string | number | null | undefined) {
@@ -590,13 +633,42 @@ function quoteDetailMoney(quote: Quote | Sample["quote"] | null | undefined, val
   return `${quote.currency ?? ""} ${value}`.trim();
 }
 
-function createEmptySampleFee() {
+type SampleFeeForm = {
+  feeType: string;
+  amount: string;
+  currency: string;
+  note: string;
+  incurredAt: string;
+  sampleRoundId: string;
+  costNature: "ACTUAL_COST" | "CUSTOMER_CHARGE";
+  responsibility: "FACTORY" | "CUSTOMER" | "SUPPLIER" | "NEGOTIATED";
+  paymentStatus: "NOT_APPLICABLE" | "PENDING" | "RECEIVED" | "WAIVED" | "REFUNDED";
+};
+
+type SampleStatusForm = {
+  carrier: string;
+  trackingNo: string;
+  shippedAt: string;
+  deliveredAt: string;
+  producedQuantity: string;
+  retainedQuantity: string;
+  retainedLocation: string;
+  feedback: string;
+  feedbackResult: "ACCEPTED" | "RESAMPLE_REQUIRED" | "CUSTOMER_REJECTED";
+  dispositionStatus: "PENDING" | "RETURNED" | "CUSTOMER_KEPT" | "DISPOSED";
+};
+
+function createEmptySampleFee(sampleRoundId = ""): SampleFeeForm {
   return {
     feeType: "SAMPLE_MAKING",
     amount: "",
     currency: "USD",
     note: "",
-    incurredAt: formatDateInput(new Date())
+    incurredAt: formatDateInput(new Date()),
+    sampleRoundId,
+    costNature: "ACTUAL_COST",
+    responsibility: "FACTORY",
+    paymentStatus: "NOT_APPLICABLE"
   };
 }
 
@@ -624,6 +696,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailMode, setDetailMode] = useState<"sample" | "quote">("sample");
   const [detailSample, setDetailSample] = useState<Sample | null>(null);
+  const [detailRoundId, setDetailRoundId] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
   const [feeOpen, setFeeOpen] = useState(false);
@@ -634,12 +707,18 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   const [editing, setEditing] = useState<Sample | null>(null);
   const [statusSample, setStatusSample] = useState<Sample | null>(null);
   const [statusTarget, setStatusTarget] = useState<string | null>(null);
-  const [statusForm, setStatusForm] = useState({
+  const [statusRoundId, setStatusRoundId] = useState<string | null>(null);
+  const [statusForm, setStatusForm] = useState<SampleStatusForm>({
     carrier: "",
     trackingNo: "",
     shippedAt: formatDateInput(new Date()),
     deliveredAt: "",
-    feedback: ""
+    producedQuantity: "",
+    retainedQuantity: "",
+    retainedLocation: "",
+    feedback: "",
+    feedbackResult: "ACCEPTED",
+    dispositionStatus: "PENDING"
   });
   const [feeSample, setFeeSample] = useState<Sample | null>(null);
   const [feeEditing, setFeeEditing] = useState<{ sampleId: string; feeId: string } | null>(null);
@@ -649,6 +728,10 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   const [approvalMode, setApprovalMode] = useState<"approve" | "reject">("approve");
   const [approvalSample, setApprovalSample] = useState<Sample | null>(null);
   const [approvalComment, setApprovalComment] = useState("");
+  const [resampleDraftOpen, setResampleDraftOpen] = useState(false);
+  const [resampleDraftSource, setResampleDraftSource] = useState<Sample | null>(null);
+  const [resampleDraftReason, setResampleDraftReason] = useState("");
+  const [resampleDraftChangeSummary, setResampleDraftChangeSummary] = useState("");
   const [moreActionsMenu, setMoreActionsMenu] = useState<{ id: string; top: number; right: number } | null>(null);
   const [editForm, setEditForm] = useState({
     productSummary: "",
@@ -659,22 +742,10 @@ export function SamplePanel({ customerId }: { customerId: string }) {
     samplePurpose: "CUSTOMER_TEST",
     deliveryDeadline: "",
     quoteId: "",
-    fileAssetIds: [] as string[],
-    carrier: "",
-    trackingNo: "",
-    shippedAt: "",
-    deliveredAt: "",
-    feedback: ""
+    fileAssetIds: [] as string[]
   });
-  const [feeForm, setFeeForm] = useState({
-    feeType: "SAMPLE_MAKING",
-    amount: "",
-    currency: "USD",
-    note: "",
-    incurredAt: formatDateInput(new Date())
-  });
+  const [feeForm, setFeeForm] = useState<SampleFeeForm>(() => createEmptySampleFee());
   const [returnForm, setReturnForm] = useState({
-    returnType: "RETURNED",
     receiverName: "",
     destination: "",
     note: "",
@@ -722,8 +793,9 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   });
   const currentEditingSample = editing ? data.find((item) => item.id === editing.id) ?? editing : null;
   const currentStatusSample = statusSample ? data.find((item) => item.id === statusSample.id) ?? statusSample : null;
-  const selectedStatusAction = sampleStatusActions(currentStatusSample?.status ?? "")
-    .find((action) => action.nextStatus === statusTarget) ?? null;
+  const currentSampleStatus = sampleTaskStatus(currentStatusSample);
+  const selectedStatusAction = sampleStatusActions(currentSampleStatus)
+    .find((action) => action.nextStatus === statusTarget) ?? (statusTarget ? { nextStatus: statusTarget, label: sampleStatusActionLabel(currentSampleStatus, statusTarget) } : null);
   const statusTransitions = selectedStatusAction ? [selectedStatusAction.nextStatus] : [];
 
   const refreshSamples = () => {
@@ -731,7 +803,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   };
 
   const create = useMutation({
-    mutationFn: () => createSample(buildCreatePayload(customerId, createForm, createFeeForms) as never),
+    mutationFn: () => createSample(buildCreatePayload(customerId, createForm, createFeeForms)),
     onSuccess: () => {
       refreshSamples();
       setCreateForm({
@@ -760,13 +832,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   });
 
   const update = useMutation({
-    mutationFn: () => {
-      const message = shippingValidationMessage(editForm, editing?.status ?? "");
-      if (message) {
-        throw new Error(message);
-      }
-      return updateSample(editing?.id ?? "", buildUpdatePayload(editForm) as never);
-    },
+    mutationFn: () => updateSample(editing?.id ?? "", buildUpdatePayload(editForm)),
     onSuccess: () => {
       refreshSamples();
       setEditOpen(false);
@@ -780,12 +846,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
         samplePurpose: "CUSTOMER_TEST",
         deliveryDeadline: "",
         quoteId: "",
-        fileAssetIds: [],
-        carrier: "",
-        trackingNo: "",
-        shippedAt: "",
-        deliveredAt: "",
-        feedback: ""
+        fileAssetIds: []
       });
       showClientToast({ type: "success", title: "样品已更新", message: "样品信息已保存。" });
     },
@@ -799,21 +860,44 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   });
 
   const statusMutation = useMutation({
-    mutationFn: (payload: { sampleId: string; status: string; carrier?: string; trackingNo?: string; shippedAt?: string; deliveredAt?: string; feedback?: string }) =>
-      updateSample(payload.sampleId, {
-        status: payload.status,
-        ...(payload.carrier !== undefined ? { carrier: payload.carrier } : {}),
-        ...(payload.trackingNo !== undefined ? { trackingNo: payload.trackingNo } : {}),
-        ...(payload.shippedAt !== undefined ? { shippedAt: payload.shippedAt } : {}),
-        ...(payload.deliveredAt !== undefined ? { deliveredAt: payload.deliveredAt } : {}),
-        ...(payload.feedback !== undefined ? { feedback: payload.feedback } : {})
-      }),
+    mutationFn: async (payload: { sampleId: string; roundId?: string; status: string; carrier?: string; trackingNo?: string; shippedAt?: string; deliveredAt?: string }) => {
+      const roundId = payload.roundId ?? payload.sampleId;
+      if (payload.status === "PENDING_APPROVAL") return submitSampleApproval(roundId);
+      if (payload.status === "RETAINED") {
+        const producedQuantity = Number(statusForm.producedQuantity);
+        const retainedQuantity = Number(statusForm.retainedQuantity);
+        if (!Number.isInteger(producedQuantity) || producedQuantity < 1 || !Number.isInteger(retainedQuantity) || retainedQuantity < 1 || retainedQuantity > producedQuantity || !statusForm.retainedLocation.trim()) throw new Error("请填写有效的完成数量、留样数量和留样位置。");
+        return retainSampleRound(roundId, { producedQuantity, retainedQuantity, retainedLocation: statusForm.retainedLocation.trim() });
+      }
+      if (payload.status === "SHIPPED") {
+        const producedQuantity = Number(currentStatusSample?.currentRound?.producedQuantity ?? currentStatusSample?.sampleQuantity ?? 0);
+        const retainedQuantity = Number(currentStatusSample?.currentRound?.retentionRecord?.retainedQuantity ?? 0);
+        const shippedQuantity = producedQuantity - retainedQuantity;
+        if (shippedQuantity < 1) throw new Error("当前轮次没有可寄出的样品数量。");
+        return shipSampleRound(roundId, { carrier: payload.carrier?.trim(), trackingNo: payload.trackingNo?.trim(), shippedQuantity, shippedAt: payload.shippedAt });
+      }
+      if (payload.status === "DELIVERED") return deliverSampleRound(roundId, { deliveredAt: payload.deliveredAt || undefined });
+      if (payload.status === "FEEDBACK_RECEIVED") {
+        if (!statusForm.feedback.trim()) throw new Error("请填写客户反馈。");
+        return recordSampleFeedback(roundId, {
+          feedbackResult: statusForm.feedbackResult,
+          feedback: statusForm.feedback.trim(),
+          dispositionStatus: statusForm.dispositionStatus
+        });
+      }
+      if (payload.status === "RETURNED" || payload.status === "CUSTOMER_KEPT" || payload.status === "DISPOSED") {
+        return recordSampleDisposition(roundId, payload.status, { ...returnForm, recordedAt: returnForm.recordedAt || undefined });
+      }
+      throw new Error(`不支持的样品动作 ${payload.status}`);
+    },
     onSuccess: () => {
       refreshSamples();
       setStatusOpen(false);
       setStatusSample(null);
       setStatusTarget(null);
-      setStatusForm({ carrier: "", trackingNo: "", shippedAt: formatDateInput(new Date()), deliveredAt: "", feedback: "" });
+      setStatusRoundId(null);
+      setStatusForm({ carrier: "", trackingNo: "", shippedAt: formatDateInput(new Date()), deliveredAt: "", producedQuantity: "", retainedQuantity: "", retainedLocation: "", feedback: "", feedbackResult: "ACCEPTED", dispositionStatus: "PENDING" });
+      setReturnForm({ receiverName: "", destination: "", note: "", recordedAt: formatDateInput(new Date()) });
       showClientToast({ type: "success", title: "状态已更新", message: "样品状态已保存。" });
     },
     onError: (error) => {
@@ -825,9 +909,28 @@ export function SamplePanel({ customerId }: { customerId: string }) {
     }
   });
 
+  const createResampleDraft = useMutation({
+    mutationFn: () => createSampleResampleDraft<Sample>(resampleDraftSource?.currentRound?.id ?? "", {
+      reason: resampleDraftReason.trim(),
+      changeSummary: resampleDraftChangeSummary.trim() || undefined
+    }),
+    onSuccess: (created) => {
+      refreshSamples();
+      setResampleDraftOpen(false);
+      setResampleDraftSource(null);
+      setResampleDraftReason("");
+      setResampleDraftChangeSummary("");
+      showClientToast({ type: "success", title: "重打草稿已生成", message: "已复制上一轮数据，可继续编辑后提交审批。" });
+      openEdit(created);
+    },
+    onError: (error) => {
+      showClientToast({ type: "error", title: "生成重打草稿失败", message: error instanceof Error ? error.message : "操作失败" });
+    }
+  });
+
   const approve = useMutation({
     mutationFn: ({ sampleId, comment }: { sampleId: string; comment?: string }) =>
-      updateSample(sampleId, { status: "PREPARING", ...(comment ? { comment } : {}) }),
+      approveSampleRound(approvalSample?.currentRound?.id ?? sampleId, { comment }),
     onSuccess: () => {
       refreshSamples();
       setApprovalOpen(false);
@@ -846,7 +949,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
 
   const reject = useMutation({
     mutationFn: ({ sampleId, comment }: { sampleId: string; comment?: string }) =>
-      updateSample(sampleId, { status: "REJECTED", ...(comment ? { comment } : {}) }),
+      rejectSampleRound(approvalSample?.currentRound?.id ?? sampleId, { comment }),
     onSuccess: () => {
       refreshSamples();
       setApprovalOpen(false);
@@ -877,7 +980,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
       setFeeMode("create");
       setFeeEditing(null);
       setFeeSample(null);
-      setFeeForm({ feeType: "SAMPLE_MAKING", amount: "", currency: "USD", note: "", incurredAt: formatDateInput(new Date()) });
+      setFeeForm(createEmptySampleFee());
       showClientToast({
         type: "success",
         title: feeMode === "edit" ? "费用已更新" : "费用已记录",
@@ -915,36 +1018,6 @@ export function SamplePanel({ customerId }: { customerId: string }) {
     }
   });
 
-  const returnMutation = useMutation({
-    mutationFn: (returnType: "RETURNED" | "STORED") =>
-      recordSampleReturn(currentStatusSample?.id ?? "", {
-        ...returnForm,
-        returnType,
-        recordedAt: returnForm.recordedAt || undefined
-      }),
-    onSuccess: () => {
-      refreshSamples();
-      setReturnForm({
-        returnType: "RETURNED",
-        receiverName: "",
-        destination: "",
-        note: "",
-        recordedAt: formatDateInput(new Date())
-      });
-      setStatusOpen(false);
-      setStatusSample(null);
-      setStatusTarget(null);
-      showClientToast({ type: "success", title: "归还/留样已记录", message: "样品状态已更新。" });
-    },
-    onError: (error) => {
-      showClientToast({
-        type: "error",
-        title: "记录归还失败",
-        message: error instanceof Error ? error.message : "操作失败"
-      });
-    }
-  });
-
   const remove = useMutation({
     mutationFn: () => deleteSample(editing?.id ?? ""),
     onSuccess: () => {
@@ -973,31 +1046,33 @@ export function SamplePanel({ customerId }: { customerId: string }) {
       samplePurpose: item.samplePurpose || "CUSTOMER_TEST",
       deliveryDeadline: item.deliveryDeadline ? formatDateInput(new Date(item.deliveryDeadline)) : "",
       quoteId: item.quoteId ?? "",
-      fileAssetIds: item.fileAssetIds ?? [],
-      carrier: item.carrier ?? "",
-      trackingNo: item.trackingNo ?? "",
-      shippedAt: item.shippedAt ? formatDateInput(new Date(item.shippedAt)) : "",
-      deliveredAt: item.deliveredAt ? formatDateInput(new Date(item.deliveredAt)) : "",
-      feedback: item.feedback ?? ""
+      fileAssetIds: item.fileAssetIds ?? []
     });
     setEditOpen(true);
   };
 
-  const openStatus = (item: Sample, nextStatus: string) => {
+  const openStatus = (item: Sample, nextStatus: string, roundId?: string) => {
     setStatusSample(item);
     setStatusTarget(nextStatus);
-    setStatusForm({
-      carrier: item.carrier ?? "",
-      trackingNo: item.trackingNo ?? "",
-      shippedAt: item.shippedAt ? formatDateInput(new Date(item.shippedAt)) : formatDateInput(new Date()),
-      deliveredAt: item.deliveredAt ? formatDateInput(new Date(item.deliveredAt)) : "",
-      feedback: item.feedback ?? ""
-    });
+    setStatusRoundId(roundId ?? item.currentRound?.id ?? null);
+     setStatusForm({
+       carrier: item.currentRound?.carrier ?? "",
+       trackingNo: item.currentRound?.trackingNo ?? "",
+       shippedAt: item.currentRound?.shippedAt ? formatDateInput(new Date(item.currentRound.shippedAt)) : formatDateInput(new Date()),
+       deliveredAt: item.currentRound?.deliveredAt ? formatDateInput(new Date(item.currentRound.deliveredAt)) : "",
+       producedQuantity: String(item.currentRound?.producedQuantity ?? item.sampleQuantity ?? ""),
+       retainedQuantity: String(item.currentRound?.retentionRecord?.retainedQuantity ?? ""),
+       retainedLocation: item.currentRound?.retentionRecord?.retainedLocation ?? "",
+       feedback: item.currentRound?.feedback ?? "",
+       feedbackResult: (item.currentRound?.feedbackResult as SampleStatusForm["feedbackResult"] | undefined) ?? "ACCEPTED",
+       dispositionStatus: (item.currentRound?.dispositionStatus as SampleStatusForm["dispositionStatus"] | undefined) ?? "PENDING"
+     });
     setStatusOpen(true);
   };
 
   const openSampleDetail = (item: Sample) => {
     setDetailSample(item);
+    setDetailRoundId(item.currentRound?.id ?? item.rounds?.at(-1)?.id ?? null);
     setDetailMode("sample");
     setDetailOpen(true);
   };
@@ -1020,7 +1095,11 @@ export function SamplePanel({ customerId }: { customerId: string }) {
       amount: "",
       currency: item.quote?.currency ?? "USD",
       note: "",
-      incurredAt: formatDateInput(new Date())
+      incurredAt: formatDateInput(new Date()),
+      sampleRoundId: item.currentRound?.id ?? "",
+      costNature: "ACTUAL_COST",
+      responsibility: "FACTORY",
+      paymentStatus: "NOT_APPLICABLE"
     });
     setFeeOpen(true);
   };
@@ -1034,7 +1113,11 @@ export function SamplePanel({ customerId }: { customerId: string }) {
       amount: String(fee.amount ?? ""),
       currency: fee.currency ?? "USD",
       note: fee.note ?? "",
-      incurredAt: fee.incurredAt ? formatDateInput(new Date(fee.incurredAt)) : formatDateInput(new Date())
+      incurredAt: fee.incurredAt ? formatDateInput(new Date(fee.incurredAt)) : formatDateInput(new Date()),
+      sampleRoundId: fee.sampleRoundId ?? "",
+      costNature: fee.costNature === "CUSTOMER_CHARGE" ? "CUSTOMER_CHARGE" : "ACTUAL_COST",
+      responsibility: (["FACTORY", "CUSTOMER", "SUPPLIER", "NEGOTIATED"].includes(fee.responsibility ?? "") ? fee.responsibility : "FACTORY") as SampleFeeForm["responsibility"],
+      paymentStatus: (["NOT_APPLICABLE", "PENDING", "RECEIVED", "WAIVED", "REFUNDED"].includes(fee.paymentStatus ?? "") ? fee.paymentStatus : "NOT_APPLICABLE") as SampleFeeForm["paymentStatus"]
     });
     setFeeOpen(true);
   };
@@ -1057,8 +1140,15 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   const openApproval = (item: Sample, mode: "approve" | "reject") => {
     setApprovalSample(item);
     setApprovalMode(mode);
-    setApprovalComment(item.approvalComment ?? "");
+    setApprovalComment(item.currentRound?.approvalComment ?? "");
     setApprovalOpen(true);
+  };
+
+  const openResampleDraft = (item: Sample) => {
+    setResampleDraftSource(item);
+    setResampleDraftReason(item.currentRound?.feedback ?? "");
+    setResampleDraftChangeSummary("");
+    setResampleDraftOpen(true);
   };
 
   const closeApproval = () => {
@@ -1067,20 +1157,19 @@ export function SamplePanel({ customerId }: { customerId: string }) {
     setApprovalComment("");
   };
 
-  const canEdit = (item: Sample) => item.status !== "VOIDED" && item.status !== "CLOSED";
-  const canDelete = (item: Sample) => item.status !== "VOIDED" && item.status !== "CLOSED";
+  const canEdit = (item: Sample) => Boolean(item.currentRoundId) && ["DRAFT", "APPROVAL_REJECTED"].includes(sampleTaskStatus(item));
+  const canDelete = (item: Sample) => Boolean(item.currentRoundId) && !["SHIPPED", "DELIVERED", "FEEDBACK_RECEIVED", "COMPLETED", "VOIDED", "PASSED", "TERMINATED"].includes(sampleTaskStatus(item));
   const currentHistory = historyQuery.data ?? [];
-  const createMessage = createSampleValidationMessage(createForm);
-  const createFeeMessage = createFeeValidationMessage(createFeeForms);
-  const createReady = createMessage === "" && createFeeMessage === "";
-  const visibleCreateMessage = createValidationRequested ? createMessage || createFeeMessage : "";
-  const shippingMessage = shippingValidationMessage(editForm, editing?.status ?? "");
+  const createMessage = createSampleValidationKey(createForm);
+  const createFeeMessage = createFeeValidationKey(createFeeForms);
+  const createReady = !createMessage && !createFeeMessage;
+  const visibleCreateMessage = createValidationRequested ? createMessage || createFeeMessage : null;
   const approvalDialogTitle = approvalMode === "approve" ? "审核通过" : "审核驳回";
   const approvalDialogConfirmLabel = approvalMode === "approve" ? "通过" : "驳回";
   const approvalDialogDescription =
     approvalMode === "approve" ? "备注可留空；填写后保留审核依据。" : "备注可留空；填写后说明需要补充或修改的内容。";
   const approvalPending = approvalMode === "approve" ? approve.isPending : reject.isPending;
-  const currentStatus = currentStatusSample?.status ?? "";
+  const currentStatus = sampleTaskStatus(currentStatusSample);
   const detailQuote = detailSample?.quoteId ? quoteOptions.find((quote) => quote.id === detailSample.quoteId) ?? null : null;
   const detailQuoteSource = detailQuote ?? detailSample?.quote ?? null;
   const detailQuoteStatus = quoteDisplayStatus(detailQuoteSource);
@@ -1171,52 +1260,59 @@ export function SamplePanel({ customerId }: { customerId: string }) {
     { label: "报价模式", value: detailQuote?.calcMode === "formula" ? "公式报价" : detailQuote ? "直接报价" : "-" },
     { label: "创建时间", value: detailQuote?.createdAt ? new Date(detailQuote.createdAt).toLocaleString() : "-" }
   ];
-  const detailSampleFeeTotal = detailSample ? formatMoney(sampleFeeTotal(detailSample), detailSample.quote?.currency ?? detailSample.fees?.[0]?.currency) : "-";
-  const sampleDetailStatus = detailSample?.status ?? "";
+  const detailSampleFeeTotal = detailSample ? sampleCostLabel(detailSample) : "-";
+  const sampleDetailRound = detailSample?.rounds?.find((round) => round.id === detailRoundId) ?? detailSample?.currentRound ?? null;
+  const sampleDetailStatus = sampleDetailRound?.status ?? "";
   const sampleDetailHistory = detailSampleHistoryQuery.data ?? [];
-  const sampleDetailRejectedAt = sampleHistoryStatusTime(sampleDetailHistory, "REJECTED");
+  const sampleDetailRejectedAt = sampleHistoryStatusTime(sampleDetailHistory, "APPROVAL_REJECTED");
   const sampleDetailHistoryLoadingValue = detailSampleHistoryQuery.isLoading ? "加载中..." : "";
-  const sampleDetailApprovalNote = detailSample?.approvalComment?.trim() ? `审批备注：${detailSample.approvalComment.trim()}` : "";
-  const latestDetailReturnRecord = detailSample ? latestReturnRecord(detailSample) : null;
-  const sampleDetailTerminalStatus = SAMPLE_TERMINAL_STATUSES.includes(sampleDetailStatus) ? sampleDetailStatus : "";
+  const sampleDetailApprovalNote = sampleDetailRound?.approvalComment?.trim() ? `审批备注：${sampleDetailRound.approvalComment.trim()}` : "";
   const sampleDetailSummary = detailSample
     ? [
         `费用 ${detailSampleFeeTotal}`,
-        detailSample.specification ? `规格 ${detailSample.specification}` : "",
-        detailSample.trackingNo ? `运单 ${detailSample.trackingNo}` : "未填运单",
-        detailSample.carrier ? `物流 ${detailSample.carrier}` : "未发货"
+        sampleDetailRound?.specification ? `规格 ${sampleDetailRound.specification}` : "",
+        sampleDetailRound?.trackingNo ? `运单 ${sampleDetailRound.trackingNo}` : "未填运单",
+        sampleDetailRound?.carrier ? `物流 ${sampleDetailRound.carrier}` : "未发货"
       ].filter(Boolean).join(" | ")
     : "";
   const sampleDetailBaseItems = [
+    { label: "当前轮次", value: detailSample?.currentRound ? `R${detailSample.currentRound.roundNo}` : "-", highlight: true },
+    { label: "当前动作", value: detailValue(detailSample?.currentAction) },
+    { label: "上一轮结论", value: detailSample?.previousRound ? `${feedbackResultLabel(detailSample.previousRound.feedbackResult)} · ${dispositionLabel(detailSample.previousRound.dispositionStatus)}` : "-" },
     { label: "关联报价", value: detailValue(detailSample?.quote?.quoteNo ?? detailSample?.quoteId ?? "未关联"), highlight: true },
-    { label: "规格", value: detailValue(detailSample?.specification) },
+    { label: "规格", value: detailValue(sampleDetailRound?.specification) },
     { label: "样品用途", value: detailValue(detailSample ? samplePurposeLabel(detailSample.samplePurpose) : "") },
-    { label: "材质", value: detailValue(detailSample?.material) },
-    { label: "工艺", value: detailValue(detailSample?.process) },
-    { label: "样品数量", value: detailValue(detailSample?.sampleQuantity) },
-    { label: "交付期限", value: detailSample?.deliveryDeadline ? new Date(detailSample.deliveryDeadline).toLocaleDateString() : "-" },
-    { label: "费用合计", value: detailSampleFeeTotal, highlight: true },
-    { label: "附件数量", value: detailValue(detailSample?.fileAssetIds?.length ?? 0) }
+    { label: "材质", value: detailValue(sampleDetailRound?.material) },
+    { label: "工艺", value: detailValue(sampleDetailRound?.process) },
+    { label: "样品数量", value: detailValue(sampleDetailRound?.requestedQuantity) },
+    { label: "交付期限", value: sampleDetailRound?.deliveryDeadline ? new Date(sampleDetailRound.deliveryDeadline).toLocaleDateString() : "-" },
+    { label: "费用合计", value: detailSampleFeeTotal, highlight: true }
   ];
+  const sampleDetailCostItems = (detailSample?.costSummary?.byCurrency ?? []).flatMap((item) => [
+    { label: `${item.currency} 累计实际成本`, value: formatMoney(item.totalActualCost, item.currency), highlight: true },
+    { label: `${item.currency} 客户收费`, value: formatMoney(item.customerCharge, item.currency) },
+    { label: `${item.currency} 已收金额`, value: formatMoney(item.receivedAmount, item.currency) },
+    { label: `${item.currency} 企业承担`, value: formatMoney(item.companyBorneAmount, item.currency) }
+  ]);
   const sampleDetailTimelineItems = [
     {
       label: "申请",
-      value: detailSample?.createdAt ? new Date(detailSample.createdAt).toLocaleString() : "-",
-      done: sampleCoreStatusReached(sampleDetailStatus, "REQUESTED"),
-      current: sampleDetailStatus === "REQUESTED"
+      value: sampleDetailRound?.createdAt ? new Date(sampleDetailRound.createdAt).toLocaleString() : detailSample?.createdAt ? new Date(detailSample.createdAt).toLocaleString() : "-",
+      done: sampleCoreStatusReached(sampleDetailStatus, "DRAFT"),
+      current: sampleDetailStatus === "DRAFT"
     },
     {
-      label: sampleCoreStatusReached(sampleDetailStatus, "PREPARING") ? "已审核" : statusLabel("APPROVING"),
-      value: detailSample?.approvedAt ? new Date(detailSample.approvedAt).toLocaleString() : sampleDetailStatus === "APPROVING" ? "当前状态" : sampleDetailStatus === "REJECTED" ? "已驳回" : "未审核",
-      done: sampleCoreStatusReached(sampleDetailStatus, "APPROVING"),
-      current: sampleDetailStatus === "APPROVING",
+      label: sampleCoreStatusReached(sampleDetailStatus, "PREPARING") ? "已审核" : statusLabel("PENDING_APPROVAL"),
+      value: sampleDetailRound?.approvedAt ? new Date(sampleDetailRound.approvedAt).toLocaleString() : sampleDetailStatus === "PENDING_APPROVAL" ? "当前状态" : sampleDetailStatus === "APPROVAL_REJECTED" ? "已驳回" : "未审核",
+      done: sampleCoreStatusReached(sampleDetailStatus, "PREPARING"),
+      current: sampleDetailStatus === "PENDING_APPROVAL",
       note: sampleCoreStatusReached(sampleDetailStatus, "PREPARING") ? sampleDetailApprovalNote : ""
     },
-    ...(sampleDetailStatus === "REJECTED"
+    ...(sampleDetailStatus === "APPROVAL_REJECTED"
       ? [
           {
-            label: statusLabel("REJECTED"),
-            value: sampleDetailRejectedAt ? new Date(sampleDetailRejectedAt).toLocaleString() : sampleDetailHistoryLoadingValue || statusLabel("REJECTED"),
+            label: statusLabel("APPROVAL_REJECTED"),
+            value: sampleDetailRejectedAt ? new Date(sampleDetailRejectedAt).toLocaleString() : sampleDetailHistoryLoadingValue || statusLabel("APPROVAL_REJECTED"),
             done: true,
             current: true,
             danger: true,
@@ -1231,34 +1327,44 @@ export function SamplePanel({ customerId }: { customerId: string }) {
       current: sampleDetailStatus === "PREPARING"
     },
     {
+      label: "我方留样",
+      value: sampleDetailRound?.retentionRecord ? `${sampleDetailRound.retentionRecord.retainedQuantity} 件 · ${sampleDetailRound.retentionRecord.retainedLocation}` : sampleCoreStatusReached(sampleDetailStatus, "RETAINED") ? "已完成留样" : "未留样",
+      done: sampleCoreStatusReached(sampleDetailStatus, "RETAINED"),
+      current: sampleDetailStatus === "RETAINED"
+    },
+    {
       label: statusLabel("SHIPPED"),
-      value: detailSample?.shippedAt ? new Date(detailSample.shippedAt).toLocaleDateString() : sampleCoreStatusReached(sampleDetailStatus, "SHIPPED") ? "已发货" : "未发货",
+      value: sampleDetailRound?.shippedAt ? new Date(sampleDetailRound.shippedAt).toLocaleDateString() : sampleCoreStatusReached(sampleDetailStatus, "SHIPPED") ? "已发货" : "未发货",
       done: sampleCoreStatusReached(sampleDetailStatus, "SHIPPED"),
       current: sampleDetailStatus === "SHIPPED"
     },
     {
       label: statusLabel("DELIVERED"),
-      value: detailSample?.deliveredAt ? new Date(detailSample.deliveredAt).toLocaleDateString() : sampleCoreStatusReached(sampleDetailStatus, "DELIVERED") ? "已签收" : "未签收",
+      value: sampleDetailRound?.deliveredAt ? new Date(sampleDetailRound.deliveredAt).toLocaleDateString() : sampleCoreStatusReached(sampleDetailStatus, "DELIVERED") ? "已签收" : "未签收",
       done: sampleCoreStatusReached(sampleDetailStatus, "DELIVERED"),
       current: sampleDetailStatus === "DELIVERED"
     },
-    ...(sampleDetailTerminalStatus && sampleDetailTerminalStatus !== "REJECTED"
+    ...(["FEEDBACK_RECEIVED", "COMPLETED"].includes(sampleDetailStatus)
       ? [
           {
-            label: statusLabel(sampleDetailTerminalStatus),
-            value: latestDetailReturnRecord ? new Date(latestDetailReturnRecord.recordedAt).toLocaleDateString() : statusLabel(sampleDetailTerminalStatus),
+            label: "客户反馈结论",
+            value: feedbackResultLabel(sampleDetailRound?.feedbackResult),
             done: true,
             current: true,
-            danger: ["REJECTED", "VOIDED"].includes(sampleDetailTerminalStatus)
+            danger: sampleDetailRound?.feedbackResult === "CUSTOMER_REJECTED",
+            note: sampleDetailRound?.feedback ?? ""
           }
         ]
+      : []),
+    ...(sampleDetailStatus === "VOIDED"
+      ? [{ label: statusLabel("VOIDED"), value: sampleDetailRound?.voidedAt ? new Date(sampleDetailRound.voidedAt).toLocaleString() : "已作废", done: true, current: true, danger: true }]
       : [])
   ];
   const hasDetailQuote = Boolean(detailQuote ?? detailSample?.quote);
 
   const handleCreateSample = () => {
     setCreateValidationRequested(true);
-    if (createMessage || createFeeMessage) {
+    if (!createReady) {
       return;
     }
     create.mutate();
@@ -1284,11 +1390,11 @@ export function SamplePanel({ customerId }: { customerId: string }) {
       </div>
 
       {samplesQuery.isLoading ? (
-        <div className="empty-state">正在加载样品记录...</div>
+        <div className="empty-state">{t("common.loading")}</div>
       ) : samplesQuery.isError ? (
         <div className="error-state">样品记录加载失败，请稍后重试。</div>
       ) : data.length === 0 ? (
-        <div className="empty-state">暂无记录</div>
+        <div className="empty-state">{t("common.noData")}</div>
       ) : (
         <div className="sample-record-table-wrap">
           <table className="sample-record-table">
@@ -1311,8 +1417,13 @@ export function SamplePanel({ customerId }: { customerId: string }) {
             </thead>
             <tbody>
               {data.map((item) => {
-                const feeTotal = sampleFeeTotal(item);
-                const nextActions = sampleStatusActions(item.status);
+                const feeTotal = sampleCostLabel(item);
+                const itemStatus = sampleTaskStatus(item);
+                const nextActions = sampleStatusActions(itemStatus);
+                const canCreateResampleDraft = Boolean(item.currentRoundId)
+                  && item.currentRound?.feedbackResult === "RESAMPLE_REQUIRED"
+                  && itemStatus === "FEEDBACK_RECEIVED"
+                  && !(item.rounds ?? []).some((round) => round.previousRoundId === item.currentRound?.id);
                 return (
                   <tr key={item.id}>
                     <td>
@@ -1325,7 +1436,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                     <td>{item.process || "未填写"}</td>
                     <td>{item.samplePurpose ? samplePurposeLabel(item.samplePurpose) : "未填写"}</td>
                     <td>{item.sampleQuantity ?? "-"}</td>
-                    <td>{feeTotal.toFixed(2)}</td>
+                    <td>{feeTotal}</td>
                     <td>
                       {item.quote ? (
                         <button className="table-link sample-record-link" onClick={() => openQuoteDetail(item)} type="button">
@@ -1333,11 +1444,11 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                         </button>
                       ) : "未关联"}
                     </td>
-                    <td>{item.carrier || "未填写"}</td>
-                    <td>{item.trackingNo || "未填写"}</td>
+                    <td>{item.currentRound?.carrier || "未填写"}</td>
+                    <td>{item.currentRound?.trackingNo || "未填写"}</td>
                     <td>
-                      <span className={sampleStatusPillClass(item.status)}>
-                        {localizedSampleStatusLabel(item.status, t)}
+                      <span className={sampleStatusPillClass(itemStatus)}>
+                        {localizedSampleStatusLabel(itemStatus, t)}
                       </span>
                     </td>
                     <td>{new Date(item.createdAt).toLocaleDateString()}</td>
@@ -1378,7 +1489,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                                 <History size={14} />
                                 <span>历史记录</span>
                               </button>
-                              {item.status === "APPROVING" ? (
+                              {itemStatus === "PENDING_APPROVAL" ? (
                                 <>
                                   <button
                                     onClick={() => {
@@ -1401,6 +1512,18 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                                     <span>审核驳回</span>
                                   </button>
                                 </>
+                              ) : null}
+                              {canCreateResampleDraft ? (
+                                <button
+                                  onClick={() => {
+                                    setMoreActionsMenu(null);
+                                    openResampleDraft(item);
+                                  }}
+                                  type="button"
+                                >
+                                  <CopyPlus size={14} />
+                                  <span>生成重打草稿</span>
+                                </button>
                               ) : null}
                               {nextActions.map((action) => (
                                 <button
@@ -1525,8 +1648,8 @@ export function SamplePanel({ customerId }: { customerId: string }) {
         <div className="analysis-edit-form sample-fee-dialog">
           <div className="sample-fee-dialog__summary">
             <div>
-              <strong>已填写 {createFeeForms.length} 条费用记录</strong>
-              <span>支持逐条添加、删除和修改</span>
+              <strong>{t("sampleFields.feeFilled").replace("{count}", String(createFeeForms.length))}</strong>
+              <span>{t("sampleFields.feeRecordInstructions")}</span>
             </div>
             <button
               className="secondary-button"
@@ -1539,13 +1662,13 @@ export function SamplePanel({ customerId }: { customerId: string }) {
           <div className="analysis-edit-gap-list">
             {!createFeeForms.length ? (
               <div className="empty-state">
-                当前未填写费用记录，直接保存即可。需要费用时再点击“添加费用”。
+                {t("sampleFields.noFeeRecordInstructions")}
               </div>
             ) : null}
             {createFeeForms.map((feeItem, index) => (
               <div className="analysis-edit-gap sample-fee-card" key={`${index}-${feeItem.incurredAt}`}>
                 <div className="sample-fee-card__header">
-                  <strong>费用 {index + 1}</strong>
+                  <strong>{t("sampleFields.feeItem").replace("{index}", String(index + 1))}</strong>
                   <button
                     className="secondary-button"
                     onClick={() => setCreateFeeForms(createFeeForms.filter((_, currentIndex) => currentIndex !== index))}
@@ -1560,7 +1683,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                     <select value={feeItem.feeType} onChange={(e) => setCreateFeeForms(createFeeForms.map((item, currentIndex) => currentIndex === index ? { ...item, feeType: e.target.value } : item))}>
                       {FEE_TYPES.map((item) => (
                         <option key={item.value} value={item.value}>
-                          {item.label}
+                          {t(item.labelKey)}
                         </option>
                       ))}
                     </select>
@@ -1577,6 +1700,24 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                     <label>{t("sampleFields.incurredAt")}</label>
                     <LocalizedDateInput value={feeItem.incurredAt} onChange={(value) => setCreateFeeForms(createFeeForms.map((item, currentIndex) => currentIndex === index ? { ...item, incurredAt: value } : item))} />
                   </div>
+                  <div className="form-field">
+                    <label>{t("sampleFields.costNature")}</label>
+                    <select value={feeItem.costNature} onChange={(e) => setCreateFeeForms(createFeeForms.map((item, currentIndex) => currentIndex === index ? { ...item, costNature: e.target.value as SampleFeeForm["costNature"], paymentStatus: e.target.value === "CUSTOMER_CHARGE" && item.paymentStatus === "NOT_APPLICABLE" ? "PENDING" : item.paymentStatus } : item))}>
+                      {COST_NATURES.map((item) => <option key={item.value} value={item.value}>{t(item.labelKey)}</option>)}
+                    </select>
+                  </div>
+                  <div className="form-field">
+                    <label>{t("sampleFields.responsibility")}</label>
+                    <select value={feeItem.responsibility} onChange={(e) => setCreateFeeForms(createFeeForms.map((item, currentIndex) => currentIndex === index ? { ...item, responsibility: e.target.value as SampleFeeForm["responsibility"] } : item))}>
+                      {FEE_RESPONSIBILITIES.map((item) => <option key={item.value} value={item.value}>{t(item.labelKey)}</option>)}
+                    </select>
+                  </div>
+                  <div className="form-field">
+                    <label>{t("sampleFields.paymentStatus")}</label>
+                    <select value={feeItem.paymentStatus} onChange={(e) => setCreateFeeForms(createFeeForms.map((item, currentIndex) => currentIndex === index ? { ...item, paymentStatus: e.target.value as SampleFeeForm["paymentStatus"] } : item))}>
+                      {PAYMENT_STATUSES.map((item) => <option key={item.value} value={item.value}>{t(item.labelKey)}</option>)}
+                    </select>
+                  </div>
                 </div>
                 <div className="form-field wide-field sample-fee-card__note">
                   <label>{t("common.notes")}</label>
@@ -1584,7 +1725,44 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                 </div>
               </div>
             ))}
-            {createFeeMessage ? <div className="error-state">{t(createFeeMessage)}</div> : null}
+            {createFeeMessage ? <div className="error-state">{createFeeMessage}</div> : null}
+          </div>
+        </div>
+      </Dialog>
+
+      <Dialog
+        v2
+        className="crm-action-dialog sample-dialog"
+        title="生成重打草稿"
+        visible={resampleDraftOpen}
+        onClose={() => {
+          setResampleDraftOpen(false);
+          setResampleDraftSource(null);
+          setResampleDraftReason("");
+          setResampleDraftChangeSummary("");
+        }}
+        footer={(
+          <div className="toolbar crm-dialog-footer">
+            <button className="secondary-button" onClick={() => setResampleDraftOpen(false)} type="button">取消</button>
+            <button className="primary-button" disabled={createResampleDraft.isPending || !resampleDraftReason.trim()} onClick={() => createResampleDraft.mutate()} type="button">
+              <CopyPlus size={14} />
+              {createResampleDraft.isPending ? "生成中..." : "生成草稿"}
+            </button>
+          </div>
+        )}
+      >
+        <div className="form-grid compact-form">
+          <div className="form-field wide-field">
+            <label>来源轮次</label>
+            <input readOnly value={resampleDraftSource?.currentRound ? `R${resampleDraftSource.currentRound.roundNo} · ${resampleDraftSource.productSummary}` : ""} />
+          </div>
+          <div className="form-field wide-field">
+            <label>重打原因</label>
+            <textarea autoFocus rows={4} value={resampleDraftReason} onChange={(event) => setResampleDraftReason(event.target.value)} />
+          </div>
+          <div className="form-field wide-field">
+            <label>调整说明</label>
+            <textarea rows={3} value={resampleDraftChangeSummary} onChange={(event) => setResampleDraftChangeSummary(event.target.value)} />
           </div>
         </div>
       </Dialog>
@@ -1613,11 +1791,53 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                 <p>{sampleDetailSummary}</p>
               </div>
               <div className="sample-detail-summary__actions">
-                <span className={sampleStatusPillClass(detailSample?.status ?? "")}>{detailSample ? statusLabel(detailSample.status) : "-"}</span>
+                <span className={sampleStatusPillClass(sampleTaskStatus(detailSample))}>{detailSample ? statusLabel(sampleTaskStatus(detailSample)) : "-"}</span>
                 <button className="secondary-button" disabled={!hasDetailQuote} onClick={() => setDetailMode("quote")} type="button">
                   查看报价
                 </button>
               </div>
+            </section>
+
+            <section className="detail-section sample-detail-section">
+              <div className="sample-detail-section__header">
+                <h4>打样轮次</h4>
+                <span>{detailSample?.rounds?.length ? `共 ${detailSample.rounds.length} 轮` : "暂无轮次"}</span>
+              </div>
+              <div className="quote-revision-chain">
+                {(detailSample?.rounds ?? []).map((round) => {
+                  const cost = detailSample?.costSummary?.byRound.find((item) => item.roundId === round.id)?.currencies
+                    .map((item) => `${item.currency} ${item.totalActualCost.toFixed(2)}`).join(" / ") || "暂无费用";
+                  return (
+                    <button className={round.id === sampleDetailRound?.id ? "quote-revision-chain__item is-current" : "quote-revision-chain__item"} key={round.id} onClick={() => setDetailRoundId(round.id)} type="button">
+                      <span className="quote-revision-chain__identity">
+                        <strong>R{round.roundNo}</strong>
+                        <span>{round.resampleReason || (round.roundNo === 1 ? "首轮样品" : "重打草稿")}</span>
+                      </span>
+                      <span className="quote-revision-chain__meta">
+                        <span className={sampleStatusPillClass(round.status)}>{statusLabel(round.status)}</span>
+                        <strong>{cost}</strong>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
+            <section className="detail-section sample-detail-section">
+              <div className="sample-detail-section__header">
+                <h4>费用统计</h4>
+                <span>按币种分别汇总</span>
+              </div>
+              {sampleDetailCostItems.length ? (
+                <div className="detail-grid sample-detail-grid sample-detail-cost-grid">
+                  {sampleDetailCostItems.map((item) => (
+                    <div className={item.highlight ? "detail-card sample-detail-card is-highlight" : "detail-card sample-detail-card"} key={item.label}>
+                      <span>{item.label}</span>
+                      <strong>{item.value}</strong>
+                    </div>
+                  ))}
+                </div>
+              ) : <div className="empty-state">暂无费用统计。</div>}
             </section>
 
             <section className="detail-section sample-detail-section">
@@ -1653,11 +1873,11 @@ export function SamplePanel({ customerId }: { customerId: string }) {
               <div className="sample-detail-logistics">
                 <div>
                   <span>物流商</span>
-                  <strong>{detailValue(detailSample?.carrier)}</strong>
+                  <strong>{detailValue(sampleDetailRound?.carrier)}</strong>
                 </div>
                 <div>
                   <span>运单号</span>
-                  <strong>{detailValue(detailSample?.trackingNo)}</strong>
+                  <strong>{detailValue(sampleDetailRound?.trackingNo)}</strong>
                 </div>
                 <div>
                   <span>更新时间</span>
@@ -1676,8 +1896,8 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                   <div className="detail-list sample-detail-list">
                     {detailSample.fees.map((fee) => (
                       <div className="detail-list-item" key={fee.id}>
-                        <strong>{feeTypeLabel(fee.feeType)} · {formatMoney(Number(fee.amount), fee.currency)}</strong>
-                        <span>{new Date(fee.incurredAt).toLocaleDateString()} {fee.note ? `· ${fee.note}` : ""}</span>
+                        <strong>{feeTypeLabel(fee.feeType, t)} · {formatMoney(Number(fee.amount), fee.currency)} · {sampleRoundLabel(detailSample, fee.sampleRoundId)}</strong>
+                        <span>{costNatureLabel(fee.costNature, t)} · {responsibilityLabel(fee.responsibility, t)} · {paymentStatusLabel(fee.paymentStatus, t)} · {new Date(fee.incurredAt).toLocaleDateString(locale)} {fee.note ? `· ${fee.note}` : ""}</span>
                       </div>
                     ))}
                   </div>
@@ -1688,20 +1908,20 @@ export function SamplePanel({ customerId }: { customerId: string }) {
 
               <div className="detail-section sample-detail-section">
                 <div className="sample-detail-section__header">
-                  <h4>归还 / 留样记录</h4>
-                  <span>{detailSample?.returnRecords?.length ? `共 ${detailSample.returnRecords.length} 条` : "暂无归还或留样记录"}</span>
+                  <h4>客户样品处置记录</h4>
+                  <span>{detailSample?.returnRecords?.length ? `共 ${detailSample.returnRecords.length} 条` : "暂无客户处置记录"}</span>
                 </div>
                 {detailSample?.returnRecords?.length ? (
                   <div className="detail-list sample-detail-list">
                     {detailSample.returnRecords.map((record) => (
                       <div className="detail-list-item" key={record.id}>
-                        <strong>{returnTypeLabel(record.returnType)} · {new Date(record.recordedAt).toLocaleDateString()}</strong>
+                        <strong>{dispositionLabel(record.dispositionStatus)} · {new Date(record.recordedAt).toLocaleDateString()}</strong>
                         <span>{record.receiverName ? `接收人 ${record.receiverName}` : ""}{record.destination ? ` · 去向 ${record.destination}` : ""}{record.note ? ` · ${record.note}` : ""}</span>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="empty-state">暂无归还或留样记录。</div>
+                  <div className="empty-state">暂无客户处置记录。</div>
                 )}
               </div>
             </section>
@@ -1712,7 +1932,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                   <h4>反馈说明</h4>
                   <span>客户测试反馈或内部备注</span>
                 </div>
-                <div className="detail-note">{detailValue(detailSample?.feedback)}</div>
+                <div className="detail-note">{detailValue(sampleDetailRound?.feedback)}</div>
               </div>
 
               <div className="detail-section sample-detail-section">
@@ -1818,7 +2038,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
             </button>
             <button
               className="primary-button"
-              disabled={update.isPending || !editForm.productSummary.trim() || Boolean(shippingMessage)}
+              disabled={update.isPending || !editForm.productSummary.trim()}
               onClick={() => update.mutate()}
               type="button"
             >
@@ -1884,27 +2104,6 @@ export function SamplePanel({ customerId }: { customerId: string }) {
               onChange={(ids) => setEditForm({ ...editForm, fileAssetIds: ids })}
             />
           </div>
-          <div className="form-field">
-            <label>{t("sampleFields.carrier")}</label>
-            <input value={editForm.carrier} onChange={(e) => setEditForm({ ...editForm, carrier: e.target.value })} />
-          </div>
-          <div className="form-field">
-            <label>{t("sampleFields.trackingNo")}</label>
-            <input value={editForm.trackingNo} onChange={(e) => setEditForm({ ...editForm, trackingNo: e.target.value })} />
-          </div>
-          {shippingMessage ? <div className="error-state">{shippingMessage}</div> : null}
-          <div className="form-field">
-            <label>{t("sampleFields.shippedAt")}</label>
-            <input type="date" value={editForm.shippedAt} onChange={(e) => setEditForm({ ...editForm, shippedAt: e.target.value })} />
-          </div>
-          <div className="form-field">
-            <label>{t("sampleFields.deliveredAt")}</label>
-            <input type="date" value={editForm.deliveredAt} onChange={(e) => setEditForm({ ...editForm, deliveredAt: e.target.value })} />
-          </div>
-          <div className="form-field wide-field">
-            <label>{t("sampleFields.feedback")}</label>
-            <textarea value={editForm.feedback} onChange={(e) => setEditForm({ ...editForm, feedback: e.target.value })} rows={3} />
-          </div>
           <div className="analysis-edit-section wide-field">
             <div className="analysis-edit-section__title">
               <h4>{t("sampleFields.feeDetails")}</h4>
@@ -1918,10 +2117,10 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                   <div className="detail-list-item sample-fee-list-item" key={fee.id}>
                     <div>
                       <strong>
-                        {feeTypeLabel(fee.feeType)} · {feeDisplayAmount(fee)}
+                        {feeTypeLabel(fee.feeType, t)} · {feeDisplayAmount(fee)} · {sampleRoundLabel(currentEditingSample, fee.sampleRoundId)}
                       </strong>
                       <span>
-                        {new Date(fee.incurredAt).toLocaleDateString()} {fee.note ? `· ${fee.note}` : ""}
+                        {costNatureLabel(fee.costNature, t)} · {responsibilityLabel(fee.responsibility, t)} · {paymentStatusLabel(fee.paymentStatus, t)} · {new Date(fee.incurredAt).toLocaleDateString(locale)} {fee.note ? `· ${fee.note}` : ""}
                       </span>
                     </div>
                     <div className="sample-fee-list-item__actions">
@@ -1953,6 +2152,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
           setStatusOpen(false);
           setStatusSample(null);
           setStatusTarget(null);
+          setStatusRoundId(null);
         }}
         footer={(
           <div className="toolbar crm-dialog-footer">
@@ -1962,6 +2162,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                 setStatusOpen(false);
                 setStatusSample(null);
                 setStatusTarget(null);
+                setStatusRoundId(null);
               }}
               type="button"
             >
@@ -1973,58 +2174,59 @@ export function SamplePanel({ customerId }: { customerId: string }) {
         <div className="detail-window">
           <section className="detail-section">
             <h4>当前状态</h4>
-            <div className="detail-note">{currentStatusSample ? statusLabel(currentStatusSample.status) : "-"}</div>
+            <div className="detail-note">{currentStatusSample ? statusLabel(currentStatus) : "-"}</div>
           </section>
-          {currentStatusSample?.status === "PREPARING" ? (
+          {currentStatus === "PREPARING" && statusTarget === "RETAINED" ? (
             <section className="detail-section">
-              <h4>物流信息</h4>
+              <h4>寄出前留样</h4>
               <div className="analysis-edit-grid sample-status-shipping-grid">
                 <div className="form-field sample-status-field">
-                  <label>{t("sampleFields.carrier")}</label>
-                  <input value={statusForm.carrier} onChange={(e) => setStatusForm({ ...statusForm, carrier: e.target.value })} />
+                  <label>实际完成数量</label>
+                  <input type="number" min={1} value={statusForm.producedQuantity} onChange={(e) => setStatusForm({ ...statusForm, producedQuantity: e.target.value })} />
                 </div>
                 <div className="form-field sample-status-field">
-                  <label>{t("sampleFields.trackingNo")}</label>
-                  <input value={statusForm.trackingNo} onChange={(e) => setStatusForm({ ...statusForm, trackingNo: e.target.value })} />
+                  <label>留样数量</label>
+                  <input type="number" min={1} value={statusForm.retainedQuantity} onChange={(e) => setStatusForm({ ...statusForm, retainedQuantity: e.target.value })} />
                 </div>
                 <div className="form-field sample-status-field">
-                  <label>{t("sampleFields.shippedAt")}</label>
-                  <LocalizedDateInput value={statusForm.shippedAt} onChange={(value) => setStatusForm({ ...statusForm, shippedAt: value })} />
+                  <label>留样位置</label>
+                  <input value={statusForm.retainedLocation} onChange={(e) => setStatusForm({ ...statusForm, retainedLocation: e.target.value })} />
                 </div>
-              </div>
-              <div className="empty-state" style={{ marginTop: 12 }}>
-                填写后可以直接把状态推进到已寄出。
               </div>
             </section>
           ) : null}
-          {currentStatusSample?.status === "SHIPPED" ? (
+          {(currentStatus === "RETAINED" && statusTarget === "SHIPPED") || (currentStatus === "SHIPPED" && statusTarget === "DELIVERED") ? (
             <section className="detail-section">
-              <h4>签收信息</h4>
-              <div className="form-field sample-status-field">
-                <label>{t("sampleFields.deliveredAt")}</label>
-                <input
-                  type="date"
-                  value={statusForm.deliveredAt}
-                  onChange={(value) => setStatusForm({ ...statusForm, deliveredAt: value })}
-                />
-              </div>
-              <div className="empty-state" style={{ marginTop: 12 }}>
-                可留空；填写后会一并记录到已签收状态。
-              </div>
+              {currentStatus === "RETAINED" ? <>
+                <h4>物流信息</h4>
+                <div className="analysis-edit-grid sample-status-shipping-grid">
+                  <div className="form-field sample-status-field"><label>{t("sampleFields.carrier")}</label><input value={statusForm.carrier} onChange={(e) => setStatusForm({ ...statusForm, carrier: e.target.value })} /></div>
+                  <div className="form-field sample-status-field"><label>{t("sampleFields.trackingNo")}</label><input value={statusForm.trackingNo} onChange={(e) => setStatusForm({ ...statusForm, trackingNo: e.target.value })} /></div>
+                  <div className="form-field sample-status-field"><label>{t("sampleFields.shippedAt")}</label><LocalizedDateInput value={statusForm.shippedAt} onChange={(value) => setStatusForm({ ...statusForm, shippedAt: value })} /></div>
+                </div>
+              </> : <>
+                <h4>签收信息</h4>
+                <div className="form-field sample-status-field"><label>{t("sampleFields.deliveredAt")}</label><LocalizedDateInput value={statusForm.deliveredAt} onChange={(value) => setStatusForm({ ...statusForm, deliveredAt: value })} /></div>
+              </>}
             </section>
           ) : null}
-          {currentStatusSample?.status === "DELIVERED" ? (
+          {currentStatus === "DELIVERED" && statusTarget === "FEEDBACK_RECEIVED" ? (
             <section className="detail-section">
-              <h4>反馈 / 归还信息</h4>
+              <h4>客户反馈</h4>
               <div className="analysis-edit-form">
                 <div className="form-field wide-field">
                   <label>{t("sampleFields.feedback")}</label>
                   <textarea value={statusForm.feedback} onChange={(e) => setStatusForm({ ...statusForm, feedback: e.target.value })} rows={4} />
                 </div>
+                <div className="form-field"><label>反馈结论</label><select value={statusForm.feedbackResult} onChange={(e) => setStatusForm({ ...statusForm, feedbackResult: e.target.value as SampleStatusForm["feedbackResult"] })}><option value="ACCEPTED">客户确认通过</option><option value="RESAMPLE_REQUIRED">客户要求重打</option><option value="CUSTOMER_REJECTED">客户终止</option></select></div>
+                <div className="form-field"><label>客户样品处置</label><select value={statusForm.dispositionStatus} onChange={(e) => setStatusForm({ ...statusForm, dispositionStatus: e.target.value as SampleStatusForm["dispositionStatus"] })}><option value="PENDING">待处置</option><option value="RETURNED">已归还</option><option value="CUSTOMER_KEPT">客户保留</option><option value="DISPOSED">已报废</option></select></div>
+                {statusForm.feedbackResult === "RESAMPLE_REQUIRED" ? <div className="detail-note">保存反馈后，可从更多操作中生成一条重打草稿。</div> : null}
               </div>
-              <div className="empty-state" style={{ marginTop: 12 }}>
-                可留空；填写后会记录在样品反馈中。
-              </div>
+            </section>
+          ) : null}
+          {statusTarget && ["RETURNED", "CUSTOMER_KEPT", "DISPOSED"].includes(statusTarget) ? (
+            <section className="detail-section">
+              <h4>客户样品处置</h4>
               <div className="analysis-edit-form" style={{ marginTop: 16 }}>
                 <div className="form-field">
                   <label>{t("sampleFields.receiver")}</label>
@@ -2060,20 +2262,17 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                   return (
                     <button
                       className="primary-button"
-                      disabled={statusMutation.isPending || returnMutation.isPending || shipmentMissing || !currentStatusSample}
+                      disabled={statusMutation.isPending || shipmentMissing || !currentStatusSample}
                       key={nextStatus}
                       onClick={() => {
                         if (!currentStatusSample) return;
-                        if (usesSampleReturnRecord(currentStatusSample.status, nextStatus)) {
-                          returnMutation.mutate(nextStatus);
-                          return;
-                        }
                         statusMutation.mutate({
                           sampleId: currentStatusSample.id,
+                          roundId: statusRoundId ?? currentStatusSample.currentRound?.id,
                           status: nextStatus,
                           ...(requiresShipmentInfo ? { carrier: statusForm.carrier, trackingNo: statusForm.trackingNo, shippedAt: statusForm.shippedAt } : {}),
                           ...(requiresDeliveryInfo ? { deliveredAt: statusForm.deliveredAt || undefined } : {}),
-                          ...(currentStatusSample.status === "DELIVERED" ? { feedback: statusForm.feedback || undefined } : {})
+                          ...(currentStatus === "DELIVERED" ? { feedback: statusForm.feedback || undefined } : {})
                         });
                       }}
                       type="button"
@@ -2086,7 +2285,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                 <div className="empty-state">当前状态没有可执行的流转操作。</div>
               )}
             </div>
-            {currentStatusSample && statusTransitions.includes("SHIPPED") && currentStatusSample.status === "PREPARING" && (!statusForm.carrier.trim() || !statusForm.trackingNo.trim() || !statusForm.shippedAt.trim()) ? (
+            {currentStatusSample && statusTransitions.includes("SHIPPED") && currentStatus === "RETAINED" && (!statusForm.carrier.trim() || !statusForm.trackingNo.trim() || !statusForm.shippedAt.trim()) ? (
               <div className="error-state" style={{ marginTop: 12 }}>
                 切换为已寄出前，请先填写物流商、运单号和发货日期。
               </div>
@@ -2166,7 +2365,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
           </div>
         }
       >
-        <p>删除后，这条费用记录会从样品中移除，但历史记录会保留。确定要删除费用 {feeDeleting ? feeTypeLabel(feeDeleting.feeType) : ""} 吗？</p>
+        <p>删除后，这条费用记录会从样品中移除，但历史记录会保留。确定要删除费用 {feeDeleting ? feeTypeLabel(feeDeleting.feeType, t) : ""} 吗？</p>
       </Dialog>
 
       <Dialog
@@ -2204,7 +2403,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                 <select value={feeForm.feeType} onChange={(e) => setFeeForm({ ...feeForm, feeType: e.target.value })}>
                   {FEE_TYPES.map((item) => (
                     <option key={item.value} value={item.value}>
-                      {item.label}
+                      {t(item.labelKey)}
                     </option>
                   ))}
                 </select>
@@ -2220,6 +2419,31 @@ export function SamplePanel({ customerId }: { customerId: string }) {
               <div className="form-field">
                 <label>{t("sampleFields.incurredAt")}</label>
                 <LocalizedDateInput value={feeForm.incurredAt} onChange={(value) => setFeeForm({ ...feeForm, incurredAt: value })} />
+              </div>
+              <div className="form-field">
+                <label>{t("sampleFields.feeRound")}</label>
+                <select value={feeForm.sampleRoundId} onChange={(e) => setFeeForm({ ...feeForm, sampleRoundId: e.target.value })}>
+                  <option value="">{t("sampleFields.sharedFee")}</option>
+                  {(feeSample?.rounds ?? []).map((round) => <option key={round.id} value={round.id}>R{round.roundNo}</option>)}
+                </select>
+              </div>
+              <div className="form-field">
+                <label>{t("sampleFields.costNature")}</label>
+                <select value={feeForm.costNature} onChange={(e) => setFeeForm({ ...feeForm, costNature: e.target.value as SampleFeeForm["costNature"], paymentStatus: e.target.value === "CUSTOMER_CHARGE" && feeForm.paymentStatus === "NOT_APPLICABLE" ? "PENDING" : feeForm.paymentStatus })}>
+                  {COST_NATURES.map((item) => <option key={item.value} value={item.value}>{t(item.labelKey)}</option>)}
+                </select>
+              </div>
+              <div className="form-field">
+                <label>{t("sampleFields.responsibility")}</label>
+                <select value={feeForm.responsibility} onChange={(e) => setFeeForm({ ...feeForm, responsibility: e.target.value as SampleFeeForm["responsibility"] })}>
+                  {FEE_RESPONSIBILITIES.map((item) => <option key={item.value} value={item.value}>{t(item.labelKey)}</option>)}
+                </select>
+              </div>
+              <div className="form-field">
+                <label>{t("sampleFields.paymentStatus")}</label>
+                <select value={feeForm.paymentStatus} onChange={(e) => setFeeForm({ ...feeForm, paymentStatus: e.target.value as SampleFeeForm["paymentStatus"] })}>
+                  {PAYMENT_STATUSES.map((item) => <option key={item.value} value={item.value}>{t(item.labelKey)}</option>)}
+                </select>
               </div>
             </div>
             <div className="form-field wide-field sample-fee-card__note">

@@ -187,32 +187,89 @@ export function exportSamples(customerId: string) {
   return apiGetBlob(`/samples/export?customerId=${customerId}`);
 }
 
-export function createSample<T = unknown>(payload: unknown) {
+export type SampleFeePayload = {
+  feeType: string;
+  amount: number;
+  currency: string;
+  note?: string;
+  incurredAt?: string;
+  sampleRoundId?: string;
+  costNature?: "ACTUAL_COST" | "CUSTOMER_CHARGE";
+  responsibility?: "FACTORY" | "CUSTOMER" | "SUPPLIER" | "NEGOTIATED";
+  paymentStatus?: "NOT_APPLICABLE" | "PENDING" | "RECEIVED" | "WAIVED" | "REFUNDED";
+};
+
+export type CreateSamplePayload = {
+  customerId: string;
+  productSummary: string;
+  specification: string;
+  material: string;
+  process: string;
+  sampleQuantity: number;
+  samplePurpose: string;
+  deliveryDeadline?: string;
+  quoteId?: string;
+  fileAssetIds?: string[];
+  initialFees?: SampleFeePayload[];
+};
+
+export type UpdateSamplePayload = {
+  productSummary?: string;
+  specification?: string;
+  material?: string;
+  process?: string;
+  requestedQuantity?: number;
+  samplePurpose?: string;
+  deliveryDeadline?: string;
+  quoteId?: string;
+  fileAssetIds?: string[];
+};
+
+export type SampleFeedbackPayload = {
+  feedbackResult: "ACCEPTED" | "RESAMPLE_REQUIRED" | "CUSTOMER_REJECTED";
+  feedback: string;
+  dispositionStatus: "PENDING" | "RETURNED" | "CUSTOMER_KEPT" | "DISPOSED";
+};
+
+export type SampleDispositionPayload = {
+  receiverName?: string;
+  destination?: string;
+  note?: string;
+  recordedAt?: string;
+};
+
+export function createSample<T = unknown>(payload: CreateSamplePayload) {
   return apiPost<T>("/samples", payload);
 }
 
-export function updateSample<T = unknown>(sampleId: string, payload: unknown) {
+export function updateSample<T = unknown>(sampleId: string, payload: UpdateSamplePayload) {
   return apiPatch<T>(`/samples/${sampleId}`, payload);
 }
+
+export function submitSampleApproval<T = unknown>(roundId: string) { return apiPost<T>(`/samples/rounds/${roundId}/submit-approval`, {}); }
+export function approveSampleRound<T = unknown>(roundId: string, payload: unknown) { return apiPost<T>(`/samples/rounds/${roundId}/approve`, payload); }
+export function rejectSampleRound<T = unknown>(roundId: string, payload: unknown) { return apiPost<T>(`/samples/rounds/${roundId}/reject`, payload); }
+export function retainSampleRound<T = unknown>(roundId: string, payload: unknown) { return apiPost<T>(`/samples/rounds/${roundId}/retain`, payload); }
+export function shipSampleRound<T = unknown>(roundId: string, payload: unknown) { return apiPost<T>(`/samples/rounds/${roundId}/ship`, payload); }
+export function deliverSampleRound<T = unknown>(roundId: string, payload?: unknown) { return apiPost<T>(`/samples/rounds/${roundId}/deliver`, payload ?? {}); }
+export function recordSampleFeedback<T = unknown>(roundId: string, payload: SampleFeedbackPayload) { return apiPost<T>(`/samples/rounds/${roundId}/feedback`, payload); }
+export function createSampleResampleDraft<T = unknown>(roundId: string, payload: { reason: string; changeSummary?: string }) { return apiPost<T>(`/samples/rounds/${roundId}/resample-draft`, payload); }
+export function recordSampleDisposition<T = unknown>(roundId: string, status: "RETURNED" | "CUSTOMER_KEPT" | "DISPOSED", payload: SampleDispositionPayload) { return apiPost<T>(`/samples/rounds/${roundId}/disposition/${status}`, payload); }
 
 export function getSampleHistory<T = unknown>(sampleId: string) {
   return apiGet<T>(`/samples/${sampleId}/history`);
 }
 
-export function recordSampleFee<T = unknown>(sampleId: string, payload: unknown) {
+export function recordSampleFee<T = unknown>(sampleId: string, payload: SampleFeePayload) {
   return apiPost<T>(`/samples/${sampleId}/fees`, payload);
 }
 
-export function updateSampleFee<T = unknown>(sampleId: string, feeId: string, payload: unknown) {
+export function updateSampleFee<T = unknown>(sampleId: string, feeId: string, payload: Partial<SampleFeePayload>) {
   return apiPatch<T>(`/samples/${sampleId}/fees/${feeId}`, payload);
 }
 
 export function deleteSampleFee<T = unknown>(sampleId: string, feeId: string) {
   return apiDelete<T>(`/samples/${sampleId}/fees/${feeId}`);
-}
-
-export function recordSampleReturn<T = unknown>(sampleId: string, payload: unknown) {
-  return apiPost<T>(`/samples/${sampleId}/returns`, payload);
 }
 
 export function deleteSample<T = unknown>(sampleId: string) {

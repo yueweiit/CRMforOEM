@@ -9,17 +9,29 @@ import { CreateQuoteDto } from "./dto/create-quote.dto";
 import { CreateQuoteRevisionDto } from "./dto/create-quote-revision.dto";
 import { CreateSampleRequestDto } from "./dto/create-sample-request.dto";
 import { QuoteReviewDto } from "./dto/quote-review.dto";
-import { RecordSampleReturnDto } from "./dto/record-sample-return.dto";
 import { UpdateSampleFeeDto } from "./dto/update-sample-fee.dto";
 import { UpdateQuoteDto } from "./dto/update-quote.dto";
 import { UpdateSampleRequestDto } from "./dto/update-sample-request.dto";
 import { QuoteReferenceService } from "./quote-reference.service";
+import { SampleWorkflowService } from "./sample-workflow.service";
+import {
+  CreateResampleDraftDto,
+  DeliverSampleRoundDto,
+  EditSampleRoundDto,
+  RecordSampleDispositionDto,
+  RecordSampleFeedbackDto,
+  RetainSampleRoundDto,
+  SampleReviewDto,
+  ShipSampleRoundDto,
+  TerminateSampleRequestDto
+} from "./dto/sample-workflow.dto";
 
 @Controller()
 export class CommercialController {
   constructor(
     private readonly commercialService: CommercialService,
-    private readonly quoteReferences: QuoteReferenceService
+    private readonly quoteReferences: QuoteReferenceService,
+    private readonly sampleWorkflow: SampleWorkflowService = undefined as never
   ) {}
 
   @RequirePermissions("quotes.read")
@@ -155,43 +167,77 @@ export class CommercialController {
     return this.commercialService.deleteQuote(user, id);
   }
 
+  @RequirePermissions("samples.read")
   @Get("samples")
   samples(@CurrentUser() user: RequestUser, @Query("customerId") customerId?: string) {
-    return this.commercialService.listSamples(user, customerId);
+    return this.sampleWorkflow.list(user, customerId);
   }
 
   @Get("samples/export")
+  @RequirePermissions("samples.export")
   async exportSamples(
     @CurrentUser() user: RequestUser,
     @Query("customerId") customerId: string | undefined,
     @Res({ passthrough: true }) res: Response
   ) {
-    const { csv, fileName } = await this.commercialService.getSampleExport(user, customerId);
+    const { csv, fileName } = await this.sampleWorkflow.getExport(user, customerId);
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
     return csv;
   }
 
+  @RequireLiveSession()
+  @RequirePermissions("samples.write")
   @Post("samples")
   createSample(@CurrentUser() user: RequestUser, @Body() dto: CreateSampleRequestDto) {
-    return this.commercialService.createSample(user, dto);
+    return this.sampleWorkflow.create(user, dto);
   }
 
+  @RequireLiveSession()
+  @RequirePermissions("samples.write")
   @Patch("samples/:id")
   updateSample(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: UpdateSampleRequestDto) {
-    return this.commercialService.updateSample(user, id, dto);
+    return this.sampleWorkflow.editCurrentRound(user, id, {
+      productSummary: dto.productSummary,
+      specification: dto.specification,
+      material: dto.material,
+      process: dto.process,
+      requestedQuantity: dto.requestedQuantity,
+      samplePurpose: dto.samplePurpose,
+      deliveryDeadline: dto.deliveryDeadline,
+      quoteId: dto.quoteId,
+      fileAssetIds: dto.fileAssetIds
+    } as EditSampleRoundDto);
+  }
+
+  @RequireLiveSession() @RequirePermissions("samples.write") @Post("samples/rounds/:id/submit-approval") submitSampleApproval(@CurrentUser() user: RequestUser, @Param("id") id: string) { return this.sampleWorkflow.submitApproval(user, id); }
+  @RequireLiveSession() @RequirePermissions("samples.approve") @Post("samples/rounds/:id/approve") approveSample(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: SampleReviewDto) { return this.sampleWorkflow.approve(user, id, dto); }
+  @RequireLiveSession() @RequirePermissions("samples.approve") @Post("samples/rounds/:id/reject") rejectSample(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: SampleReviewDto) { return this.sampleWorkflow.reject(user, id, dto); }
+  @RequireLiveSession() @RequirePermissions("samples.write") @Post("samples/rounds/:id/retain") retainSample(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: RetainSampleRoundDto) { return this.sampleWorkflow.retain(user, id, dto); }
+  @RequireLiveSession() @RequirePermissions("samples.write") @Post("samples/rounds/:id/ship") shipSample(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: ShipSampleRoundDto) { return this.sampleWorkflow.ship(user, id, dto); }
+  @RequireLiveSession() @RequirePermissions("samples.write") @Post("samples/rounds/:id/deliver") deliverSample(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: DeliverSampleRoundDto) { return this.sampleWorkflow.deliver(user, id, dto); }
+  @RequireLiveSession() @RequirePermissions("samples.write") @Post("samples/rounds/:id/feedback") recordSampleFeedback(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: RecordSampleFeedbackDto) { return this.sampleWorkflow.feedback(user, id, dto); }
+  @RequireLiveSession() @RequirePermissions("samples.write") @Post("samples/rounds/:id/resample-draft") createResampleDraft(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: CreateResampleDraftDto) { return this.sampleWorkflow.createResampleDraft(user, id, dto); }
+  @RequireLiveSession() @RequirePermissions("samples.write") @Post("samples/rounds/:id/disposition/:status") recordSampleDisposition(@CurrentUser() user: RequestUser, @Param("id") id: string, @Param("status") status: "RETURNED" | "CUSTOMER_KEPT" | "DISPOSED", @Body() dto: RecordSampleDispositionDto) { return this.sampleWorkflow.disposition(user, id, status, dto); }
+
+  @RequireLiveSession() @RequirePermissions("samples.write")
+  @Post("samples/:id/terminate")
+  terminateSample(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: TerminateSampleRequestDto) {
+    return this.sampleWorkflow.terminate(user, id, dto);
   }
 
   @Get("samples/:id/history")
   sampleHistory(@CurrentUser() user: RequestUser, @Param("id") id: string) {
-    return this.commercialService.getSampleHistory(user, id);
+    return this.sampleWorkflow.getHistory(user, id);
   }
 
+  @RequireLiveSession() @RequirePermissions("samples.write")
   @Post("samples/:id/fees")
   recordSampleFee(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: CreateSampleFeeDto) {
-    return this.commercialService.recordSampleFee(user, id, dto);
+    return this.sampleWorkflow.addFee(user, id, dto);
   }
 
+  @RequireLiveSession() @RequirePermissions("samples.write")
   @Patch("samples/:sampleId/fees/:feeId")
   updateSampleFee(
     @CurrentUser() user: RequestUser,
@@ -199,21 +245,18 @@ export class CommercialController {
     @Param("feeId") feeId: string,
     @Body() dto: UpdateSampleFeeDto
   ) {
-    return this.commercialService.updateSampleFee(user, sampleId, feeId, dto);
+    return this.sampleWorkflow.updateFee(user, sampleId, feeId, dto);
   }
 
+  @RequireLiveSession() @RequirePermissions("samples.write")
   @Delete("samples/:sampleId/fees/:feeId")
   deleteSampleFee(@CurrentUser() user: RequestUser, @Param("sampleId") sampleId: string, @Param("feeId") feeId: string) {
-    return this.commercialService.deleteSampleFee(user, sampleId, feeId);
+    return this.sampleWorkflow.deleteFee(user, sampleId, feeId);
   }
 
-  @Post("samples/:id/returns")
-  recordSampleReturn(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: RecordSampleReturnDto) {
-    return this.commercialService.recordSampleReturn(user, id, dto);
-  }
-
+  @RequireLiveSession() @RequirePermissions("samples.write")
   @Delete("samples/:id")
   deleteSample(@CurrentUser() user: RequestUser, @Param("id") id: string) {
-    return this.commercialService.deleteSample(user, id);
+    return this.sampleWorkflow.void(user, id);
   }
 }

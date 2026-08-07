@@ -206,18 +206,55 @@ enum QuoteReplyAssessmentStatus {
   STALE
 }
 
-enum SampleStatus {
-  REQUESTED
-  APPROVING
-  REJECTED
+enum SampleRoundStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVAL_REJECTED
   PREPARING
+  RETAINED
   SHIPPED
   DELIVERED
   FEEDBACK_RECEIVED
-  RETURNED
-  STORED
+  COMPLETED
   VOIDED
-  CLOSED
+}
+
+enum SampleFeedbackResult {
+  ACCEPTED
+  RESAMPLE_REQUIRED
+  CUSTOMER_REJECTED
+}
+
+enum SampleDispositionStatus {
+  PENDING
+  RETURNED
+  CUSTOMER_KEPT
+  DISPOSED
+}
+
+enum SampleRetentionEvidenceStatus {
+  PENDING
+  RECORDED
+}
+
+enum SampleFeeCostNature {
+  ACTUAL_COST
+  CUSTOMER_CHARGE
+}
+
+enum SampleFeeResponsibility {
+  FACTORY
+  CUSTOMER
+  SUPPLIER
+  NEGOTIATED
+}
+
+enum SampleFeePaymentStatus {
+  NOT_APPLICABLE
+  PENDING
+  RECEIVED
+  WAIVED
+  REFUNDED
 }
 
 enum SampleHistoryAction {
@@ -228,6 +265,13 @@ enum SampleHistoryAction {
   FEE_UPDATED
   FEE_DELETED
   QUOTE_LINKED
+  ROUND_CREATED
+  RETAINED
+  SHIPPED
+  DELIVERED
+  FEEDBACK_RECORDED
+  RESAMPLE_CREATED
+  CUSTOMER_KEPT
   RETURNED
   STORED
   VOIDED
@@ -247,11 +291,6 @@ enum SamplePurpose {
   CUSTOMER_TEST
   EXHIBITION
   APPEARANCE_CONFIRMATION
-}
-
-enum SampleReturnType {
-  RETURNED
-  STORED
 }
 
 model Organization {
@@ -1207,91 +1246,154 @@ model QuoteReplyAssessment {
 }
 
 model SampleRequest {
-  id               String        @id @default(cuid())
+  id                String              @id @default(cuid())
   customerId        String
   quoteId           String?
-  status            SampleStatus  @default(REQUESTED)
   productSummary    String
-  specification     String?
-  material          String?
-  process           String?
-  sampleQuantity    Int?
   samplePurpose     SamplePurpose?
-  deliveryDeadline  DateTime?
-  fileAssetIds      String[]      @default([])
-  trackingNo        String?
-  carrier           String?
-  shippedAt         DateTime?
-  deliveredAt       DateTime?
-  approvedAt        DateTime?
-  approvalComment   String?
-  returnedAt        DateTime?
-  storedAt          DateTime?
-  voidedAt          DateTime?
+  currentRoundId    String?             @unique
+  terminationReason String?
   closedAt          DateTime?
-  feedback          String?
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
 
-  customer       Customer            @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  quote          Quote?              @relation(fields: [quoteId], references: [id], onDelete: SetNull)
-  histories      SampleHistory[]
-  fees           SampleFee[]
-  returnRecords  SampleReturnRecord[]
+  customer      Customer             @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  quote         Quote?               @relation(fields: [quoteId], references: [id], onDelete: SetNull)
+  currentRound  SampleRound?         @relation("SampleRequestCurrentRound", fields: [currentRoundId], references: [id], onDelete: SetNull)
+  rounds        SampleRound[]        @relation("SampleRequestRounds")
+  histories     SampleHistory[]
+  fees          SampleFee[]
+  returnRecords SampleReturnRecord[]
 
   @@index([customerId])
   @@index([quoteId])
   @@map("sample_requests")
 }
 
+model SampleRound {
+  id                      String                        @id @default(cuid())
+  sampleRequestId         String
+  roundNo                 Int
+  previousRoundId         String?
+  status                  SampleRoundStatus             @default(DRAFT)
+  specification           String?
+  material                String?
+  process                 String?
+  requestedQuantity       Int?
+  deliveryDeadline        DateTime?
+  fileAssetIds            String[]                      @default([])
+  trackingNo              String?
+  carrier                 String?
+  shippedAt               DateTime?
+  deliveredAt             DateTime?
+  approvedAt              DateTime?
+  approvalComment         String?
+  producedQuantity        Int?
+  shippedQuantity         Int?
+  feedback                String?
+  feedbackResult          SampleFeedbackResult?
+  feedbackAt              DateTime?
+  resampleReason          String?
+  changeSummary           String?
+  dispositionStatus       SampleDispositionStatus       @default(PENDING)
+  retentionEvidenceStatus  SampleRetentionEvidenceStatus @default(PENDING)
+  completedAt             DateTime?
+  voidedAt                DateTime?
+  createdAt               DateTime                      @default(now())
+  updatedAt               DateTime                      @updatedAt
+
+  sampleRequest   SampleRequest          @relation("SampleRequestRounds", fields: [sampleRequestId], references: [id], onDelete: Cascade)
+  previousRound   SampleRound?           @relation("SampleRoundChain", fields: [previousRoundId], references: [id], onDelete: SetNull)
+  nextRound       SampleRound?           @relation("SampleRoundChain")
+  currentFor      SampleRequest?         @relation("SampleRequestCurrentRound")
+  histories       SampleHistory[]
+  fees            SampleFee[]
+  returnRecords   SampleReturnRecord[]
+  retentionRecord SampleRetentionRecord?
+
+  @@unique([sampleRequestId, roundNo])
+  @@unique([previousRoundId])
+  @@index([sampleRequestId, status, roundNo])
+  @@index([status, updatedAt])
+  @@map("sample_rounds")
+}
+
+model SampleRetentionRecord {
+  id               String      @id @default(cuid())
+  sampleRoundId    String      @unique
+  retainedQuantity Int
+  retainedAt       DateTime
+  retainedLocation String
+  fileAssetIds     String[]    @default([])
+  retainedById     String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  sampleRound SampleRound @relation(fields: [sampleRoundId], references: [id], onDelete: Cascade)
+
+  @@map("sample_retention_records")
+}
+
 model SampleHistory {
-  id             String             @id @default(cuid())
+  id              String             @id @default(cuid())
   sampleRequestId String
-  action         SampleHistoryAction
-  before         Json?
-  after          Json?
-  comment        String?
-  actorId        String?
-  actorName      String?
-  createdAt      DateTime           @default(now())
+  sampleRoundId   String?
+  action          SampleHistoryAction
+  before          Json?
+  after           Json?
+  comment         String?
+  actorId         String?
+  actorName       String?
+  createdAt       DateTime           @default(now())
 
   sampleRequest SampleRequest @relation(fields: [sampleRequestId], references: [id], onDelete: Cascade)
+  sampleRound   SampleRound?   @relation(fields: [sampleRoundId], references: [id], onDelete: SetNull)
 
   @@index([sampleRequestId, createdAt])
+  @@index([sampleRoundId, createdAt])
   @@map("sample_histories")
 }
 
 model SampleFee {
-  id             String        @id @default(cuid())
-  sampleRequestId String
-  feeType        SampleFeeType
-  amount         Decimal
-  currency       String
-  note           String?
-  incurredAt     DateTime      @default(now())
-  createdById    String?
-  createdAt      DateTime      @default(now())
+  id               String                   @id @default(cuid())
+  sampleRequestId  String
+  sampleRoundId    String?
+  feeType          SampleFeeType
+  amount           Decimal
+  currency         String
+  note             String?
+  costNature       SampleFeeCostNature?
+  responsibility SampleFeeResponsibility?
+  paymentStatus    SampleFeePaymentStatus?
+  incurredAt       DateTime                 @default(now())
+  createdById      String?
+  createdAt        DateTime                 @default(now())
 
   sampleRequest SampleRequest @relation(fields: [sampleRequestId], references: [id], onDelete: Cascade)
+  sampleRound   SampleRound?  @relation(fields: [sampleRoundId], references: [id], onDelete: SetNull)
 
   @@index([sampleRequestId, incurredAt])
+  @@index([sampleRoundId, incurredAt])
   @@map("sample_fees")
 }
 
 model SampleReturnRecord {
-  id             String          @id @default(cuid())
-  sampleRequestId String
-  returnType     SampleReturnType
-  receiverName   String?
-  destination    String?
-  note           String?
-  recordedById   String?
-  recordedAt     DateTime        @default(now())
-  createdAt      DateTime        @default(now())
+  id                String                  @id @default(cuid())
+  sampleRequestId   String
+  sampleRoundId     String
+  dispositionStatus SampleDispositionStatus
+  receiverName      String?
+  destination       String?
+  note              String?
+  recordedById      String?
+  recordedAt        DateTime                @default(now())
+  createdAt         DateTime                @default(now())
 
   sampleRequest SampleRequest @relation(fields: [sampleRequestId], references: [id], onDelete: Cascade)
+  sampleRound   SampleRound    @relation(fields: [sampleRoundId], references: [id], onDelete: Cascade)
 
   @@index([sampleRequestId, recordedAt])
+  @@index([sampleRoundId, recordedAt])
   @@map("sample_return_records")
 }
 

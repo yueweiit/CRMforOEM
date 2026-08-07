@@ -1,4 +1,6 @@
-import { IsArray, IsDateString, IsIn, IsInt, IsOptional, IsString, Min } from "class-validator";
+import { Type } from "class-transformer";
+import { IsArray, IsDateString, IsIn, IsInt, IsOptional, IsString, Min, ValidateNested } from "class-validator";
+import { CreateSampleFeeDto } from "./create-sample-fee.dto";
 
 const SAMPLE_PURPOSES = ["CUSTOMER_TEST", "EXHIBITION", "APPEARANCE_CONFIRMATION"] as const;
 
@@ -39,25 +41,9 @@ export class CreateSampleRequestDto {
   fileAssetIds?: string[];
 
   @IsOptional()
-  @IsString()
-  carrier?: string;
-
-  @IsOptional()
-  @IsString()
-  trackingNo?: string;
-
-  @IsOptional()
-  @IsDateString()
-  shippedAt?: string;
-
-  @IsOptional()
   @IsArray()
-  initialFees?: Array<{
-    feeType: string;
-    amount: number;
-    currency: string;
-    note?: string;
-    incurredAt?: string;
-  }>;
+  @ValidateNested({ each: true })
+  @Type(() => CreateSampleFeeDto)
+  initialFees?: CreateSampleFeeDto[];
 }
 

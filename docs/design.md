@@ -52,7 +52,7 @@ NestJS REST API
 | AI 邮件 | 个性化英文开发信、主题、多版本、人工编辑、最终版本留档 |
 | 邮箱中心 | SMTP 发送、IMAP 同步、线程归档、附件归档、发送限频 |
 | 跟进任务 | 首封后 N 天跟进、回复后需求确认、报价后提醒、样品后提醒、逾期升级 |
-| 报价样品订单 | 报价记录、样品记录、谈判阶段、成交转化 |
+| 报价样品订单 | 报价记录、样品记录、谈判阶段、成交转化；样品多轮打样与费用规则见 [样品多轮打样与费用统计方案](样品多轮打样与费用统计方案.md) |
 | 看板报表 | 个人漏斗、团队漏斗、回复率、转化率、阶段停留、邮件效果、AI 使用效果 |
 | 系统配置 | 邮箱参数、AI 模型、抓取策略、评分权重、发送频率、任务规则 |
 
@@ -74,6 +74,11 @@ Customer 1--N OemFitScore
 Customer 1--N FollowUpTask
 Customer 1--N Quote
 Customer 1--N SampleRequest
+SampleRequest 1--N SampleRound
+SampleRound 1--1 SampleRetentionRecord
+SampleRequest 1--N SampleFee
+SampleRound 1--N SampleFee(optional round cost)
+SampleRound 1--N SampleReturnRecord
 Customer 1--N EmailThread
 
 EmailThread 1--N EmailMessage
@@ -386,4 +391,3 @@ score = clamp(score, 0, 100)
 - 阶段停留时长：阶段历史表相邻记录时间差。
 - 逾期任务数：截止时间小于当前时间且未完成。
 - AI 采纳率：最终版本与 AI 原稿相似度高于配置阈值的数量 / AI 生成数量。
-
