@@ -307,6 +307,20 @@ function buildQuotePayload(form: {
   };
 }
 
+function createQuoteValidationKey(form: {
+  quoteNo: string;
+  productName: string;
+  quantity: string;
+  currency: string;
+}) {
+  const quantity = Number(form.quantity);
+  if (!form.quoteNo.trim()) return "quoteFields.validationQuoteNoRequired";
+  if (!form.productName.trim()) return "quoteFields.validationProductNameRequired";
+  if (!form.quantity.trim() || !Number.isInteger(quantity) || quantity < 1) return "quoteFields.validationQuantityRequired";
+  if (!form.currency.trim()) return "quoteFields.validationCurrencyRequired";
+  return null;
+}
+
 function buildQuoteEditPayload(form: {
   quoteNo: string;
   currency: string;
@@ -628,6 +642,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
   const [revisionOpen, setRevisionOpen] = useState(false);
   const [revisionSource, setRevisionSource] = useState<Quote | null>(null);
   const [revisionReason, setRevisionReason] = useState("");
+  const [createValidationRequested, setCreateValidationRequested] = useState(false);
   const [moreActionsMenu, setMoreActionsMenu] = useState<{ id: string; top: number; right: number } | null>(null);
 
   const { data = [] } = useQuery({ queryKey: ["quotes", customerId], queryFn: () => getQuotes<Quote[]>(customerId) });
@@ -671,6 +686,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
         ...EMPTY_FORMULA_FIELDS,
         notes: ""
       });
+      setCreateValidationRequested(false);
     },
     onError: (error) => {
       showClientToast({
@@ -997,13 +1013,16 @@ export function QuotePanel({ customerId }: { customerId: string }) {
   const statusQuoteId = statusQuote?.id ?? "";
   const createSummary = calculateQuotePricing(form);
   const editSummary = calculateQuotePricing(editForm);
-  const createValidationMessage = !createSummary.moqValid
+  const createFieldValidationMessage = createQuoteValidationKey(form);
+  const createPricingValidationMessage = !createSummary.moqValid
     ? "报价数量不能小于 MOQ，请先调整数量或起订量。"
     : !createSummary.nonNegativeItemValid
       ? "报价金额项不能为负数，请检查成本、运费或优惠金额。"
       : !createSummary.totalValid
         ? "报价总价不能小于 0，请调整优惠金额或成本项。"
         : "";
+  const createValidationMessage = createFieldValidationMessage ? t(createFieldValidationMessage) : createPricingValidationMessage;
+  const visibleCreateValidationMessage = createValidationRequested ? createValidationMessage : "";
   const editValidationMessage = !editSummary.moqValid
     ? "报价数量不能小于 MOQ，请先调整数量或起订量。"
     : !editSummary.nonNegativeItemValid
@@ -1011,6 +1030,11 @@ export function QuotePanel({ customerId }: { customerId: string }) {
       : !editSummary.totalValid
         ? "报价总价不能小于 0，请调整优惠金额或成本项。"
         : "";
+  const handleCreateQuote = () => {
+    setCreateValidationRequested(true);
+    if (createValidationMessage) return;
+    create.mutate();
+  };
   const detailSnapshot = useMemo(() => {
     const input = quoteToPricingInput(detailQuote);
     return input ? calculateQuotePricing(input) : null;
@@ -1639,8 +1663,8 @@ export function QuotePanel({ customerId }: { customerId: string }) {
           </div>
         </div>
         <Field label={t("common.notes")} value={form.notes} onChange={(value) => setForm({ ...form, notes: value })} />
-        {createValidationMessage ? <div className="error-state">{createValidationMessage}</div> : null}
-        <div className="wide-field"><AddIconButton disabled={create.isPending || Boolean(createValidationMessage)} label={create.isPending ? t("quoteFields.submitting") : t("quoteFields.createQuote")} onClick={() => create.mutate()} /></div>
+        {visibleCreateValidationMessage ? <div className="error-state">{visibleCreateValidationMessage}</div> : null}
+        <div className="wide-field"><AddIconButton disabled={create.isPending} label={create.isPending ? t("quoteFields.submitting") : t("quoteFields.createQuote")} onClick={handleCreateQuote} /></div>
       </div>
     </section>
 
