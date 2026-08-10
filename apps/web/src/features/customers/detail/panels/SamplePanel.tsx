@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog } from "@alifd/next";
 import "@alifd/next/lib/dialog/style.js";
-import { CheckCircle2, ChevronDown, CopyPlus, Download, History, MoreHorizontal, Send, XCircle } from "lucide-react";
+import { CheckCircle2, ChevronDown, CopyPlus, Download, History, MoreHorizontal, PackageCheck, Send, Trash2, UserRoundCheck, XCircle } from "lucide-react";
 import "./analysis-edit.css";
 import { quoteFlowStatusLabel } from "@oem-crm/shared";
 import { showClientToast } from "../../../../components/Toast";
@@ -39,7 +39,7 @@ import { Field } from "../../../../components/ui/Field";
 import { useI18n } from "../../../../i18n";
 import type { TranslationKey } from "../../../../i18n/resources";
 import { formatDateInput } from "../../../../shared/utils/format";
-import type { Quote, QuoteHistoryItem, Sample, SampleFee, SampleHistoryItem } from "../shared/types";
+import type { Quote, QuoteHistoryItem, Sample, SampleFee, SampleHistoryItem, SampleRound } from "../shared/types";
 
 function downloadBlob(blob: Blob, fileName: string) {
   const url = URL.createObjectURL(blob);
@@ -128,6 +128,20 @@ function feedbackResultLabel(result?: string | null) {
 
 function dispositionLabel(status?: string | null) {
   return ({ PENDING: "待处置", RETURNED: "已归还", CUSTOMER_KEPT: "客户保留", DISPOSED: "已报废" } as Record<string, string>)[status ?? ""] ?? status ?? "-";
+}
+
+const SAMPLE_DISPOSITION_ACTIONS = [
+  { status: "RETURNED", label: "记录已归还" },
+  { status: "CUSTOMER_KEPT", label: "记录客户保留" },
+  { status: "DISPOSED", label: "记录已报废" }
+] as const;
+
+function canRecordSampleDisposition(round?: Pick<SampleRound, "status" | "feedbackResult" | "dispositionStatus"> | null) {
+  return Boolean(
+    round?.feedbackResult
+    && ["FEEDBACK_RECEIVED", "COMPLETED"].includes(round.status)
+    && round.dispositionStatus === "PENDING"
+  );
 }
 
 function sampleTaskOutcome(sample?: Pick<Sample, "currentRoundId" | "terminationReason" | "rounds" | "currentRound"> | null) {
@@ -343,6 +357,21 @@ function quoteTimelineDateValue(date: string | null | undefined) {
 
 function historyActorLabel(item: SampleHistoryItem) {
   return item.actorName ?? item.actorId ?? "系统";
+}
+
+function historyRound(sample: Sample | null | undefined, item: SampleHistoryItem) {
+  return item.sampleRoundId ? sample?.rounds?.find((round) => round.id === item.sampleRoundId) ?? null : null;
+}
+
+function historyRoundLabel(sample: Sample | null | undefined, item: SampleHistoryItem) {
+  const round = historyRound(sample, item);
+  return round ? `R${round.roundNo}` : item.sampleRoundId ? "未知轮次" : "公共记录";
+}
+
+function historyRoundTone(sample: Sample | null | undefined, item: SampleHistoryItem) {
+  const round = historyRound(sample, item);
+  if (!round) return "is-unassigned";
+  return round.roundNo % 2 === 0 ? "is-round-even" : "is-round-odd";
 }
 
 function normalizeHistoryComment(comment: string) {
@@ -772,6 +801,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   });
 
   const data = samplesQuery.data ?? [];
+  const activeDetailSample = detailSample ? data.find((item) => item.id === detailSample.id) ?? detailSample : null;
   const quoteOptions = quotesQuery.data ?? [];
   const exportAllMutation = useMutation({
     mutationFn: () => exportSamples(customerId),
@@ -793,7 +823,8 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   });
   const currentEditingSample = editing ? data.find((item) => item.id === editing.id) ?? editing : null;
   const currentStatusSample = statusSample ? data.find((item) => item.id === statusSample.id) ?? statusSample : null;
-  const currentSampleStatus = sampleTaskStatus(currentStatusSample);
+  const statusActionRound = currentStatusSample?.rounds?.find((round) => round.id === statusRoundId) ?? currentStatusSample?.currentRound ?? null;
+  const currentSampleStatus = statusActionRound?.status ?? sampleTaskStatus(currentStatusSample);
   const selectedStatusAction = sampleStatusActions(currentSampleStatus)
     .find((action) => action.nextStatus === statusTarget) ?? (statusTarget ? { nextStatus: statusTarget, label: sampleStatusActionLabel(currentSampleStatus, statusTarget) } : null);
   const statusTransitions = selectedStatusAction ? [selectedStatusAction.nextStatus] : [];
@@ -1052,20 +1083,22 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   };
 
   const openStatus = (item: Sample, nextStatus: string, roundId?: string) => {
+    const targetRoundId = roundId ?? item.currentRound?.id ?? null;
+    const targetRound = item.rounds?.find((round) => round.id === targetRoundId) ?? item.currentRound ?? null;
     setStatusSample(item);
     setStatusTarget(nextStatus);
-    setStatusRoundId(roundId ?? item.currentRound?.id ?? null);
+    setStatusRoundId(targetRoundId);
      setStatusForm({
-       carrier: item.currentRound?.carrier ?? "",
-       trackingNo: item.currentRound?.trackingNo ?? "",
-       shippedAt: item.currentRound?.shippedAt ? formatDateInput(new Date(item.currentRound.shippedAt)) : formatDateInput(new Date()),
-       deliveredAt: item.currentRound?.deliveredAt ? formatDateInput(new Date(item.currentRound.deliveredAt)) : "",
-       producedQuantity: String(item.currentRound?.producedQuantity ?? item.sampleQuantity ?? ""),
-       retainedQuantity: String(item.currentRound?.retentionRecord?.retainedQuantity ?? ""),
-       retainedLocation: item.currentRound?.retentionRecord?.retainedLocation ?? "",
-       feedback: item.currentRound?.feedback ?? "",
-       feedbackResult: (item.currentRound?.feedbackResult as SampleStatusForm["feedbackResult"] | undefined) ?? "ACCEPTED",
-       dispositionStatus: (item.currentRound?.dispositionStatus as SampleStatusForm["dispositionStatus"] | undefined) ?? "PENDING"
+       carrier: targetRound?.carrier ?? "",
+       trackingNo: targetRound?.trackingNo ?? "",
+       shippedAt: targetRound?.shippedAt ? formatDateInput(new Date(targetRound.shippedAt)) : formatDateInput(new Date()),
+       deliveredAt: targetRound?.deliveredAt ? formatDateInput(new Date(targetRound.deliveredAt)) : "",
+       producedQuantity: String(targetRound?.producedQuantity ?? item.sampleQuantity ?? ""),
+       retainedQuantity: String(targetRound?.retentionRecord?.retainedQuantity ?? ""),
+       retainedLocation: targetRound?.retentionRecord?.retainedLocation ?? "",
+       feedback: targetRound?.feedback ?? "",
+       feedbackResult: (targetRound?.feedbackResult as SampleStatusForm["feedbackResult"] | undefined) ?? "ACCEPTED",
+       dispositionStatus: (targetRound?.dispositionStatus as SampleStatusForm["dispositionStatus"] | undefined) ?? "PENDING"
      });
     setStatusOpen(true);
   };
@@ -1160,6 +1193,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   const canEdit = (item: Sample) => Boolean(item.currentRoundId) && ["DRAFT", "APPROVAL_REJECTED"].includes(sampleTaskStatus(item));
   const canDelete = (item: Sample) => Boolean(item.currentRoundId) && !["SHIPPED", "DELIVERED", "FEEDBACK_RECEIVED", "COMPLETED", "VOIDED", "PASSED", "TERMINATED"].includes(sampleTaskStatus(item));
   const currentHistory = historyQuery.data ?? [];
+  const historyHasMultipleRounds = (historySample?.rounds?.length ?? 0) > 1;
   const createMessage = createSampleValidationKey(createForm);
   const createFeeMessage = createFeeValidationKey(createFeeForms);
   const createReady = !createMessage && !createFeeMessage;
@@ -1169,9 +1203,9 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   const approvalDialogDescription =
     approvalMode === "approve" ? "备注可留空；填写后保留审核依据。" : "备注可留空；填写后说明需要补充或修改的内容。";
   const approvalPending = approvalMode === "approve" ? approve.isPending : reject.isPending;
-  const currentStatus = sampleTaskStatus(currentStatusSample);
-  const detailQuote = detailSample?.quoteId ? quoteOptions.find((quote) => quote.id === detailSample.quoteId) ?? null : null;
-  const detailQuoteSource = detailQuote ?? detailSample?.quote ?? null;
+  const currentStatus = currentSampleStatus;
+  const detailQuote = activeDetailSample?.quoteId ? quoteOptions.find((quote) => quote.id === activeDetailSample.quoteId) ?? null : null;
+  const detailQuoteSource = detailQuote ?? activeDetailSample?.quote ?? null;
   const detailQuoteStatus = quoteDisplayStatus(detailQuoteSource);
   const detailQuoteTerminalStatus = QUOTE_TERMINAL_STATUSES.includes(detailQuoteStatus) ? detailQuoteStatus : "";
   const detailQuoteHistory = detailQuoteHistoryQuery.data ?? [];
@@ -1260,14 +1294,14 @@ export function SamplePanel({ customerId }: { customerId: string }) {
     { label: "报价模式", value: detailQuote?.calcMode === "formula" ? "公式报价" : detailQuote ? "直接报价" : "-" },
     { label: "创建时间", value: detailQuote?.createdAt ? new Date(detailQuote.createdAt).toLocaleString() : "-" }
   ];
-  const detailSampleFeeTotal = detailSample ? sampleCostLabel(detailSample) : "-";
-  const sampleDetailRound = detailSample?.rounds?.find((round) => round.id === detailRoundId) ?? detailSample?.currentRound ?? null;
+  const detailSampleFeeTotal = activeDetailSample ? sampleCostLabel(activeDetailSample) : "-";
+  const sampleDetailRound = activeDetailSample?.rounds?.find((round) => round.id === detailRoundId) ?? activeDetailSample?.currentRound ?? null;
   const sampleDetailStatus = sampleDetailRound?.status ?? "";
   const sampleDetailHistory = detailSampleHistoryQuery.data ?? [];
   const sampleDetailRejectedAt = sampleHistoryStatusTime(sampleDetailHistory, "APPROVAL_REJECTED");
   const sampleDetailHistoryLoadingValue = detailSampleHistoryQuery.isLoading ? "加载中..." : "";
   const sampleDetailApprovalNote = sampleDetailRound?.approvalComment?.trim() ? `审批备注：${sampleDetailRound.approvalComment.trim()}` : "";
-  const sampleDetailSummary = detailSample
+  const sampleDetailSummary = activeDetailSample
     ? [
         `费用 ${detailSampleFeeTotal}`,
         sampleDetailRound?.specification ? `规格 ${sampleDetailRound.specification}` : "",
@@ -1276,19 +1310,20 @@ export function SamplePanel({ customerId }: { customerId: string }) {
       ].filter(Boolean).join(" | ")
     : "";
   const sampleDetailBaseItems = [
-    { label: "当前轮次", value: detailSample?.currentRound ? `R${detailSample.currentRound.roundNo}` : "-", highlight: true },
-    { label: "当前动作", value: detailValue(detailSample?.currentAction) },
-    { label: "上一轮结论", value: detailSample?.previousRound ? `${feedbackResultLabel(detailSample.previousRound.feedbackResult)} · ${dispositionLabel(detailSample.previousRound.dispositionStatus)}` : "-" },
-    { label: "关联报价", value: detailValue(detailSample?.quote?.quoteNo ?? detailSample?.quoteId ?? "未关联"), highlight: true },
+    { label: "当前轮次", value: activeDetailSample?.currentRound ? `R${activeDetailSample.currentRound.roundNo}` : "-", highlight: true },
+    { label: "当前动作", value: detailValue(activeDetailSample?.currentAction) },
+    { label: "上一轮结论", value: activeDetailSample?.previousRound ? `${feedbackResultLabel(activeDetailSample.previousRound.feedbackResult)} · ${dispositionLabel(activeDetailSample.previousRound.dispositionStatus)}` : "-" },
+    { label: "关联报价", value: detailValue(activeDetailSample?.quote?.quoteNo ?? activeDetailSample?.quoteId ?? "未关联"), highlight: true },
     { label: "规格", value: detailValue(sampleDetailRound?.specification) },
-    { label: "样品用途", value: detailValue(detailSample ? samplePurposeLabel(detailSample.samplePurpose) : "") },
+    { label: "样品用途", value: detailValue(activeDetailSample ? samplePurposeLabel(activeDetailSample.samplePurpose) : "") },
     { label: "材质", value: detailValue(sampleDetailRound?.material) },
     { label: "工艺", value: detailValue(sampleDetailRound?.process) },
     { label: "样品数量", value: detailValue(sampleDetailRound?.requestedQuantity) },
     { label: "交付期限", value: sampleDetailRound?.deliveryDeadline ? new Date(sampleDetailRound.deliveryDeadline).toLocaleDateString() : "-" },
+    { label: "更新时间", value: activeDetailSample?.updatedAt ? new Date(activeDetailSample.updatedAt).toLocaleString() : "-" },
     { label: "费用合计", value: detailSampleFeeTotal, highlight: true }
   ];
-  const sampleDetailCostItems = (detailSample?.costSummary?.byCurrency ?? []).flatMap((item) => [
+  const sampleDetailCostItems = (activeDetailSample?.costSummary?.byCurrency ?? []).flatMap((item) => [
     { label: `${item.currency} 累计实际成本`, value: formatMoney(item.totalActualCost, item.currency), highlight: true },
     { label: `${item.currency} 客户收费`, value: formatMoney(item.customerCharge, item.currency) },
     { label: `${item.currency} 已收金额`, value: formatMoney(item.receivedAmount, item.currency) },
@@ -1297,7 +1332,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   const sampleDetailTimelineItems = [
     {
       label: "申请",
-      value: sampleDetailRound?.createdAt ? new Date(sampleDetailRound.createdAt).toLocaleString() : detailSample?.createdAt ? new Date(detailSample.createdAt).toLocaleString() : "-",
+      value: sampleDetailRound?.createdAt ? new Date(sampleDetailRound.createdAt).toLocaleString() : activeDetailSample?.createdAt ? new Date(activeDetailSample.createdAt).toLocaleString() : "-",
       done: sampleCoreStatusReached(sampleDetailStatus, "DRAFT"),
       current: sampleDetailStatus === "DRAFT"
     },
@@ -1360,7 +1395,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
       ? [{ label: statusLabel("VOIDED"), value: sampleDetailRound?.voidedAt ? new Date(sampleDetailRound.voidedAt).toLocaleString() : "已作废", done: true, current: true, danger: true }]
       : [])
   ];
-  const hasDetailQuote = Boolean(detailQuote ?? detailSample?.quote);
+  const hasDetailQuote = Boolean(detailQuote ?? activeDetailSample?.quote);
 
   const handleCreateSample = () => {
     setCreateValidationRequested(true);
@@ -1770,7 +1805,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
       <Dialog
         v2
         className={`crm-action-dialog sample-dialog ${detailMode === "sample" ? "sample-detail-dialog" : "quote-detail-dialog"}`}
-        title={detailMode === "sample" ? `样品详情 · ${detailSample?.productSummary ?? ""}` : `报价详情 · ${detailQuote?.quoteNo ?? detailSample?.quote?.quoteNo ?? ""}`}
+        title={detailMode === "sample" ? `样品详情 · ${activeDetailSample?.productSummary ?? ""}` : `报价详情 · ${detailQuote?.quoteNo ?? activeDetailSample?.quote?.quoteNo ?? ""}`}
         width="min(1040px, calc(100vw - 48px))"
         visible={detailOpen}
         onClose={() => setDetailOpen(false)}
@@ -1787,11 +1822,11 @@ export function SamplePanel({ customerId }: { customerId: string }) {
             <section className="sample-detail-summary">
               <div>
                 <p className="detail-eyebrow">样品申请</p>
-                <h3>{detailValue(detailSample?.productSummary)}</h3>
+                <h3>{detailValue(activeDetailSample?.productSummary)}</h3>
                 <p>{sampleDetailSummary}</p>
               </div>
               <div className="sample-detail-summary__actions">
-                <span className={sampleStatusPillClass(sampleTaskStatus(detailSample))}>{detailSample ? statusLabel(sampleTaskStatus(detailSample)) : "-"}</span>
+                <span className={sampleStatusPillClass(sampleTaskStatus(activeDetailSample))}>{activeDetailSample ? statusLabel(sampleTaskStatus(activeDetailSample)) : "-"}</span>
                 <button className="secondary-button" disabled={!hasDetailQuote} onClick={() => setDetailMode("quote")} type="button">
                   查看报价
                 </button>
@@ -1801,11 +1836,11 @@ export function SamplePanel({ customerId }: { customerId: string }) {
             <section className="detail-section sample-detail-section">
               <div className="sample-detail-section__header">
                 <h4>打样轮次</h4>
-                <span>{detailSample?.rounds?.length ? `共 ${detailSample.rounds.length} 轮` : "暂无轮次"}</span>
+                <span>{activeDetailSample?.rounds?.length ? `共 ${activeDetailSample.rounds.length} 轮` : "暂无轮次"}</span>
               </div>
               <div className="quote-revision-chain">
-                {(detailSample?.rounds ?? []).map((round) => {
-                  const cost = detailSample?.costSummary?.byRound.find((item) => item.roundId === round.id)?.currencies
+                {(activeDetailSample?.rounds ?? []).map((round) => {
+                  const cost = activeDetailSample?.costSummary?.byRound.find((item) => item.roundId === round.id)?.currencies
                     .map((item) => `${item.currency} ${item.totalActualCost.toFixed(2)}`).join(" / ") || "暂无费用";
                   return (
                     <button className={round.id === sampleDetailRound?.id ? "quote-revision-chain__item is-current" : "quote-revision-chain__item"} key={round.id} onClick={() => setDetailRoundId(round.id)} type="button">
@@ -1821,6 +1856,27 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                   );
                 })}
               </div>
+              {activeDetailSample && canRecordSampleDisposition(sampleDetailRound) ? (
+                <div className="sample-round-disposition">
+                  <div>
+                    <strong>R{sampleDetailRound?.roundNo} 客户样品待处置</strong>
+                    <span>本轮反馈已经完成，可独立登记原样品的归还、客户保留或报废结果。</span>
+                  </div>
+                  <div className="toolbar">
+                    {SAMPLE_DISPOSITION_ACTIONS.map((action) => (
+                      <button
+                        className="secondary-button"
+                        key={action.status}
+                        onClick={() => sampleDetailRound && openStatus(activeDetailSample, action.status, sampleDetailRound.id)}
+                        type="button"
+                      >
+                        {action.status === "RETURNED" ? <PackageCheck size={14} /> : action.status === "CUSTOMER_KEPT" ? <UserRoundCheck size={14} /> : <Trash2 size={14} />}
+                        <span>{action.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </section>
 
             <section className="detail-section sample-detail-section">
@@ -1880,8 +1936,8 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                   <strong>{detailValue(sampleDetailRound?.trackingNo)}</strong>
                 </div>
                 <div>
-                  <span>更新时间</span>
-                  <strong>{detailSample?.updatedAt ? new Date(detailSample.updatedAt).toLocaleString() : "-"}</strong>
+                  <span>反馈说明</span>
+                  <strong>{detailValue(sampleDetailRound?.feedback)}</strong>
                 </div>
               </div>
             </section>
@@ -1890,13 +1946,13 @@ export function SamplePanel({ customerId }: { customerId: string }) {
               <div className="detail-section sample-detail-section">
                 <div className="sample-detail-section__header">
                   <h4>费用明细</h4>
-                  <span>{detailSample?.fees?.length ? `共 ${detailSample.fees.length} 条` : "暂无费用记录"}</span>
+                  <span>{activeDetailSample?.fees?.length ? `共 ${activeDetailSample.fees.length} 条` : "暂无费用记录"}</span>
                 </div>
-                {detailSample?.fees?.length ? (
+                {activeDetailSample?.fees?.length ? (
                   <div className="detail-list sample-detail-list">
-                    {detailSample.fees.map((fee) => (
+                    {activeDetailSample.fees.map((fee) => (
                       <div className="detail-list-item" key={fee.id}>
-                        <strong>{feeTypeLabel(fee.feeType, t)} · {formatMoney(Number(fee.amount), fee.currency)} · {sampleRoundLabel(detailSample, fee.sampleRoundId)}</strong>
+                        <strong>{feeTypeLabel(fee.feeType, t)} · {formatMoney(Number(fee.amount), fee.currency)} · {sampleRoundLabel(activeDetailSample, fee.sampleRoundId)}</strong>
                         <span>{costNatureLabel(fee.costNature, t)} · {responsibilityLabel(fee.responsibility, t)} · {paymentStatusLabel(fee.paymentStatus, t)} · {new Date(fee.incurredAt).toLocaleDateString(locale)} {fee.note ? `· ${fee.note}` : ""}</span>
                       </div>
                     ))}
@@ -1909,13 +1965,13 @@ export function SamplePanel({ customerId }: { customerId: string }) {
               <div className="detail-section sample-detail-section">
                 <div className="sample-detail-section__header">
                   <h4>客户样品处置记录</h4>
-                  <span>{detailSample?.returnRecords?.length ? `共 ${detailSample.returnRecords.length} 条` : "暂无客户处置记录"}</span>
+                  <span>{activeDetailSample?.returnRecords?.length ? `共 ${activeDetailSample.returnRecords.length} 条` : "暂无客户处置记录"}</span>
                 </div>
-                {detailSample?.returnRecords?.length ? (
+                {activeDetailSample?.returnRecords?.length ? (
                   <div className="detail-list sample-detail-list">
-                    {detailSample.returnRecords.map((record) => (
+                    {activeDetailSample.returnRecords.map((record) => (
                       <div className="detail-list-item" key={record.id}>
-                        <strong>{dispositionLabel(record.dispositionStatus)} · {new Date(record.recordedAt).toLocaleDateString()}</strong>
+                        <strong>{dispositionLabel(record.dispositionStatus)} · {record.sampleRoundId ? sampleRoundLabel(activeDetailSample, record.sampleRoundId) : "未标注轮次"} · {new Date(record.recordedAt).toLocaleDateString()}</strong>
                         <span>{record.receiverName ? `接收人 ${record.receiverName}` : ""}{record.destination ? ` · 去向 ${record.destination}` : ""}{record.note ? ` · ${record.note}` : ""}</span>
                       </div>
                     ))}
@@ -1926,29 +1982,19 @@ export function SamplePanel({ customerId }: { customerId: string }) {
               </div>
             </section>
 
-            <section className="sample-detail-split">
-              <div className="detail-section sample-detail-section">
-                <div className="sample-detail-section__header">
-                  <h4>反馈说明</h4>
-                  <span>客户测试反馈或内部备注</span>
-                </div>
-                <div className="detail-note">{detailValue(sampleDetailRound?.feedback)}</div>
+            <section className="detail-section sample-detail-section">
+              <div className="sample-detail-section__header">
+                <h4>附件</h4>
+                <span>{detailValue(activeDetailSample?.fileAssetIds?.length ?? 0)} 个文件</span>
               </div>
-
-              <div className="detail-section sample-detail-section">
-                <div className="sample-detail-section__header">
-                  <h4>附件</h4>
-                  <span>{detailValue(detailSample?.fileAssetIds?.length ?? 0)} 个文件</span>
-                </div>
-                <FileUpload
-                  entityId={detailSample?.id}
-                  entityType="sample-request"
-                  fileIds={detailSample?.fileAssetIds ?? []}
-                  multiple
-                  onChange={() => {}}
-                  readOnly
-                />
-              </div>
+              <FileUpload
+                entityId={activeDetailSample?.id}
+                entityType="sample-request"
+                fileIds={activeDetailSample?.fileAssetIds ?? []}
+                multiple
+                onChange={() => {}}
+                readOnly
+              />
             </section>
           </div>
         ) : (
@@ -1956,7 +2002,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
             <section className="sample-detail-summary quote-detail-summary">
               <div>
                 <p className="detail-eyebrow">关联报价</p>
-                <h3>{detailValue(detailQuote?.quoteNo ?? detailSample?.quote?.quoteNo)}</h3>
+                <h3>{detailValue(detailQuote?.quoteNo ?? activeDetailSample?.quote?.quoteNo)}</h3>
                 <p>{detailQuoteSummary}</p>
               </div>
               <div className="sample-detail-summary__actions">
@@ -2146,7 +2192,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
       <Dialog
         v2
         className="crm-action-dialog sample-dialog"
-        title={`${selectedStatusAction?.label ?? "样品状态"} · ${currentStatusSample?.productSummary ?? ""}`}
+        title={`${selectedStatusAction?.label ?? "样品状态"}${statusActionRound ? ` · R${statusActionRound.roundNo}` : ""} · ${currentStatusSample?.productSummary ?? ""}`}
         visible={statusOpen}
         onClose={() => {
           setStatusOpen(false);
@@ -2174,7 +2220,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
         <div className="detail-window">
           <section className="detail-section">
             <h4>当前状态</h4>
-            <div className="detail-note">{currentStatusSample ? statusLabel(currentStatus) : "-"}</div>
+            <div className="detail-note">{statusActionRound ? `R${statusActionRound.roundNo} · ${statusLabel(currentStatus)}` : currentStatusSample ? statusLabel(currentStatus) : "-"}</div>
           </section>
           {currentStatus === "PREPARING" && statusTarget === "RETAINED" ? (
             <section className="detail-section">
@@ -2474,7 +2520,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
           <div className="history-timeline" aria-label="样品历史时间轴">
             {currentHistory.length ? (
               currentHistory.map((item) => (
-                <div className="history-timeline__item" key={item.id}>
+                <div className={`history-timeline__item ${historyHasMultipleRounds ? historyRoundTone(historySample, item) : ""}`} key={item.id}>
                   <div className="history-timeline__rail" aria-hidden="true">
                     <span className="history-timeline__dot">
                       <History size={14} />
@@ -2482,7 +2528,10 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                   </div>
                   <div className="history-timeline__content">
                     <div className="history-timeline__header">
-                      <strong>{historyActionLabel(item)}</strong>
+                      <div className="history-timeline__heading">
+                        {historyHasMultipleRounds ? <span className="history-timeline__round">{historyRoundLabel(historySample, item)}</span> : null}
+                        <strong>{historyActionLabel(item)}</strong>
+                      </div>
                       <time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleString()}</time>
                     </div>
                     <span className="history-timeline__meta">{historyActorLabel(item)}</span>

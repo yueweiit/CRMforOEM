@@ -271,6 +271,7 @@ export type SampleRound = {
 };
 export type SampleHistoryItem = {
   id: string;
+  sampleRoundId?: string | null;
   action: string;
   before?: Record<string, unknown> | null;
   after?: Record<string, unknown> | null;

@@ -43,7 +43,9 @@ async function main() {
 
     const projected = (await service.list(user, customer.id)).find((item) => item.id === requestId);
     assert.equal(projected?.currentAction, "第 2 轮重新打样中");
+    assert.equal(projected?.currentRound?.id, r2Id);
     assert.equal(projected?.rounds.find((round) => round.id === r1.id)?.dispositionStatus, "RETURNED");
+    assert.equal(projected?.returnRecords.find((record) => record.dispositionStatus === "RETURNED")?.sampleRoundId, r1.id);
     assert.equal(projected?.costSummary.byCurrency[0].resampleCost, 80);
     assert.equal(projected?.costSummary.byCurrency[0].firstRoundCost, 20);
 
