@@ -569,6 +569,15 @@ async function main() {
   }
 
   {
+    const { service, calls } = buildService({ status: "DRAFT", approvalStatus: "APPROVED" });
+    await assert.rejects(
+      () => service.updateQuote(user, "quote-1", { notes: "审批后修改" }),
+      /Approved quote is immutable; create a revision instead/
+    );
+    assert.equal(calls.quoteUpdate, undefined);
+  }
+
+  {
     const { service, calls } = buildService({ status: "SENT", approvalStatus: "APPROVED" });
     await service.acceptQuote(user, "quote-1", {});
     assert.equal(calls.quoteUpdate?.status, "ACCEPTED");

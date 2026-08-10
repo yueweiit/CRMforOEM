@@ -993,7 +993,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
     setReviewComment("");
   };
 
-  const canEditQuote = (item: Quote) => item.status !== "VOIDED" && item.status !== "CUSTOMER_REJECTED";
+  const canEditQuote = (item: Quote) => item.approvalStatus !== "APPROVED" && item.status !== "VOIDED" && item.status !== "CUSTOMER_REJECTED";
   const statusQuoteId = statusQuote?.id ?? "";
   const createSummary = calculateQuotePricing(form);
   const editSummary = calculateQuotePricing(editForm);

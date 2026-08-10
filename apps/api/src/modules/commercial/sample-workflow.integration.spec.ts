@@ -21,6 +21,10 @@ async function main() {
     assert.equal(r1.status, "DRAFT");
     await service.submitApproval(user, r1.id);
     await service.approve(user, r1.id, { comment: "通过" });
+    await assert.rejects(
+      () => service.editCurrentRound(user, requestId, { productSummary: "审批后不应修改" }),
+      /审批通过后不可编辑/
+    );
     await assert.rejects(() => service.ship(user, r1.id, { carrier: "DHL", trackingNo: "TEST-R1", shippedQuantity: 2 }), BadRequestException);
     await service.retain(user, r1.id, { producedQuantity: 3, retainedQuantity: 1, retainedLocation: "A-01" });
     await service.ship(user, r1.id, { carrier: "DHL", trackingNo: "TEST-R1", shippedQuantity: 2 });

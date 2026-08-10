@@ -384,7 +384,7 @@ export class CommercialService {
     if (dto.status !== undefined) {
       throw new BadRequestException("Quote lifecycle status must be changed through a dedicated command");
     }
-    this.assertQuoteEditable(quote.status);
+    this.assertQuoteEditable(quote.status, quote.approvalStatus);
     const actorName = await this.resolveActorName(user);
     const mergedPricing = calculateQuotePricing({
       calcMode: (dto.calcMode as "formula" | "direct" | undefined) ?? (quote.calcMode as "formula" | "direct" | undefined),
@@ -710,7 +710,10 @@ export class CommercialService {
     return actor?.name ?? actor?.email ?? user.name ?? user.email ?? user.id;
   }
 
-  private assertQuoteEditable(status: string) {
+  private assertQuoteEditable(status: string, approvalStatus: string) {
+    if (approvalStatus === "APPROVED") {
+      throw new BadRequestException("Approved quote is immutable; create a revision instead");
+    }
     if (status === "CUSTOMER_REJECTED") {
       throw new BadRequestException("Customer-rejected quote is immutable; create a revision instead");
     }

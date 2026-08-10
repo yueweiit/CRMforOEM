@@ -92,6 +92,11 @@ Prisma 中已有完整的报价与样品相关表和枚举定义，以下为详�
 | `APPROVED` | 已通过 |
 | `REJECTED` | 已驳回 |
 
+**编辑锁定规则**
+
+- 报价：`approvalStatus=APPROVED` 的报价不可编辑；`status=CUSTOMER_REJECTED` 或 `VOIDED` 的报价也不可编辑，需通过专用流转或创建修订版处理。
+- 样品：当前轮次只有 `DRAFT`（草稿）和 `APPROVAL_REJECTED`（审批驳回）可编辑；`PENDING_APPROVAL`、`PREPARING`、`RETAINED`、`SHIPPED`、`DELIVERED`、`FEEDBACK_RECEIVED`、`COMPLETED`、`VOIDED` 均不可编辑。审批通过后的物流、反馈、处置仍须使用对应的状态命令。
+
 **报价历史动作 `QuoteHistoryAction`**
 
 | 值 | 说明 |

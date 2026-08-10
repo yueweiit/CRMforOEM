@@ -36,6 +36,8 @@ const requestInclude = Prisma.validator<Prisma.SampleRequestInclude>()({
   returnRecords: { orderBy: { recordedAt: "desc" } }
 });
 
+const EDITABLE_SAMPLE_ROUND_STATUSES = ["DRAFT", "APPROVAL_REJECTED"] as const;
+
 type SampleRequestRecord = Prisma.SampleRequestGetPayload<{ include: typeof requestInclude }>;
 type HistoryAction = "CREATED" | "UPDATED" | "STATUS_CHANGED" | "FEE_ADDED" | "FEE_UPDATED" | "FEE_DELETED" | "QUOTE_LINKED" | "RETAINED" | "SHIPPED" | "DELIVERED" | "FEEDBACK_RECORDED" | "RESAMPLE_CREATED" | "CUSTOMER_KEPT" | "RETURNED" | "VOIDED" | "CLOSED";
 
@@ -109,7 +111,9 @@ export class SampleWorkflowService {
 
   async editRound(user: RequestUser, roundId: string, dto: EditSampleRoundDto) {
     const round = await this.getRound(user, roundId);
-    if (!["DRAFT", "APPROVAL_REJECTED"].includes(round.status)) throw new BadRequestException("只有草稿或审批驳回轮次可以编辑");
+    if (!(EDITABLE_SAMPLE_ROUND_STATUSES as readonly string[]).includes(round.status)) {
+      throw new BadRequestException("只有草稿或审批驳回轮次可以编辑；审批通过后不可编辑");
+    }
     const request = await this.getRequest(user, round.sampleRequestId);
     const quote = dto.quoteId !== undefined ? (dto.quoteId ? await this.ensureQuote(user, dto.quoteId, request.customerId) : null) : undefined;
     const actorName = await this.actorName(user);
