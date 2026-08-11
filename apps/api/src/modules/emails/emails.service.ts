@@ -12,6 +12,7 @@ import type { UpdateEmailAccountDto } from "./dto/update-email-account.dto";
 import type { UpdateEmailDraftDto } from "./dto/update-email-draft.dto";
 import type { ResolveQuoteReplyAssessmentDto } from "./dto/resolve-quote-reply-assessment.dto";
 import { QuoteReplyAssessmentService } from "./inbound/quote-reply-assessment.service";
+import { EmailDraftAttachmentService } from "./drafts/email-draft-attachment.service";
 
 @Injectable()
 export class EmailsService {
@@ -21,7 +22,8 @@ export class EmailsService {
     private readonly draftService: EmailDraftService,
     private readonly threads: EmailThreadService,
     private readonly manualSync: ImapManualSyncService,
-    private readonly quoteReplyAssessments: QuoteReplyAssessmentService
+    private readonly quoteReplyAssessments: QuoteReplyAssessmentService,
+    private readonly draftAttachments: EmailDraftAttachmentService
   ) {}
 
   // ── Account management ──
@@ -44,6 +46,12 @@ export class EmailsService {
   submitReview(user: RequestUser, id: string) { return this.draftService.submitReview(user, id); }
   approve(user: RequestUser, id: string, dto: ApproveEmailDraftDto) { return this.draftService.approve(user, id, dto); }
   sendApprovedDraft(user: RequestUser, id: string) { return this.draftService.sendApprovedDraft(user, id); }
+  attachDraftFile(user: RequestUser, id: string, file: Express.Multer.File, fileName?: string) {
+    return this.draftAttachments.attach(user, id, file, fileName);
+  }
+  removeDraftFile(user: RequestUser, id: string, attachmentId: string) {
+    return this.draftAttachments.remove(user, id, attachmentId);
+  }
 
   // ── Thread queries ──
 

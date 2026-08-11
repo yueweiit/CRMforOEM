@@ -12,6 +12,7 @@ import { EmailComplianceService } from "../accounts/email-compliance.service";
 import { SmtpService } from "../generation/smtp.service";
 import type { ApproveEmailDraftDto } from "../dto/approve-email-draft.dto";
 import { getDraftPurpose } from "../helpers/email-helpers";
+import { EmailDraftAttachmentService, PreparedEmailAttachment } from "./email-draft-attachment.service";
 
 @Injectable()
 export class EmailApprovalService {
@@ -24,7 +25,8 @@ export class EmailApprovalService {
     private readonly smtp: SmtpService,
     private readonly customerStageService: CustomerStageService,
     private readonly followUps: FollowUpsService,
-    private readonly quoteWorkflow: QuoteWorkflowService
+    private readonly quoteWorkflow: QuoteWorkflowService,
+    private readonly draftAttachments: EmailDraftAttachmentService
   ) {}
 
   async approve(user: RequestUser, draft: { id: string; status: string; subject: string; body: string; aiGenerationRunId?: string | null }, dto: ApproveEmailDraftDto) {
@@ -56,26 +58,41 @@ export class EmailApprovalService {
       bccEmails: string[];
       subject: string;
       body: string;
+      purpose?: string | null;
       emailAccountId?: string | null;
       aiGenerationRun?: { rawInput?: unknown } | null;
     },
     account: { id: string; email: string; name?: string | null; hourlySendLimit: number; dailySendLimit: number; isActive: boolean; smtpHost: string; smtpPort: number; smtpSecure: boolean; smtpUsername: string; smtpPasswordEncrypted: string }
   ) {
     await this.compliance.assertCanSend(user, draft, account);
+    const attachments = await this.draftAttachments.prepareForSend(user, draft.id);
     if (draft.quoteId) {
-      return this.sendQuotation(user, draft, account);
+      return this.sendQuotation(user, draft, account, attachments);
     }
 
-    const sendResult = await this.smtp.send(account, draft);
+    const sendResult = await this.smtp.send(account, draft, { attachments });
     await this.compliance.consumeQuota(account);
 
     const thread = await this.prisma.emailThread.create({ data: { customerId: draft.customerId, subject: draft.subject, lastMessageAt: new Date() } });
     const message = await this.prisma.emailMessage.create({
-      data: { threadId: thread.id, emailAccountId: account.id, direction: "OUTBOUND", status: "SENT", messageId: sendResult.messageId, fromEmail: account.email, toEmails: [draft.toEmail], ccEmails: draft.ccEmails, subject: draft.subject, bodyText: draft.body, sentAt: new Date() }
+      data: {
+        threadId: thread.id,
+        emailAccountId: account.id,
+        direction: "OUTBOUND",
+        status: "SENT",
+        messageId: sendResult.messageId,
+        fromEmail: account.email,
+        toEmails: [draft.toEmail],
+        ccEmails: draft.ccEmails,
+        subject: draft.subject,
+        bodyText: draft.body,
+        sentAt: new Date(),
+        attachments: { create: this.attachmentSnapshots(attachments) }
+      }
     });
     await this.prisma.emailDraft.update({ where: { id: draft.id }, data: { status: EmailDraftStatus.Sent as never, sentMessageId: message.id, emailAccountId: account.id, fromEmailSnapshot: account.email, fromNameSnapshot: account.name } });
 
-    const purpose = normalizeEmailDraftPurpose((draft as { purpose?: string | null }).purpose ?? getDraftPurpose(draft.aiGenerationRun?.rawInput));
+    const purpose = normalizeEmailDraftPurpose(draft.purpose ?? getDraftPurpose(draft.aiGenerationRun?.rawInput));
     await this.advanceStageByPurpose(user, draft.customerId, purpose);
     await this.followUps.handleEmailSent({ customerId: draft.customerId, actorUserId: user.id, purpose });
 
@@ -95,9 +112,11 @@ export class EmailApprovalService {
       bccEmails: string[];
       subject: string;
       body: string;
+      purpose?: string | null;
       aiGenerationRun?: { rawInput?: unknown } | null;
     },
-    account: { id: string; email: string; name?: string | null; hourlySendLimit: number; dailySendLimit: number; isActive: boolean; smtpHost: string; smtpPort: number; smtpSecure: boolean; smtpUsername: string; smtpPasswordEncrypted: string }
+    account: { id: string; email: string; name?: string | null; hourlySendLimit: number; dailySendLimit: number; isActive: boolean; smtpHost: string; smtpPort: number; smtpSecure: boolean; smtpUsername: string; smtpPasswordEncrypted: string },
+    attachments: PreparedEmailAttachment[]
   ) {
     if (!draft.quoteId || !draft.quoteUpdatedAtSnapshot) {
       throw new BadRequestException("Quotation draft is missing its quote snapshot");
@@ -138,7 +157,8 @@ export class EmailApprovalService {
             toEmails: [draft.toEmail],
             ccEmails: draft.ccEmails,
             subject: draft.subject,
-            bodyText: draft.body
+            bodyText: draft.body,
+            attachments: { create: this.attachmentSnapshots(attachments) }
           }
         });
         await tx.quoteEmailDispatch.create({
@@ -168,7 +188,7 @@ export class EmailApprovalService {
 
     let smtpMessageId: string;
     try {
-      const result = await this.smtp.send(account, draft, { messageId: providerMessageId });
+      const result = await this.smtp.send(account, draft, { messageId: providerMessageId, attachments });
       smtpMessageId = result.messageId;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "SMTP send failed";
@@ -249,6 +269,15 @@ export class EmailApprovalService {
   private buildProviderMessageId(dispatchId: string, senderEmail: string) {
     const domain = senderEmail.split("@")[1]?.replace(/[^a-zA-Z0-9.-]/g, "") || "localhost";
     return `<quote-${dispatchId}@${domain}>`;
+  }
+
+  private attachmentSnapshots(attachments: PreparedEmailAttachment[]) {
+    return attachments.map((attachment) => ({
+      fileAssetId: attachment.fileAssetId,
+      filename: attachment.filename,
+      mimeType: attachment.contentType,
+      sizeBytes: attachment.sizeBytes
+    }));
   }
 
   private async runPostSendEffects(

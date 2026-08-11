@@ -1,4 +1,4 @@
-import { apiGet, apiPatch, apiPost } from "./http";
+import { apiDelete, apiGet, apiPatch, apiPost, apiUpload } from "./http";
 
 export function getEmailAccounts<T = unknown>() {
   return apiGet<T>("/email-accounts");
@@ -46,6 +46,21 @@ export function approveEmailDraft<T = unknown>(draftId: string) {
 
 export function sendEmailDraft<T = unknown>(draftId: string, options?: { toast?: boolean }) {
   return apiPost<T>(`/email-drafts/${draftId}/send`, undefined, options);
+}
+
+export function uploadEmailDraftAttachment<T = unknown>(draftId: string, file: File, options?: { toast?: boolean }) {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("fileName", file.name);
+  return apiUpload<T>(`/email-drafts/${draftId}/attachments`, formData, options);
+}
+
+export function deleteEmailDraftAttachment<T = unknown>(draftId: string, attachmentId: string, options?: { toast?: boolean }) {
+  return apiDelete<T>(`/email-drafts/${draftId}/attachments/${attachmentId}`, options);
+}
+
+export function getEmailAttachmentUrl(fileAssetId: string) {
+  return apiGet<{ id: string; url: string; originalName: string; mimeType?: string | null }>(`/upload/${fileAssetId}/url`);
 }
 
 export function getEmailThreads<T = unknown>() {

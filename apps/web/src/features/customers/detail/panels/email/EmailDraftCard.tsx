@@ -1,8 +1,17 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { MailPlus } from "lucide-react";
+import { Download, MailPlus, Paperclip, Upload } from "lucide-react";
 import { emailDraftPurposeLabel, emailDraftStatusLabel } from "@oem-crm/shared";
-import { approveEmailDraft, getEmailDraft, sendEmailDraft, updateEmailDraft } from "../../../../../api/email";
+import {
+  approveEmailDraft,
+  deleteEmailDraftAttachment,
+  getEmailAttachmentUrl,
+  getEmailDraft,
+  sendEmailDraft,
+  updateEmailDraft,
+  uploadEmailDraftAttachment
+} from "../../../../../api/email";
+import { DeleteIconButton } from "../../../../../components/DeleteIconButton";
 import { showClientToast } from "../../../../../components/Toast";
 import { useI18n } from "../../../../../i18n";
 import { formatDraftRecipient, formatDraftSender } from "../../../../../shared/utils/email-format";
@@ -23,6 +32,8 @@ export function EmailDraftCard({
   const { locale, t } = useI18n();
   const [expanded, setExpanded] = useState(false);
   const [editDraft, setEditDraft] = useState<Record<string, string>>({});
+  const [attachmentBusy, setAttachmentBusy] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const detailQuery = useQuery({
     queryKey: ["email-draft", draft.id],
     queryFn: () => getEmailDraft<EmailDraft>(draft.id),
@@ -80,6 +91,65 @@ export function EmailDraftCard({
     }
   });
 
+  async function refreshDraft() {
+    await queryClient.invalidateQueries({ queryKey: ["email-draft", draft.id] });
+    invalidateEmailData(queryClient, customerId, onChanged);
+  }
+
+  async function uploadAttachments(files: FileList | null) {
+    if (!files?.length) return;
+    setAttachmentBusy(true);
+    try {
+      for (const file of Array.from(files)) {
+        await uploadEmailDraftAttachment(draft.id, file, { toast: false });
+      }
+      await refreshDraft();
+      showClientToast({
+        type: "success",
+        title: t("emailCenter.attachmentUploadSuccess"),
+        message: t("emailCenter.attachmentReviewRequired")
+      });
+    } catch (error) {
+      showClientToast({
+        type: "error",
+        title: t("emailCenter.attachmentUploadFailed"),
+        message: error instanceof Error ? error.message : t("emailCenter.attachmentUploadFailed")
+      });
+      await refreshDraft();
+    } finally {
+      setAttachmentBusy(false);
+    }
+  }
+
+  async function removeAttachment(attachmentId: string) {
+    setAttachmentBusy(true);
+    try {
+      await deleteEmailDraftAttachment(draft.id, attachmentId, { toast: false });
+      await refreshDraft();
+    } catch (error) {
+      showClientToast({
+        type: "error",
+        title: t("emailCenter.attachmentDeleteFailed"),
+        message: error instanceof Error ? error.message : t("emailCenter.attachmentDeleteFailed")
+      });
+    } finally {
+      setAttachmentBusy(false);
+    }
+  }
+
+  async function openAttachment(fileAssetId: string) {
+    try {
+      const file = await getEmailAttachmentUrl(fileAssetId);
+      window.open(file.url, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      showClientToast({
+        type: "error",
+        title: t("emailCenter.attachmentOpenFailed"),
+        message: error instanceof Error ? error.message : t("emailCenter.attachmentOpenFailed")
+      });
+    }
+  }
+
   return (
     <article className="draft-editor email-draft-card">
       <button className="email-draft-summary" type="button" onClick={() => setExpanded((current) => !current)}>
@@ -121,6 +191,73 @@ export function EmailDraftCard({
             ) : (
               <div className="loading-state">{t("emailCenter.generatingDraftBody")}</div>
             )}
+            <section className="email-draft-attachments" aria-label={t("emailCenter.attachments")}>
+              <div className="email-draft-attachments-header">
+                <div>
+                  <Paperclip size={16} />
+                  <strong>{t("emailCenter.attachments")}</strong>
+                  <span>{editableDraft.attachments?.length ?? 0}/5</span>
+                </div>
+                {editableDraft.status !== "SENT" ? (
+                  <>
+                    <button
+                      className="secondary-button email-attachment-upload-button"
+                      disabled={attachmentBusy || (editableDraft.attachments?.length ?? 0) >= 5}
+                      onClick={() => fileInputRef.current?.click()}
+                      type="button"
+                    >
+                      <Upload size={14} />
+                      {attachmentBusy ? t("common.processing") : t("emailCenter.uploadAttachments")}
+                    </button>
+                    <input
+                      ref={fileInputRef}
+                      accept=".csv,.doc,.docx,.gif,.jpeg,.jpg,.pdf,.png,.ppt,.pptx,.txt,.webp,.xls,.xlsx,.zip"
+                      hidden
+                      multiple
+                      onChange={(event) => {
+                        void uploadAttachments(event.currentTarget.files);
+                        event.currentTarget.value = "";
+                      }}
+                      type="file"
+                    />
+                  </>
+                ) : null}
+              </div>
+              {editableDraft.attachments?.length ? (
+                <div className="email-attachment-list">
+                  {editableDraft.attachments.map((attachment) => (
+                    <div className="email-attachment-row" key={attachment.id}>
+                      <Paperclip aria-hidden="true" size={15} />
+                      <div>
+                        <strong title={attachment.filename}>{attachment.filename}</strong>
+                        <span>{formatAttachmentSize(attachment.sizeBytes)}</span>
+                      </div>
+                      <button
+                        aria-label={t("emailCenter.openAttachment")}
+                        className="secondary-button icon-button"
+                        onClick={() => void openAttachment(attachment.fileAssetId)}
+                        title={t("emailCenter.openAttachment")}
+                        type="button"
+                      >
+                        <Download size={14} />
+                      </button>
+                      {editableDraft.status !== "SENT" ? (
+                        <DeleteIconButton
+                          disabled={attachmentBusy}
+                          label={t("emailCenter.deleteAttachment")}
+                          onClick={() => void removeAttachment(attachment.id)}
+                        />
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <span className="email-attachment-empty">{t("emailCenter.noAttachments")}</span>
+              )}
+              {editableDraft.status !== "SENT" ? (
+                <span className="email-attachment-limit">{t("emailCenter.attachmentLimitHint")}</span>
+              ) : null}
+            </section>
             <div className="toolbar">
               <button className="secondary-button" disabled={update.isPending || !editableDraft.body || editableDraft.status === "SENT"} onClick={() => update.mutate()}>
                 {update.isPending ? t("common.saving") : t("common.saveChanges")}
@@ -142,4 +279,11 @@ export function EmailDraftCard({
       ) : null}
     </article>
   );
+}
+
+function formatAttachmentSize(sizeBytes?: number | null) {
+  if (sizeBytes === undefined || sizeBytes === null) return "-";
+  if (sizeBytes < 1024) return `${sizeBytes} B`;
+  if (sizeBytes < 1024 * 1024) return `${(sizeBytes / 1024).toFixed(1)} KB`;
+  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
 }

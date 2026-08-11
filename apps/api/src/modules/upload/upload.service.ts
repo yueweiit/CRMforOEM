@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, OnModuleInit } from "@nestjs/common";
+import { ConflictException, Injectable, Logger, NotFoundException, OnModuleInit, PayloadTooLargeException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { CreateBucketCommand, DeleteObjectCommand, GetObjectCommand, HeadBucketCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
@@ -102,12 +102,43 @@ export class UploadService implements OnModuleInit {
     return { id: record.id, url, originalName: repairMojibakeFileName(record.originalName), mimeType: record.mimeType };
   }
 
+  async readFile(id: string, organizationId: string, maxBytes: number) {
+    const record = await this.prisma.fileAsset.findFirst({
+      where: { id, organizationId }
+    });
+    if (!record) {
+      throw new NotFoundException("File not found");
+    }
+    if (record.sizeBytes !== null && record.sizeBytes > maxBytes) {
+      throw new PayloadTooLargeException("File exceeds the allowed email attachment size");
+    }
+
+    const result = await this.s3.send(
+      new GetObjectCommand({ Bucket: record.bucket ?? this.bucket, Key: record.objectKey })
+    );
+    if (!result.Body) {
+      throw new NotFoundException("Stored file content not found");
+    }
+    const content = Buffer.from(await result.Body.transformToByteArray());
+    if (content.byteLength > maxBytes) {
+      throw new PayloadTooLargeException("File exceeds the allowed email attachment size");
+    }
+    return { record, content };
+  }
+
   async deleteFile(id: string, organizationId: string) {
     const record = await this.prisma.fileAsset.findFirst({
       where: { id, organizationId }
     });
     if (!record) {
       throw new NotFoundException("File not found");
+    }
+    const [draftReference, messageReference] = await Promise.all([
+      this.prisma.emailDraftAttachment.findFirst({ where: { fileAssetId: id }, select: { id: true } }),
+      this.prisma.emailAttachment.findFirst({ where: { fileAssetId: id }, select: { id: true } })
+    ]);
+    if (draftReference || messageReference) {
+      throw new ConflictException("File is referenced by an email and cannot be deleted");
     }
 
     await this.s3.send(

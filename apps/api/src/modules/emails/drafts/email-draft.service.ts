@@ -71,6 +71,7 @@ export class EmailDraftService {
       where: { id, customer: buildCustomerDataScopeWhere(user) },
       include: {
         emailAccount: { select: { id: true, name: true, email: true, scope: true } },
+        attachments: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] },
         aiGenerationRun: { include: { versions: { orderBy: { createdAt: "asc" } } } }
       }
     });

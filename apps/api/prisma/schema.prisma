@@ -1015,12 +1015,33 @@ model EmailDraft {
   quote           Quote?           @relation(fields: [quoteId], references: [id], onDelete: SetNull)
   emailAccount    EmailAccount?    @relation(fields: [emailAccountId], references: [id])
   aiGenerationRun AiGenerationRun? @relation(fields: [aiGenerationRunId], references: [id])
+  attachments     EmailDraftAttachment[]
   quoteEmailDispatch QuoteEmailDispatch?
 
   @@index([customerId, status])
   @@index([customerId, purpose])
   @@index([quoteId])
   @@map("email_drafts")
+}
+
+model EmailDraftAttachment {
+  id           String   @id @default(cuid())
+  emailDraftId String
+  fileAssetId  String
+  filename     String
+  mimeType     String?
+  sizeBytes    Int?
+  sortOrder    Int      @default(0)
+  createdById  String?
+  createdAt    DateTime @default(now())
+
+  emailDraft EmailDraft @relation(fields: [emailDraftId], references: [id], onDelete: Cascade)
+  fileAsset  FileAsset  @relation(fields: [fileAssetId], references: [id], onDelete: Restrict)
+
+  @@unique([emailDraftId, fileAssetId])
+  @@index([emailDraftId, sortOrder])
+  @@index([fileAssetId])
+  @@map("email_draft_attachments")
 }
 
 model EmailMessage {
@@ -1069,7 +1090,10 @@ model EmailAttachment {
   createdAt      DateTime @default(now())
 
   emailMessage EmailMessage @relation(fields: [emailMessageId], references: [id], onDelete: Cascade)
+  fileAsset    FileAsset    @relation(fields: [fileAssetId], references: [id], onDelete: Restrict)
 
+  @@unique([emailMessageId, fileAssetId])
+  @@index([fileAssetId])
   @@map("email_attachments")
 }
 
@@ -1426,6 +1450,9 @@ model FileAsset {
   entityId       String?
   createdById    String?
   createdAt      DateTime @default(now())
+
+  emailDraftAttachments EmailDraftAttachment[]
+  emailAttachments      EmailAttachment[]
 
   @@index([organizationId, entityType, entityId])
   @@map("file_assets")

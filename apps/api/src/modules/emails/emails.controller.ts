@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UploadedFile, UseInterceptors } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import { CurrentUser, RequestUser } from "../../common/auth/current-user.decorator";
 import { RequireLiveSession } from "../../common/auth/live-session.decorator";
 import { RequireAnyPermissions } from "../../common/auth/permissions.decorator";
@@ -79,6 +80,30 @@ export class EmailsController {
   @Patch("email-drafts/:id")
   updateDraft(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: UpdateEmailDraftDto) {
     return this.emailsService.updateDraft(user, id, dto);
+  }
+
+  @Post("email-drafts/:id/attachments")
+  @RequireLiveSession()
+  @RequireAnyPermissions("emails.generate", "emails.send", "settings.manage")
+  @UseInterceptors(FileInterceptor("file", { limits: { fileSize: 10 * 1024 * 1024 } }))
+  attachDraftFile(
+    @CurrentUser() user: RequestUser,
+    @Param("id") id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Body("fileName") fileName?: string
+  ) {
+    return this.emailsService.attachDraftFile(user, id, file, fileName);
+  }
+
+  @Delete("email-drafts/:id/attachments/:attachmentId")
+  @RequireLiveSession()
+  @RequireAnyPermissions("emails.generate", "emails.send", "settings.manage")
+  removeDraftFile(
+    @CurrentUser() user: RequestUser,
+    @Param("id") id: string,
+    @Param("attachmentId") attachmentId: string
+  ) {
+    return this.emailsService.removeDraftFile(user, id, attachmentId);
   }
 
   @Post("email-drafts/:id/submit-review")

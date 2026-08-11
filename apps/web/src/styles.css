@@ -2047,6 +2047,93 @@ td small {
   max-width: calc(100vw - 48px);
 }
 
+.email-draft-attachments {
+  display: grid;
+  gap: 8px;
+  padding-block: 10px;
+  border-block: 1px solid #e5e9e2;
+}
+
+.email-draft-attachments-header,
+.email-draft-attachments-header > div,
+.email-attachment-row {
+  display: flex;
+  align-items: center;
+}
+
+.email-draft-attachments-header {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.email-draft-attachments-header > div {
+  min-width: 0;
+  gap: 7px;
+}
+
+.email-draft-attachments-header span,
+.email-attachment-row span,
+.email-attachment-empty,
+.email-attachment-limit {
+  color: #718096;
+  font-size: 12px;
+}
+
+.email-attachment-upload-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.email-attachment-list {
+  display: grid;
+  gap: 6px;
+}
+
+.email-attachment-row {
+  min-width: 0;
+  gap: 8px;
+  padding: 7px 8px;
+  border: 1px solid #e5e9e2;
+  border-radius: 6px;
+  background: #f8faf7;
+}
+
+.email-attachment-row > div {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 2px;
+}
+
+.email-attachment-row strong {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+  .email-draft-detail-window {
+    overflow-x: hidden;
+  }
+
+  .email-draft-detail-window .toolbar {
+    flex-wrap: wrap;
+  }
+
+  .email-draft-attachments-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .email-attachment-upload-button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
 .quote-detail-dialog.next-dialog,
 .sample-edit-dialog.next-dialog,
 .quote-edit-dialog.next-dialog {

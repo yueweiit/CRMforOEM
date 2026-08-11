@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { promises as dns } from "node:dns";
 import * as nodemailer from "nodemailer";
 import { EmailSecretService } from "../accounts/email-secret.service";
+import type { PreparedEmailAttachment } from "../drafts/email-draft-attachment.service";
 
 @Injectable()
 export class SmtpService {
@@ -15,7 +16,7 @@ export class SmtpService {
   async send(
     account: SmtpAccount,
     draft: { subject: string; body: string; toEmail: string; ccEmails: string[]; bccEmails: string[] },
-    options: { messageId?: string } = {}
+    options: { messageId?: string; attachments?: PreparedEmailAttachment[] } = {}
   ) {
     const transport = await this.createTransport(account);
     const result = await transport.sendMail({
@@ -25,6 +26,11 @@ export class SmtpService {
       bcc: draft.bccEmails,
       subject: draft.subject,
       text: draft.body,
+      attachments: options.attachments?.map((attachment) => ({
+        filename: attachment.filename,
+        content: attachment.content,
+        contentType: attachment.contentType
+      })),
       ...(options.messageId ? { messageId: options.messageId } : {})
     });
     return { messageId: result.messageId };

@@ -48,6 +48,8 @@ function buildHarness(options: { smtpFails?: boolean } = {}) {
   let messageStatus = "";
   let dispatch: Record<string, any> | null = null;
   let smtpCalls = 0;
+  let sentAttachments: Array<{ filename: string; contentType?: string }> = [];
+  let archivedAttachments: Array<Record<string, unknown>> = [];
   const histories: Array<Record<string, unknown>> = [];
   const quote = {
     id: "quote-1",
@@ -77,6 +79,7 @@ function buildHarness(options: { smtpFails?: boolean } = {}) {
     emailMessage: {
       create: async ({ data }: any) => {
         messageStatus = data.status;
+        archivedAttachments = data.attachments?.create ?? [];
         return { id: "message-1", ...data };
       },
       update: async ({ data }: any) => {
@@ -111,12 +114,22 @@ function buildHarness(options: { smtpFails?: boolean } = {}) {
     consumeQuota: async () => undefined
   };
   const smtp = {
-    send: async (_account: unknown, _draft: unknown, sendOptions: { messageId?: string }) => {
+    send: async (_account: unknown, _draft: unknown, sendOptions: { messageId?: string; attachments?: Array<{ filename: string; contentType?: string }> }) => {
       smtpCalls++;
-      assert.match(sendOptions.messageId ?? "", /^<quote-.+@example\.com>$/);
+      if (sendOptions.messageId) assert.match(sendOptions.messageId, /^<quote-.+@example\.com>$/);
+      sentAttachments = sendOptions.attachments ?? [];
       if (options.smtpFails) throw new Error("SMTP unavailable");
       return { messageId: sendOptions.messageId! };
     }
+  };
+  const draftAttachments = {
+    prepareForSend: async () => [{
+      fileAssetId: "file-1",
+      filename: "specification.pdf",
+      contentType: "application/pdf",
+      sizeBytes: 4,
+      content: Buffer.from("test")
+    }]
   };
   const service = new EmailApprovalService(
     prisma as never,
@@ -125,12 +138,13 @@ function buildHarness(options: { smtpFails?: boolean } = {}) {
     smtp as never,
     { advanceCustomerStage: async () => undefined } as never,
     { handleEmailSent: async () => undefined } as never,
-    new QuoteWorkflowService()
+    new QuoteWorkflowService(),
+    draftAttachments as never
   );
 
   return {
     service,
-    state: () => ({ quoteStatus, draftStatus, messageStatus, dispatch, smtpCalls, histories })
+    state: () => ({ quoteStatus, draftStatus, messageStatus, dispatch, smtpCalls, histories, sentAttachments, archivedAttachments })
   };
 }
 
@@ -143,6 +157,8 @@ async function main() {
   assert.equal(success.state().messageStatus, "SENT");
   assert.equal(success.state().dispatch?.status, "SENT");
   assert.equal(success.state().histories[0]?.action, "SENT");
+  assert.equal(success.state().sentAttachments[0]?.filename, "specification.pdf");
+  assert.equal(success.state().archivedAttachments[0]?.fileAssetId, "file-1");
 
   const repeated = await success.service.send(user, draft, account) as { alreadySent?: boolean };
   assert.equal(repeated.alreadySent, true);
@@ -154,6 +170,11 @@ async function main() {
   assert.equal(failed.state().draftStatus, "APPROVED");
   assert.equal(failed.state().messageStatus, "FAILED");
   assert.equal(failed.state().dispatch?.status, "FAILED");
+
+  const ordinary = buildHarness();
+  await ordinary.service.send(user, { ...draft, quoteId: null, quoteUpdatedAtSnapshot: null, purpose: "FIRST_OUTREACH" }, account);
+  assert.equal(ordinary.state().messageStatus, "SENT");
+  assert.equal(ordinary.state().archivedAttachments[0]?.filename, "specification.pdf");
 
   console.log("email-approval.service.spec.ts OK");
 }

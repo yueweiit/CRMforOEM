@@ -5,10 +5,12 @@ import { CustomersModule } from "../customers/customers.module";
 import { FollowUpsModule } from "../follow-ups/follow-ups.module";
 import { CommercialModule } from "../commercial/commercial.module";
 import { SettingsModule } from "../settings/settings.module";
+import { UploadModule } from "../upload/upload.module";
 import { EMAIL_DRAFT_QUEUE } from "./drafts/email-draft.constants";
 import { EmailDraftProcessor } from "./drafts/email-draft.processor";
 import { EmailApprovalService } from "./drafts/email-approval.service";
 import { EmailDraftService } from "./drafts/email-draft.service";
+import { EmailDraftAttachmentService } from "./drafts/email-draft-attachment.service";
 import { EmailsController } from "./emails.controller";
 import { EmailComplianceService } from "./accounts/email-compliance.service";
 import { EmailSecretService } from "./accounts/email-secret.service";
@@ -40,6 +42,7 @@ import { QuoteReplyAssessmentService } from "./inbound/quote-reply-assessment.se
     FollowUpsModule,
     CommercialModule,
     SettingsModule,
+    UploadModule,
     BullModule.registerQueue({ name: EMAIL_DRAFT_QUEUE }),
     BullModule.registerQueue({ name: IMAP_INBOUND_QUEUE })
   ],
@@ -51,6 +54,7 @@ import { QuoteReplyAssessmentService } from "./inbound/quote-reply-assessment.se
     EmailAccountTestService,
     EmailApprovalService,
     EmailDraftService,
+    EmailDraftAttachmentService,
     EmailContextBuilder,
     EmailDraftCreationService,
     EmailDraftGenerationService,
