@@ -9,6 +9,7 @@ async function main() {
   await prisma.$connect();
   let requestId = "";
   let keptRequestId = "";
+  let keptResampleRequestId = "";
   try {
     const customer = await prisma.customer.findFirst({ where: { organizationId: "default-org" } });
     assert.ok(customer, "integration test requires one local customer");
@@ -19,7 +20,12 @@ async function main() {
     requestId = created.id;
     const r1 = created.currentRound;
     assert.equal(r1.status, "DRAFT");
-    await service.submitApproval(user, r1.id);
+    const firstSubmission = await service.submitApproval(user, r1.id);
+    assert.equal(firstSubmission.status, "PENDING_APPROVAL");
+    const rejected = await service.reject(user, r1.id, { comment: "补充工艺说明" });
+    assert.equal(rejected.status, "APPROVAL_REJECTED");
+    const resubmitted = await service.submitApproval(user, r1.id);
+    assert.equal(resubmitted.status, "PENDING_APPROVAL");
     await service.approve(user, r1.id, { comment: "通过" });
     await assert.rejects(
       () => service.editCurrentRound(user, requestId, { productSummary: "审批后不应修改" }),
@@ -61,8 +67,24 @@ async function main() {
     assert.equal(keptFeedback.status, "COMPLETED");
     const keptProjected = (await service.list(user, customer.id)).find((item) => item.id === keptRequestId);
     assert.equal(keptProjected?.currentRound?.feedbackResult, "ACCEPTED");
+
+    const keptResample = await service.create(user, { customerId: customer.id, productSummary: "客户保留重打验收", specification: "R1", material: "ABS", process: "注塑", sampleQuantity: 2, samplePurpose: "CUSTOMER_TEST" });
+    keptResampleRequestId = keptResample.id;
+    const keptResampleR1 = keptResample.currentRound;
+    await service.submitApproval(user, keptResampleR1.id);
+    await service.approve(user, keptResampleR1.id, {});
+    await service.retain(user, keptResampleR1.id, { producedQuantity: 2, retainedQuantity: 1, retainedLocation: "A-03" });
+    await service.ship(user, keptResampleR1.id, { carrier: "DHL", trackingNo: "TEST-KEPT-RESAMPLE", shippedQuantity: 1 });
+    await service.deliver(user, keptResampleR1.id, {});
+    const completedResampleFeedback = await service.feedback(user, keptResampleR1.id, { feedbackResult: "RESAMPLE_REQUIRED", feedback: "客户保留原样并要求重打", dispositionStatus: "CUSTOMER_KEPT" });
+    assert.equal(completedResampleFeedback.status, "COMPLETED");
+    const keptResampleR2 = await service.createResampleDraft(user, keptResampleR1.id, { reason: "客户要求调整后重打", changeSummary: "保留原样作为对照" });
+    assert.equal(keptResampleR2.currentRound?.roundNo, 2);
+    assert.equal(keptResampleR2.currentRound?.status, "DRAFT");
+    assert.equal(keptResampleR2.previousRound?.dispositionStatus, "CUSTOMER_KEPT");
     console.log("sample-workflow integration assertions passed");
   } finally {
+    if (keptResampleRequestId) await prisma.sampleRequest.delete({ where: { id: keptResampleRequestId } });
     if (keptRequestId) await prisma.sampleRequest.delete({ where: { id: keptRequestId } });
     if (requestId) await prisma.sampleRequest.delete({ where: { id: requestId } });
     await prisma.$disconnect();

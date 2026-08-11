@@ -145,7 +145,7 @@ export class SampleWorkflowService {
     });
   }
 
-  async submitApproval(user: RequestUser, roundId: string) { return this.transition(user, roundId, "PENDING_APPROVAL", "已提交样品审批", ["DRAFT"]); }
+  async submitApproval(user: RequestUser, roundId: string) { return this.transition(user, roundId, "PENDING_APPROVAL", "已提交样品审批", ["DRAFT", "APPROVAL_REJECTED"]); }
   async approve(user: RequestUser, roundId: string, dto: SampleReviewDto) { return this.transition(user, roundId, "PREPARING", "已通过样品审批", ["PENDING_APPROVAL"], { approvedAt: new Date(), approvalComment: dto.comment?.trim() || null }); }
   async reject(user: RequestUser, roundId: string, dto: SampleReviewDto) { return this.transition(user, roundId, "APPROVAL_REJECTED", "已驳回样品审批", ["PENDING_APPROVAL"], { approvalComment: dto.comment?.trim() || null }); }
 
@@ -207,7 +207,7 @@ export class SampleWorkflowService {
   async createResampleDraft(user: RequestUser, roundId: string, dto: CreateResampleDraftDto) {
     const round = await this.getRound(user, roundId);
     this.assertCurrentRound(round);
-    if (round.feedbackResult !== "RESAMPLE_REQUIRED" || round.status !== "FEEDBACK_RECEIVED") {
+    if (round.feedbackResult !== "RESAMPLE_REQUIRED" || !["FEEDBACK_RECEIVED", "COMPLETED"].includes(round.status)) {
       throw new BadRequestException("只有客户要求重打的已反馈轮次可以生成新草稿");
     }
     const reason = dto.reason.trim();

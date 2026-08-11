@@ -1457,7 +1457,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                 const nextActions = sampleStatusActions(itemStatus);
                 const canCreateResampleDraft = Boolean(item.currentRoundId)
                   && item.currentRound?.feedbackResult === "RESAMPLE_REQUIRED"
-                  && itemStatus === "FEEDBACK_RECEIVED"
+                  && SAMPLE_AFTER_FEEDBACK_STATUSES.includes(itemStatus)
                   && !(item.rounds ?? []).some((round) => round.previousRoundId === item.currentRound?.id);
                 return (
                   <tr key={item.id}>
