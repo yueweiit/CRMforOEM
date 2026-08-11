@@ -1781,22 +1781,20 @@ td small {
 }
 
 .email-draft-filter-bar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
   display: grid;
   grid-template-columns: repeat(3, minmax(160px, 1fr));
   gap: 12px;
-  margin-bottom: 14px;
-}
-
-.email-draft-history.is-expanded {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  border-bottom: 1px solid #e6e9e3;
+  background: white;
+  margin-bottom: 10px;
+  padding-bottom: 12px;
 }
 
 .email-draft-history-window {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  height: clamp(420px, 58vh, 680px);
-  min-height: 0;
+  display: block;
 }
 
 .email-draft-filter-bar label {
@@ -1821,9 +1819,7 @@ td small {
 }
 
 .email-draft-list {
-  min-height: 0;
-  overflow-y: auto;
-  padding-right: 4px;
+  min-width: 0;
 }
 
 .email-draft-card {
@@ -1856,10 +1852,7 @@ td small {
 .email-draft-detail-window {
   display: grid;
   gap: 10px;
-  height: clamp(320px, 44vh, 520px);
   min-height: 0;
-  overflow-y: auto;
-  padding-right: 4px;
 }
 
 .detail-window {
@@ -2115,10 +2108,6 @@ td small {
 }
 
 @media (max-width: 560px) {
-  .email-draft-detail-window {
-    overflow-x: hidden;
-  }
-
   .email-draft-detail-window .toolbar {
     flex-wrap: wrap;
   }
@@ -2637,10 +2626,9 @@ td small {
 }
 
 .draft-editor textarea.email-draft-body-editor {
-  height: clamp(180px, 30vh, 320px);
   min-height: 180px;
-  overflow: auto;
-  resize: vertical;
+  overflow: hidden;
+  resize: none;
 }
 
 .email-draft-load-sentinel {
@@ -3543,6 +3531,10 @@ td small {
 @media (max-width: 640px) {
   .table-panel {
     overflow-x: auto;
+  }
+
+  .email-draft-history {
+    overflow: visible;
   }
 
   table {

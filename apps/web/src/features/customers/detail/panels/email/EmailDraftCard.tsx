@@ -16,21 +16,24 @@ import { showClientToast } from "../../../../../components/Toast";
 import { useI18n } from "../../../../../i18n";
 import { formatDraftRecipient, formatDraftSender } from "../../../../../shared/utils/email-format";
 import type { EmailDraft, EmailDraftListItem } from "../../shared/types";
-import { AiVersions } from "../../shared/ui";
+import { AiVersions, AutoResizeTextarea } from "../../shared/ui";
 import { cleanPayload, invalidateEmailData } from "./email-panel-utils";
 
 export function EmailDraftCard({
   customerId,
   draft,
+  expanded,
+  onToggle,
   onChanged
 }: {
   customerId: string;
   draft: EmailDraftListItem;
+  expanded: boolean;
+  onToggle: () => void;
   onChanged: () => void;
 }) {
   const queryClient = useQueryClient();
   const { locale, t } = useI18n();
-  const [expanded, setExpanded] = useState(false);
   const [editDraft, setEditDraft] = useState<Record<string, string>>({});
   const [attachmentBusy, setAttachmentBusy] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -151,8 +154,8 @@ export function EmailDraftCard({
   }
 
   return (
-    <article className="draft-editor email-draft-card">
-      <button className="email-draft-summary" type="button" onClick={() => setExpanded((current) => !current)}>
+    <article className={`draft-editor email-draft-card${expanded ? " is-expanded" : ""}`}>
+      <button className="email-draft-summary" type="button" onClick={onToggle}>
         <MailPlus size={16} />
         <div>
           <strong>{t("emailCenter.draftTypePrefix")}{emailDraftPurposeLabel(draft.purpose, locale)}</strong>
@@ -182,7 +185,7 @@ export function EmailDraftCard({
               onChange={(event) => setEditDraft({ ...editDraft, subject: event.target.value })}
             />
             {editableDraft.body ? (
-              <textarea
+              <AutoResizeTextarea
                 disabled={editableDraft.status === "SENT"}
                 className="email-draft-body-editor"
                 value={editDraft.body ?? editableDraft.body}

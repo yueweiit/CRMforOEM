@@ -29,6 +29,7 @@ export function EmailDraftHistory({
 }) {
   const { locale, t } = useI18n();
   const [expanded, setExpanded] = useState(false);
+  const [expandedDraftId, setExpandedDraftId] = useState<string | null>(null);
   const [filters, setFilters] = useState<EmailDraftFilters>(DEFAULT_FILTERS);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const query = useInfiniteQuery({
@@ -41,6 +42,11 @@ export function EmailDraftHistory({
     refetchInterval: (result) => (shouldPollEmailDraftPages(result.state.data?.pages) ? 3000 : false)
   });
   const drafts = useMemo(() => flattenEmailDraftPages<EmailDraftListItem>(query.data?.pages), [query.data?.pages]);
+
+  function toggleHistory() {
+    if (expanded) setExpandedDraftId(null);
+    setExpanded(!expanded);
+  }
 
   useEffect(() => {
     const node = loadMoreRef.current;
@@ -57,7 +63,7 @@ export function EmailDraftHistory({
   return (
     <section className={`table-panel email-draft-history ${expanded ? "is-expanded" : ""}`}>
       <div className="panel-title">
-        <button className="email-draft-history-toggle" type="button" onClick={() => setExpanded((current) => !current)}>
+        <button className="email-draft-history-toggle" type="button" onClick={toggleHistory}>
           {expanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
           <h2>{t("emailCenter.emailTitle")}</h2>
         </button>
@@ -107,7 +113,14 @@ export function EmailDraftHistory({
           {drafts.length ? (
             <div className="email-draft-list">
               {drafts.map((draft) => (
-                <EmailDraftCard customerId={customerId} draft={draft} onChanged={onChanged} key={draft.id} />
+                <EmailDraftCard
+                  customerId={customerId}
+                  draft={draft}
+                  expanded={expandedDraftId === draft.id}
+                  key={draft.id}
+                  onChanged={onChanged}
+                  onToggle={() => setExpandedDraftId((current) => current === draft.id ? null : draft.id)}
+                />
               ))}
               <div className="email-draft-load-sentinel" ref={loadMoreRef}>
                 {query.isFetchingNextPage ? t("emailCenter.loadMoreDrafts") : query.hasNextPage ? t("emailCenter.scrollMoreDrafts") : t("emailCenter.allDraftsLoaded")}

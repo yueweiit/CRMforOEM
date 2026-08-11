@@ -260,9 +260,17 @@ export function AutoResizeTextarea(props: TextareaHTMLAttributes<HTMLTextAreaEle
   useLayoutEffect(() => {
     const node = ref.current;
     if (!node) return;
+    const textarea: HTMLTextAreaElement = node;
 
-    node.style.height = "0px";
-    node.style.height = `${node.scrollHeight}px`;
+    function resize() {
+      textarea.style.height = "0px";
+      const borderHeight = textarea.offsetHeight - textarea.clientHeight;
+      textarea.style.height = `${textarea.scrollHeight + borderHeight}px`;
+    }
+
+    resize();
+    window.addEventListener("resize", resize);
+    return () => window.removeEventListener("resize", resize);
   }, [value]);
 
   return <textarea {...props} ref={ref} rows={1} style={{ ...(props.style ?? {}), overflow: "hidden", resize: "none" }} />;
