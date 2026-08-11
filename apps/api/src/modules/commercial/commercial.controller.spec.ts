@@ -39,7 +39,11 @@ async function main() {
       revisionReason: dto.reason
     })
   };
-  const controller = new CommercialController(service as never, {} as never);
+  const sampleWorkflow = {
+    getSingleExport: async () => ({ workbook, fileName: "sample-sample-1.xlsx" }),
+    getExport: async () => ({ workbook, fileName: "samples-customer-1.xlsx" })
+  };
+  const controller = new CommercialController(service as never, {} as never, sampleWorkflow as never);
 
   assert.deepEqual(Reflect.getMetadata("permissions", CommercialController.prototype.quotes), ["quotes.read"]);
   assert.deepEqual(Reflect.getMetadata("permissions", CommercialController.prototype.exportQuote), ["quotes.export"]);
@@ -48,6 +52,8 @@ async function main() {
   assert.deepEqual(Reflect.getMetadata("permissions", CommercialController.prototype.quoteReferenceCandidates), ["quotes.reference.read"]);
   assert.deepEqual(Reflect.getMetadata("permissions", CommercialController.prototype.quoteRevisions), ["quotes.read"]);
   assert.deepEqual(Reflect.getMetadata("permissions", CommercialController.prototype.createQuoteRevision), ["quotes.write"]);
+  assert.deepEqual(Reflect.getMetadata("permissions", CommercialController.prototype.exportSample), ["samples.export"]);
+  assert.deepEqual(Reflect.getMetadata("permissions", CommercialController.prototype.exportSamples), ["samples.export"]);
 
   assert.deepEqual(await controller.quoteRevisions(user, "quote-1"), [{ id: "quote-1", revisionNo: 1 }]);
   assert.deepEqual(await controller.createQuoteRevision(user, "quote-1", { reason: "客户要求调整价格" }), {
@@ -67,6 +73,18 @@ async function main() {
   await controller.exportQuotes(user, "customer-1", batchResponse.response as never);
   assert.strictEqual(batchResponse.getSent(), workbook);
   assert.equal(batchResponse.headers.get("Content-Disposition"), "attachment; filename=\"quotes.xlsx\"");
+
+  const singleSampleResponse = createResponse();
+  await controller.exportSample(user, "sample-1", singleSampleResponse.response as never);
+  assert.strictEqual(singleSampleResponse.getSent(), workbook);
+  assert.equal(singleSampleResponse.headers.get("Content-Type"), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  assert.equal(singleSampleResponse.headers.get("Content-Disposition"), "attachment; filename=\"sample-sample-1.xlsx\"");
+
+  const batchSampleResponse = createResponse();
+  await controller.exportSamples(user, "customer-1", batchSampleResponse.response as never);
+  assert.strictEqual(batchSampleResponse.getSent(), workbook);
+  assert.equal(batchSampleResponse.headers.get("Content-Type"), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  assert.equal(batchSampleResponse.headers.get("Content-Disposition"), "attachment; filename=\"samples-customer-1.xlsx\"");
 
   console.log("commercial.controller.spec.ts OK");
 }

@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+import * as ExcelJS from "exceljs";
 import { CustomerStage } from "@oem-crm/shared";
 import { RequestUser } from "../../common/auth/current-user.decorator";
 import { buildCustomerDataScopeWhere } from "../../common/query/data-scope";
@@ -52,15 +53,54 @@ export class SampleWorkflowService {
 
   async getExport(user: RequestUser, customerId?: string) {
     const requests = await this.findRequests(user, customerId);
+    return this.buildExport(requests, customerId ? `samples-${customerId}.xlsx` : "samples.xlsx");
+  }
+
+  async getSingleExport(user: RequestUser, id: string) {
+    const request = await this.getRequest(user, id);
+    return this.buildExport([request], `sample-${id}.xlsx`);
+  }
+
+  private async buildExport(requests: SampleRequestRecord[], fileName: string) {
     const rows = requests.flatMap((request) => {
       const projection = this.projectRequest(request);
       return projection.costSummary.byCurrency.length
         ? projection.costSummary.byCurrency.map((cost) => this.exportRow(projection, cost))
         : [this.exportRow(projection, null)];
     });
-    const headers = ["样品任务ID", "客户", "产品", "当前轮次", "当前动作", "上一轮结论", "上一轮处置", "币种", "首轮成本", "重打增量成本", "累计实际成本", "客户收费", "已收金额", "企业承担金额", "轮次成本明细"];
-    const csv = `\ufeff${[headers, ...rows].map((row) => row.map((value) => this.escapeCsv(value)).join(",")).join("\n")}`;
-    return { csv, fileName: customerId ? `samples-${customerId}.csv` : "samples.csv" };
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = "OEM Customer Development CRM";
+    workbook.created = new Date();
+    const sheet = workbook.addWorksheet("样品汇总", { views: [{ state: "frozen", ySplit: 1 }] });
+    sheet.columns = [
+      { header: "样品任务ID", key: "sampleRequestId", width: 38 },
+      { header: "客户", key: "customerName", width: 22 },
+      { header: "产品", key: "productSummary", width: 26 },
+      { header: "当前轮次", key: "currentRound", width: 12 },
+      { header: "当前动作", key: "currentAction", width: 22 },
+      { header: "上一轮结论", key: "previousFeedback", width: 18 },
+      { header: "上一轮处置", key: "previousDisposition", width: 18 },
+      { header: "币种", key: "currency", width: 10 },
+      { header: "首轮成本", key: "firstRoundCost", width: 14 },
+      { header: "重打增量成本", key: "resampleCost", width: 16 },
+      { header: "累计实际成本", key: "totalActualCost", width: 16 },
+      { header: "企业承担金额", key: "companyBorneAmount", width: 16 },
+      { header: "轮次成本明细", key: "roundDetails", width: 36 }
+    ];
+    sheet.addRows(rows);
+    const headerRow = sheet.getRow(1);
+    headerRow.alignment = { vertical: "middle" };
+    for (let columnNumber = 1; columnNumber <= sheet.columnCount; columnNumber += 1) {
+      const headerCell = headerRow.getCell(columnNumber);
+      headerCell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+      headerCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF007F73" } };
+    }
+    sheet.autoFilter = { from: "A1", to: { row: 1, column: sheet.columnCount } };
+    sheet.eachRow((row, rowNumber) => {
+      if (rowNumber > 1) row.alignment = { vertical: "top", wrapText: true };
+    });
+    for (const columnNumber of [9, 10, 11, 12]) sheet.getColumn(columnNumber).numFmt = "#,##0.00";
+    return { workbook: Buffer.from(await workbook.xlsx.writeBuffer()), fileName };
   }
 
   async getHistory(user: RequestUser, id: string) {
@@ -425,13 +465,22 @@ export class SampleWorkflowService {
     return labels[round.status] ?? round.status;
   }
 
-  private exportRow(projection: ReturnType<SampleWorkflowService["projectRequest"]>, cost: { currency: string; firstRoundCost: number; resampleCost: number; totalActualCost: number; customerCharge: number; receivedAmount: number; companyBorneAmount: number } | null) {
+  private exportRow(projection: ReturnType<SampleWorkflowService["projectRequest"]>, cost: { currency: string; firstRoundCost: number; resampleCost: number; totalActualCost: number; companyBorneAmount: number } | null) {
     const roundDetails = projection.costSummary.byRound.flatMap((round) => round.currencies.map((item) => `R${round.roundNo ?? "公共"} ${item.currency} ${item.totalActualCost.toFixed(2)}`)).join("; ");
-    return [projection.id, projection.customer?.name ?? "", projection.productSummary, projection.currentRound ? `R${projection.currentRound.roundNo}` : "", projection.currentAction, projection.previousRound?.feedbackResult ?? "", projection.previousRound?.dispositionStatus ?? "", cost?.currency ?? "", cost?.firstRoundCost.toFixed(2) ?? "", cost?.resampleCost.toFixed(2) ?? "", cost?.totalActualCost.toFixed(2) ?? "", cost?.customerCharge.toFixed(2) ?? "", cost?.receivedAmount.toFixed(2) ?? "", cost?.companyBorneAmount.toFixed(2) ?? "", roundDetails];
-  }
-
-  private escapeCsv(value: unknown) {
-    const text = value === null || value === undefined ? "" : String(value);
-    return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+    return {
+      sampleRequestId: projection.id,
+      customerName: projection.customer?.name ?? "",
+      productSummary: projection.productSummary,
+      currentRound: projection.currentRound ? `R${projection.currentRound.roundNo}` : "",
+      currentAction: projection.currentAction,
+      previousFeedback: projection.previousRound?.feedbackResult ?? "",
+      previousDisposition: projection.previousRound?.dispositionStatus ?? "",
+      currency: cost?.currency ?? "",
+      firstRoundCost: cost?.firstRoundCost ?? "",
+      resampleCost: cost?.resampleCost ?? "",
+      totalActualCost: cost?.totalActualCost ?? "",
+      companyBorneAmount: cost?.companyBorneAmount ?? "",
+      roundDetails
+    };
   }
 }

@@ -183,6 +183,10 @@ export function getSamples<T = unknown>(customerId: string) {
   return apiGet<T>(`/samples?customerId=${customerId}`);
 }
 
+export function exportSample(sampleId: string) {
+  return apiGetBlob(`/samples/${sampleId}/export`);
+}
+
 export function exportSamples(customerId: string) {
   return apiGetBlob(`/samples/export?customerId=${customerId}`);
 }

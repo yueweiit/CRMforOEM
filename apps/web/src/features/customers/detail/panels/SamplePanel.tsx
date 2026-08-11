@@ -10,6 +10,7 @@ import { showClientToast } from "../../../../components/Toast";
 import {
   createSample,
   createSampleResampleDraft,
+  exportSample,
   exportSamples,
   deleteSample,
   deleteSampleFee,
@@ -803,10 +804,28 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   const data = samplesQuery.data ?? [];
   const activeDetailSample = detailSample ? data.find((item) => item.id === detailSample.id) ?? detailSample : null;
   const quoteOptions = quotesQuery.data ?? [];
+  const exportMutation = useMutation({
+    mutationFn: (sampleId: string) => exportSample(sampleId),
+    onSuccess: async ({ blob, fileName }) => {
+      downloadBlob(blob, fileName ?? "sample.xlsx");
+      showClientToast({
+        type: "success",
+        title: "导出成功",
+        message: "样品文件已下载。"
+      });
+    },
+    onError: (error) => {
+      showClientToast({
+        type: "error",
+        title: "导出失败",
+        message: error instanceof Error ? error.message : "操作失败"
+      });
+    }
+  });
   const exportAllMutation = useMutation({
     mutationFn: () => exportSamples(customerId),
     onSuccess: async ({ blob, fileName }) => {
-      downloadBlob(blob, fileName ?? `samples-${customerId}.csv`);
+      downloadBlob(blob, fileName ?? `samples-${customerId}.xlsx`);
       showClientToast({
         type: "success",
         title: "批量导出成功",
@@ -1490,6 +1509,15 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                     <td>
                       <div className="sample-record-actions">
                         <EditIconButton disabled={!canEdit(item)} onClick={() => openEdit(item)} />
+                        <button
+                          className="secondary-button icon-button"
+                          disabled={exportMutation.isPending}
+                          onClick={() => exportMutation.mutate(item.id)}
+                          title="导出当前样品"
+                          type="button"
+                        >
+                          <Download size={14} />
+                        </button>
                         <div className="sample-record-more">
                           <button
                             aria-expanded={moreActionsMenu?.id === item.id}

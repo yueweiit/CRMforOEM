@@ -173,17 +173,31 @@ export class CommercialController {
     return this.sampleWorkflow.list(user, customerId);
   }
 
+  @RequireLiveSession()
+  @RequirePermissions("samples.export")
+  @Get("samples/:id/export")
+  async exportSample(
+    @CurrentUser() user: RequestUser,
+    @Param("id") id: string,
+    @Res() res: Response
+  ) {
+    const { workbook, fileName } = await this.sampleWorkflow.getSingleExport(user, id);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    return res.send(workbook);
+  }
+
   @Get("samples/export")
   @RequirePermissions("samples.export")
   async exportSamples(
     @CurrentUser() user: RequestUser,
     @Query("customerId") customerId: string | undefined,
-    @Res({ passthrough: true }) res: Response
+    @Res() res: Response
   ) {
-    const { csv, fileName } = await this.sampleWorkflow.getExport(user, customerId);
-    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    const { workbook, fileName } = await this.sampleWorkflow.getExport(user, customerId);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-    return csv;
+    return res.send(workbook);
   }
 
   @RequireLiveSession()

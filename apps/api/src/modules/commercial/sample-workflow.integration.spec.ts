@@ -1,5 +1,6 @@
 import * as assert from "node:assert/strict";
 import { BadRequestException } from "@nestjs/common";
+import * as ExcelJS from "exceljs";
 import { PrismaService } from "../../infrastructure/prisma/prisma.service";
 import { SampleWorkflowService } from "./sample-workflow.service";
 import type { RequestUser } from "../../common/auth/current-user.decorator";
@@ -54,6 +55,19 @@ async function main() {
     assert.equal(projected?.returnRecords.find((record) => record.dispositionStatus === "RETURNED")?.sampleRoundId, r1.id);
     assert.equal(projected?.costSummary.byCurrency[0].resampleCost, 80);
     assert.equal(projected?.costSummary.byCurrency[0].firstRoundCost, 20);
+    const singleExport = await service.getSingleExport(user, requestId);
+    assert.equal(singleExport.fileName, `sample-${requestId}.xlsx`);
+    const exportedWorkbook = new ExcelJS.Workbook();
+    await exportedWorkbook.xlsx.load(singleExport.workbook as never);
+    const exportSheet = exportedWorkbook.getWorksheet("样品汇总");
+    assert.ok(exportSheet);
+    const headers = exportSheet!.getRow(1).values as unknown[];
+    assert.ok(headers.includes("样品任务ID"));
+    assert.ok(!headers.includes("客户收费"));
+    assert.ok(!headers.includes("已收金额"));
+    assert.equal(exportSheet.getCell("C2").value, "样品工作流验收");
+    assert.equal(exportSheet.getCell("I2").value, 20);
+    assert.equal(exportSheet.getCell("J2").value, 80);
 
     const kept = await service.create(user, { customerId: customer.id, productSummary: "签收反馈阶段验收", specification: "R1", material: "ABS", process: "注塑", sampleQuantity: 2, samplePurpose: "CUSTOMER_TEST" });
     keptRequestId = kept.id;
