@@ -40,6 +40,7 @@ import { Field } from "../../../../components/ui/Field";
 import { useI18n } from "../../../../i18n";
 import type { TranslationKey } from "../../../../i18n/resources";
 import { formatDateInput } from "../../../../shared/utils/format";
+import { normalizeQuoteHistoryComment, quoteApprovalHistoryNote } from "../shared/quote-history";
 import type { Quote, QuoteHistoryItem, Sample, SampleFee, SampleHistoryItem, SampleRound } from "../shared/types";
 
 function downloadBlob(blob: Blob, fileName: string) {
@@ -304,17 +305,6 @@ function quoteStatusPillClass(status: string) {
   return ["status-pill", "status-pill--detail", toneByStatus[status] ?? "status-pill--neutral"].join(" ");
 }
 
-function normalizeQuoteHistoryComment(comment: string) {
-  const legacyLabels: Record<string, string> = {
-    "Quote created": "已创建报价",
-    "Quote updated": "已更新报价",
-    "Quote voided": "已作废报价",
-    "Submitted for approval": "已提交报价审批",
-    "Quote approved": "已通过报价审批",
-    "Quote rejected": "已驳回报价审批"
-  };
-  return legacyLabels[comment] ?? comment;
-}
 
 function quoteHistoryField(item: QuoteHistoryItem, source: "before" | "after", field: string) {
   const value = item[source]?.[field];
@@ -1233,7 +1223,9 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   const detailQuoteSentAt = quoteHistoryStatusTime(detailQuoteHistory, "SENT");
   const detailQuoteTerminalAt = detailQuoteTerminalStatus ? quoteHistoryStatusTime(detailQuoteHistory, detailQuoteTerminalStatus) : "";
   const detailQuoteHistoryLoadingValue = detailQuoteHistoryQuery.isLoading ? "加载中..." : "";
-  const detailQuoteApprovalNote = detailQuote?.approvalComment?.trim() ? `审批备注：${detailQuote.approvalComment.trim()}` : "";
+  const detailQuoteSubmittedNote = quoteApprovalHistoryNote(detailQuoteHistory, "SUBMITTED", "提交备注");
+  const detailQuoteApprovedNote = quoteApprovalHistoryNote(detailQuoteHistory, "APPROVED", "审批备注");
+  const detailQuoteRejectedNote = quoteApprovalHistoryNote(detailQuoteHistory, "REJECTED", "审批备注");
   const detailQuoteTimelineItems = [
     {
       label: quoteStatusLabel("DRAFT", locale),
@@ -1247,7 +1239,8 @@ export function SamplePanel({ customerId }: { customerId: string }) {
       value: detailQuote?.approvalSubmittedAt ? new Date(detailQuote.approvalSubmittedAt).toLocaleString() : detailQuoteStatus === "PENDING_APPROVAL" ? "当前状态" : "未提交",
       done: quoteCoreStatusReached(detailQuoteStatus, "PENDING_APPROVAL"),
       current: detailQuoteStatus === "PENDING_APPROVAL",
-      danger: false
+      danger: false,
+      note: detailQuoteSubmittedNote
     },
     ...(detailQuoteStatus === "REJECTED"
       ? [
@@ -1257,7 +1250,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
             done: true,
             current: true,
             danger: true,
-            note: detailQuoteApprovalNote
+            note: detailQuoteRejectedNote
           }
         ]
       : []),
@@ -1267,7 +1260,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
       done: quoteCoreStatusReached(detailQuoteStatus, "APPROVED"),
       current: detailQuoteStatus === "APPROVED",
       danger: false,
-      note: quoteCoreStatusReached(detailQuoteStatus, "APPROVED") ? detailQuoteApprovalNote : ""
+      note: quoteCoreStatusReached(detailQuoteStatus, "APPROVED") ? detailQuoteApprovedNote : ""
     },
     {
       label: quoteStatusLabel("SENT", locale),

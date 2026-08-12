@@ -32,6 +32,7 @@ import { EditIconButton } from "../../../../components/EditIconButton";
 import { Field } from "../../../../components/ui/Field";
 import { useI18n } from "../../../../i18n";
 import { formatDateInput } from "../../../../shared/utils/format";
+import { normalizeQuoteHistoryComment, quoteApprovalHistoryNote } from "../shared/quote-history";
 import type { Quote, QuoteHistoryItem } from "../shared/types";
 
 const CURRENCY_OPTIONS = ["USD", "CNY", "KRW", "JPY", "MXN"] as const;
@@ -173,18 +174,6 @@ function historyActionLabel(item: QuoteHistoryItem, revisionCreatedLabel = "创�
   return labels[item.action] ?? item.action;
 }
 
-function normalizeHistoryComment(comment: string) {
-  const legacyLabels: Record<string, string> = {
-    "Quote created": "已创建报价",
-    "Quote updated": "已更新报价",
-    "Quote voided": "已作废报价",
-    "Submitted for approval": "已提交报价审批",
-    "Quote approved": "已通过报价审批",
-    "Quote rejected": "已驳回报价审批"
-  };
-  return legacyLabels[comment] ?? comment;
-}
-
 function quoteHistoryField(item: QuoteHistoryItem, source: "before" | "after", field: string) {
   const value = item[source]?.[field];
   return typeof value === "string" ? value : "";
@@ -195,7 +184,7 @@ function quoteHistoryStatusTime(history: QuoteHistoryItem[], status: string) {
     const beforeStatus = quoteHistoryField(item, "before", "status");
     const afterStatus = quoteHistoryField(item, "after", "status");
     const afterApprovalStatus = quoteHistoryField(item, "after", "approvalStatus");
-    const comment = normalizeHistoryComment(item.comment ?? "");
+    const comment = normalizeQuoteHistoryComment(item.comment ?? "");
 
     if (status === "SENT") {
       return afterStatus === "SENT" || comment.includes("发送报价");
@@ -1050,7 +1039,9 @@ export function QuotePanel({ customerId }: { customerId: string }) {
   const detailQuoteAcceptedAt = quoteHistoryStatusTime(detailQuoteHistory, "ACCEPTED");
   const detailQuoteTerminalAt = detailQuoteTerminalStatus ? quoteHistoryStatusTime(detailQuoteHistory, detailQuoteTerminalStatus) : "";
   const detailQuoteHistoryLoadingValue = detailHistoryQuery.isLoading ? "加载中..." : "";
-  const detailQuoteApprovalNote = detailQuote?.approvalComment?.trim() ? `审批备注：${detailQuote.approvalComment.trim()}` : "";
+  const detailQuoteSubmittedNote = quoteApprovalHistoryNote(detailQuoteHistory, "SUBMITTED", "提交备注");
+  const detailQuoteApprovedNote = quoteApprovalHistoryNote(detailQuoteHistory, "APPROVED", "审批备注");
+  const detailQuoteRejectedNote = quoteApprovalHistoryNote(detailQuoteHistory, "REJECTED", "审批备注");
   const detailQuoteTimelineItems = [
     {
       label: statusLabel("DRAFT", locale),
@@ -1064,7 +1055,8 @@ export function QuotePanel({ customerId }: { customerId: string }) {
       value: detailQuote?.approvalSubmittedAt ? new Date(detailQuote.approvalSubmittedAt).toLocaleString() : detailQuoteStatus === "PENDING_APPROVAL" ? "当前状态" : "未提交",
       done: quoteCoreStatusReached(detailQuoteStatus, "PENDING_APPROVAL"),
       current: detailQuoteStatus === "PENDING_APPROVAL",
-      danger: false
+      danger: false,
+      note: detailQuoteSubmittedNote
     },
     ...(detailQuoteStatus === "REJECTED"
       ? [
@@ -1074,7 +1066,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
             done: true,
             current: true,
             danger: true,
-            note: detailQuoteApprovalNote
+            note: detailQuoteRejectedNote
           }
         ]
       : []),
@@ -1084,7 +1076,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
       done: quoteCoreStatusReached(detailQuoteStatus, "APPROVED"),
       current: detailQuoteStatus === "APPROVED",
       danger: false,
-      note: quoteCoreStatusReached(detailQuoteStatus, "APPROVED") ? detailQuoteApprovalNote : ""
+      note: quoteCoreStatusReached(detailQuoteStatus, "APPROVED") ? detailQuoteApprovedNote : ""
     },
     {
       label: statusLabel("SENT", locale),
@@ -2285,7 +2277,7 @@ export function QuotePanel({ customerId }: { customerId: string }) {
                     <time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleString()}</time>
                   </div>
                   <span className="history-timeline__meta">{historyActorLabel(item)}</span>
-                  {item.comment ? <span className="history-timeline__detail">{normalizeHistoryComment(item.comment)}</span> : null}
+                  {item.comment ? <span className="history-timeline__detail">{normalizeQuoteHistoryComment(item.comment)}</span> : null}
                 </div>
               </div>
             )) : <div className="empty-state">暂无历史记录。</div>}
