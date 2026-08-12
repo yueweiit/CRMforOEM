@@ -204,7 +204,9 @@ function quoteHistoryStatusTime(history: QuoteHistoryItem[], status: string) {
       return afterStatus === "ACCEPTED" || comment.includes("客户已接受报价");
     }
     if (status === "CUSTOMER_REJECTED") {
-      return (afterStatus === "REJECTED" && afterApprovalStatus === "APPROVED") || comment.includes("客户已拒绝报价");
+      return afterStatus === "CUSTOMER_REJECTED"
+        || (afterStatus === "REJECTED" && afterApprovalStatus === "APPROVED")
+        || comment.includes("客户已拒绝报价");
     }
     if (status === "EXPIRED") {
       return afterStatus === "EXPIRED" || comment.includes("报价已到期失效");
