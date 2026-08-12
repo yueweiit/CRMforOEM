@@ -2771,10 +2771,14 @@ td small {
 
 .quote-records-panel {
   margin-bottom: 16px;
+  min-width: 0;
 }
 
 .quote-record-table-wrap,
 .sample-record-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   overscroll-behavior-x: contain;
   overflow-x: auto;
   padding-bottom: 4px;
@@ -2812,6 +2816,7 @@ td small {
   padding-top: 9px;
   padding-bottom: 9px;
   vertical-align: middle;
+  white-space: nowrap;
 }
 
 .quote-record-table th {
@@ -2820,9 +2825,22 @@ td small {
 }
 
 .quote-record-table th:first-child,
-.quote-record-table td:first-child {
+.quote-record-table td:first-child,
+.sample-record-table th:first-child,
+.sample-record-table td:first-child {
+  background: #fff;
+  box-shadow: 8px 0 12px -12px rgba(15, 23, 42, 0.45);
   min-width: 160px;
+  position: sticky;
+  left: 0;
   white-space: nowrap;
+  z-index: 1;
+}
+
+.quote-record-table th:first-child,
+.sample-record-table th:first-child {
+  background: #f1f3f5;
+  z-index: 2;
 }
 
 .quote-record-table th:last-child,
@@ -2956,6 +2974,7 @@ td small {
 
 .sample-records-panel {
   margin-bottom: 16px;
+  min-width: 0;
 }
 
 .sample-record-table {
@@ -2967,6 +2986,7 @@ td small {
   padding-top: 9px;
   padding-bottom: 9px;
   vertical-align: middle;
+  white-space: nowrap;
 }
 
 .sample-record-table th {

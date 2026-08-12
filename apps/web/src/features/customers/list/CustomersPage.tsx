@@ -5,6 +5,7 @@ import { createCustomer, getCustomerFilterOptions, getCustomers } from "../../..
 import { getCurrentUser, hasPermission } from "../../../auth/permissions";
 import plusIconUrl from "../../../components/icons/加号.svg";
 import { notifyMutationStep } from "../../../components/Toast";
+import { DetailPageHeader } from "../../../components/ui/DetailPageHeader";
 import { useI18n } from "../../../i18n";
 import type { CustomerOptions } from "../../../shared/types/customer";
 import { splitList } from "../../../shared/utils/string";
@@ -75,12 +76,16 @@ export function CustomersPage({ mode }: { mode?: "create" }) {
   if (mode === "create") {
     return (
       <section className="page-stack">
-        <header className="page-header">
-          <div>
-            <p className="eyebrow">Customer Development</p>
-            <h1>{t("customers.newTitle")}</h1>
-          </div>
-        </header>
+        <DetailPageHeader
+          backTo="/customers"
+          backLabel={t("customerDetail.backToPool")}
+          breadcrumbs={[
+            { label: t("customerDetail.breadcrumbCustomers"), to: "/customers" },
+            { label: t("customers.newTitle") }
+          ]}
+          eyebrow="Customer Development"
+          title={t("customers.newTitle")}
+        />
         <CustomerCreateForm
           form={form}
           onFieldChange={updateField}
