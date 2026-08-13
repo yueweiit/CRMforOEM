@@ -429,6 +429,13 @@ function sampleHistoryStatusTime(history: SampleHistoryItem[], status: string) {
   return matched?.createdAt ?? "";
 }
 
+function sampleRetentionHistoryTime(history: SampleHistoryItem[], roundId: string | undefined, isSingleRound: boolean) {
+  const roundHistory = history.find((item) => item.action === "RETAINED" && item.sampleRoundId === roundId);
+  if (roundHistory) return roundHistory.createdAt;
+  if (!isSingleRound) return "";
+  return history.find((item) => item.action === "RETAINED" && !item.sampleRoundId)?.createdAt ?? "";
+}
+
 function toNumber(value: string) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -1313,6 +1320,8 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   const sampleDetailStatus = sampleDetailRound?.status ?? "";
   const sampleDetailHistory = detailSampleHistoryQuery.data ?? [];
   const sampleDetailRejectedAt = sampleHistoryStatusTime(sampleDetailHistory, "APPROVAL_REJECTED");
+  const sampleDetailRetainedAt = sampleDetailRound?.retentionRecord?.retainedAt
+    ?? sampleRetentionHistoryTime(sampleDetailHistory, sampleDetailRound?.id, activeDetailSample?.rounds?.length === 1);
   const sampleDetailHistoryLoadingValue = detailSampleHistoryQuery.isLoading ? "加载中..." : "";
   const sampleDetailApprovalNote = sampleDetailRound?.approvalComment?.trim() ? `审批备注：${sampleDetailRound.approvalComment.trim()}` : "";
   const sampleDetailSummary = activeDetailSample
@@ -1377,9 +1386,10 @@ export function SamplePanel({ customerId }: { customerId: string }) {
     },
     {
       label: "我方留样",
-      value: sampleDetailRound?.retentionRecord ? `${sampleDetailRound.retentionRecord.retainedQuantity} 件 · ${sampleDetailRound.retentionRecord.retainedLocation}` : sampleCoreStatusReached(sampleDetailStatus, "RETAINED") ? "已完成留样" : "未留样",
+      value: sampleDetailRetainedAt ? new Date(sampleDetailRetainedAt).toLocaleString() : sampleCoreStatusReached(sampleDetailStatus, "RETAINED") ? sampleDetailHistoryLoadingValue || "已完成留样" : "未留样",
       done: sampleCoreStatusReached(sampleDetailStatus, "RETAINED"),
-      current: sampleDetailStatus === "RETAINED"
+      current: sampleDetailStatus === "RETAINED",
+      note: sampleDetailRound?.retentionRecord ? `${sampleDetailRound.retentionRecord.retainedQuantity} 件 · ${sampleDetailRound.retentionRecord.retainedLocation}` : ""
     },
     {
       label: statusLabel("SHIPPED"),
