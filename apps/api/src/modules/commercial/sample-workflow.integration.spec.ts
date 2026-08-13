@@ -11,6 +11,7 @@ async function main() {
   let requestId = "";
   let keptRequestId = "";
   let keptResampleRequestId = "";
+  let pendingAcceptedRequestId = "";
   try {
     const customer = await prisma.customer.findFirst({ where: { organizationId: "default-org" } });
     assert.ok(customer, "integration test requires one local customer");
@@ -79,8 +80,28 @@ async function main() {
     await service.deliver(user, keptR1.id, {});
     const keptFeedback = await service.feedback(user, keptR1.id, { feedbackResult: "ACCEPTED", feedback: "客户确认通过并保留样品", dispositionStatus: "CUSTOMER_KEPT" });
     assert.equal(keptFeedback.status, "COMPLETED");
+    const keptHistory = await service.getHistory(user, keptRequestId);
+    assert.deepEqual(keptHistory.slice(0, 2).map((item) => item.action), ["CUSTOMER_KEPT", "FEEDBACK_RECORDED"]);
     const keptProjected = (await service.list(user, customer.id)).find((item) => item.id === keptRequestId);
     assert.equal(keptProjected?.currentRound?.feedbackResult, "ACCEPTED");
+    assert.equal(keptProjected?.currentAction, "样品客户已通过");
+
+    const pendingAccepted = await service.create(user, { customerId: customer.id, productSummary: "通过但待处置验收", specification: "R1", material: "ABS", process: "注塑", sampleQuantity: 2, samplePurpose: "CUSTOMER_TEST" });
+    pendingAcceptedRequestId = pendingAccepted.id;
+    const pendingAcceptedRound = pendingAccepted.currentRound;
+    await service.submitApproval(user, pendingAcceptedRound.id);
+    await service.approve(user, pendingAcceptedRound.id, {});
+    await service.retain(user, pendingAcceptedRound.id, { producedQuantity: 2, retainedQuantity: 1, retainedLocation: "A-04" });
+    await service.ship(user, pendingAcceptedRound.id, { carrier: "DHL", trackingNo: "TEST-PENDING-ACCEPTED", shippedQuantity: 1 });
+    await service.deliver(user, pendingAcceptedRound.id, {});
+    await service.feedback(user, pendingAcceptedRound.id, { feedbackResult: "ACCEPTED", feedback: "客户确认通过，待安排样品处置", dispositionStatus: "PENDING" });
+    const pendingAcceptedProjected = (await service.list(user, customer.id)).find((item) => item.id === pendingAccepted.id);
+    assert.equal(pendingAcceptedProjected?.currentAction, "第 1 轮等待处置");
+    await service.disposition(user, pendingAcceptedRound.id, "DISPOSED", { note: "已完成报废" });
+    const pendingAcceptedHistory = await service.getHistory(user, pendingAcceptedRequestId);
+    assert.equal(pendingAcceptedHistory[0]?.action, "DISPOSED");
+    const disposedAcceptedProjected = (await service.list(user, customer.id)).find((item) => item.id === pendingAccepted.id);
+    assert.equal(disposedAcceptedProjected?.currentAction, "样品客户已通过");
 
     const keptResample = await service.create(user, { customerId: customer.id, productSummary: "客户保留重打验收", specification: "R1", material: "ABS", process: "注塑", sampleQuantity: 2, samplePurpose: "CUSTOMER_TEST" });
     keptResampleRequestId = keptResample.id;
@@ -99,6 +120,7 @@ async function main() {
     console.log("sample-workflow integration assertions passed");
   } finally {
     if (keptResampleRequestId) await prisma.sampleRequest.delete({ where: { id: keptResampleRequestId } });
+    if (pendingAcceptedRequestId) await prisma.sampleRequest.delete({ where: { id: pendingAcceptedRequestId } });
     if (keptRequestId) await prisma.sampleRequest.delete({ where: { id: keptRequestId } });
     if (requestId) await prisma.sampleRequest.delete({ where: { id: requestId } });
     await prisma.$disconnect();

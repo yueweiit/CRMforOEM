@@ -2057,8 +2057,27 @@ td small {
 }
 
 .sample-detail-dialog.next-dialog {
-  width: min(1040px, calc(100vw - 48px));
-  max-width: calc(100vw - 48px);
+  width: min(1280px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+}
+
+.sample-detail-dialog .sample-detail-timeline {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0;
+  overflow: hidden;
+}
+
+.sample-detail-dialog .sample-detail-timeline__item {
+  flex: 1 1 0;
+  width: 0;
+}
+
+.sample-detail-dialog .sample-detail-timeline__item strong,
+.sample-detail-dialog .sample-detail-timeline__item small,
+.sample-detail-dialog .sample-detail-timeline__item em {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .email-draft-attachments {
@@ -2628,6 +2647,16 @@ td small {
   .sample-detail-timeline {
     grid-template-columns: 1fr;
     gap: 14px;
+  }
+
+  .sample-detail-dialog .sample-detail-timeline {
+    display: grid;
+    gap: 14px;
+    overflow: visible;
+  }
+
+  .sample-detail-dialog .sample-detail-timeline__item {
+    width: auto;
   }
 
   .sample-detail-timeline::before {

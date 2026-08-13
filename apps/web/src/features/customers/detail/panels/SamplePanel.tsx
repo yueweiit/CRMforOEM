@@ -42,6 +42,7 @@ import type { TranslationKey } from "../../../../i18n/resources";
 import { formatDateInput } from "../../../../shared/utils/format";
 import { normalizeQuoteHistoryComment, quoteApprovalHistoryNote } from "../shared/quote-history";
 import type { Quote, QuoteHistoryItem, Sample, SampleFee, SampleHistoryItem, SampleRound } from "../shared/types";
+import { sampleRoundDisplayStatus } from "./sample-round-display";
 
 function downloadBlob(blob: Blob, fileName: string) {
   const url = URL.createObjectURL(blob);
@@ -119,7 +120,11 @@ function statusLabel(status: string) {
     FEEDBACK_RECEIVED: "已反馈",
     VOIDED: "已作废",
     PASSED: "已通过",
-    TERMINATED: "已终止"
+    TERMINATED: "已终止",
+    PENDING_DISPOSITION: "待处置",
+    RETURNED: "已归还",
+    CUSTOMER_KEPT: "客户保留",
+    DISPOSED: "已报废"
   };
   return labels[status] ?? status;
 }
@@ -148,17 +153,16 @@ function canRecordSampleDisposition(round?: Pick<SampleRound, "status" | "feedba
 
 function sampleTaskOutcome(sample?: Pick<Sample, "currentRoundId" | "terminationReason" | "rounds" | "currentRound"> | null) {
   const currentRound = sample?.currentRound ?? sample?.rounds?.find((item) => item.id === sample.currentRoundId) ?? sample?.rounds?.[sample.rounds.length - 1] ?? null;
-  if (sample?.terminationReason) return "TERMINATED";
+  if (sample?.terminationReason || currentRound?.feedbackResult === "CUSTOMER_REJECTED") return "TERMINATED";
   if (currentRound?.status === "VOIDED") return "VOIDED";
-  if (currentRound?.feedbackResult === "CUSTOMER_REJECTED") return "TERMINATED";
-  if (currentRound?.feedbackResult === "ACCEPTED") return "PASSED";
+  if (currentRound?.feedbackResult === "ACCEPTED" && currentRound.dispositionStatus !== "PENDING") return "PASSED";
   return "IN_PROGRESS";
 }
 
 function sampleTaskStatus(sample?: Sample | null) {
   const currentRound = sample?.currentRound ?? sample?.rounds?.find((item) => item.id === sample.currentRoundId) ?? sample?.rounds?.[sample.rounds.length - 1] ?? null;
   const outcome = sampleTaskOutcome(sample);
-  return outcome === "IN_PROGRESS" ? currentRound?.status ?? "DRAFT" : outcome;
+  return outcome === "IN_PROGRESS" ? (currentRound ? sampleRoundDisplayStatus(currentRound) ?? currentRound.status : "DRAFT") : outcome;
 }
 
 function historyActionLabel(item: SampleHistoryItem) {
@@ -194,6 +198,7 @@ function historyActionLabel(item: SampleHistoryItem) {
     RESAMPLE_CREATED: "创建重打轮次",
     CUSTOMER_KEPT: "客户保留",
     RETURNED: "归还",
+    DISPOSED: "已报废",
     VOIDED: "作废",
   };
   return labels[item.action] ?? item.action;
@@ -217,6 +222,24 @@ function responsibilityLabel(value?: string | null, t?: (key: TranslationKey) =>
 function paymentStatusLabel(value?: string | null, t?: (key: TranslationKey) => string) {
   const item = PAYMENT_STATUSES.find((candidate) => candidate.value === value);
   return item ? (t ? t(item.labelKey) : item.label) : value ?? "-";
+}
+
+function sampleFeeDetailMeta(fee: Pick<SampleFee, "costNature" | "responsibility" | "paymentStatus" | "incurredAt" | "note">, t: (key: TranslationKey) => string, locale: string) {
+  const isDefaultActualCost = fee.costNature === "ACTUAL_COST"
+    && fee.responsibility === "FACTORY"
+    && fee.paymentStatus === "NOT_APPLICABLE";
+  const labels = isDefaultActualCost
+    ? []
+    : [
+      costNatureLabel(fee.costNature, t),
+      responsibilityLabel(fee.responsibility, t),
+      paymentStatusLabel(fee.paymentStatus, t)
+    ];
+  return [
+    ...labels,
+    new Date(fee.incurredAt).toLocaleDateString(locale),
+    fee.note ? fee.note : ""
+  ].filter(Boolean).join(" · ");
 }
 
 function sampleRoundLabel(sample: Sample | null | undefined, roundId?: string | null) {
@@ -304,7 +327,6 @@ function quoteStatusPillClass(status: string) {
   };
   return ["status-pill", "status-pill--detail", toneByStatus[status] ?? "status-pill--neutral"].join(" ");
 }
-
 
 function quoteHistoryField(item: QuoteHistoryItem, source: "before" | "after", field: string) {
   const value = item[source]?.[field];
@@ -397,6 +419,17 @@ function normalizeHistoryComment(comment: string) {
 }
 
 function historyDetailText(item: SampleHistoryItem) {
+  if (item.action === "FEEDBACK_RECORDED") {
+    const feedbackResult = typeof item.after?.feedbackResult === "string" ? item.after.feedbackResult : "";
+    const feedback = typeof item.after?.feedback === "string" ? item.after.feedback : "";
+    const dispositionStatus = typeof item.after?.dispositionStatus === "string" ? item.after.dispositionStatus : "";
+    const segments = [
+      feedbackResult ? `反馈结论：${feedbackResultLabel(feedbackResult)}` : "",
+      dispositionStatus && dispositionStatus !== "PENDING" ? `处置：${dispositionLabel(dispositionStatus)}` : "",
+      feedback ? `反馈说明：${feedback}` : ""
+    ].filter(Boolean);
+    return segments.join(" · ");
+  }
   if (item.action !== "FEE_ADDED" && item.action !== "FEE_UPDATED" && item.action !== "FEE_DELETED") {
     return "";
   }
@@ -491,7 +524,11 @@ function sampleStatusPillClass(status: string) {
     COMPLETED: "status-pill--success",
     VOIDED: "status-pill--danger",
     PASSED: "status-pill--success",
-    TERMINATED: "status-pill--danger"
+    TERMINATED: "status-pill--danger",
+    PENDING_DISPOSITION: "status-pill--warning",
+    RETURNED: "status-pill--success",
+    CUSTOMER_KEPT: "status-pill--success",
+    DISPOSED: "status-pill--danger"
   };
   return ["status-pill", "status-pill--detail", toneByStatus[status] ?? "status-pill--neutral"].join(" ");
 }
@@ -506,6 +543,7 @@ function allowedTransitions(status: string) {
     SHIPPED: ["DELIVERED", "VOIDED"],
     DELIVERED: ["FEEDBACK_RECEIVED"],
     FEEDBACK_RECEIVED: ["RETURNED", "CUSTOMER_KEPT", "DISPOSED"],
+    PENDING_DISPOSITION: ["RETURNED", "CUSTOMER_KEPT", "DISPOSED"],
     VOIDED: [],
     COMPLETED: []
   };
@@ -1318,6 +1356,8 @@ export function SamplePanel({ customerId }: { customerId: string }) {
   const detailSampleFeeTotal = activeDetailSample ? sampleCostLabel(activeDetailSample) : "-";
   const sampleDetailRound = activeDetailSample?.rounds?.find((round) => round.id === detailRoundId) ?? activeDetailSample?.currentRound ?? null;
   const sampleDetailStatus = sampleDetailRound?.status ?? "";
+  const sampleDetailDisplayStatus = statusLabel(sampleRoundDisplayStatus(sampleDetailRound ?? { status: sampleDetailStatus }) ?? sampleDetailStatus);
+  const sampleDetailDisplayStatusAt = sampleDetailRound?.completedAt ?? sampleDetailRound?.feedbackAt ?? "";
   const sampleDetailHistory = detailSampleHistoryQuery.data ?? [];
   const sampleDetailRejectedAt = sampleHistoryStatusTime(sampleDetailHistory, "APPROVAL_REJECTED");
   const sampleDetailRetainedAt = sampleDetailRound?.retentionRecord?.retainedAt
@@ -1415,6 +1455,18 @@ export function SamplePanel({ customerId }: { customerId: string }) {
           }
         ]
       : []),
+    ...(["FEEDBACK_RECEIVED", "COMPLETED"].includes(sampleDetailStatus)
+      ? [
+          {
+            label: sampleDetailDisplayStatus,
+            value: sampleDetailDisplayStatusAt ? new Date(sampleDetailDisplayStatusAt).toLocaleString() : "当前状态",
+            done: true,
+            current: true,
+            danger: sampleRoundDisplayStatus(sampleDetailRound ?? { status: sampleDetailStatus }) === "DISPOSED"
+              || sampleRoundDisplayStatus(sampleDetailRound ?? { status: sampleDetailStatus }) === "PENDING_DISPOSITION"
+          }
+        ]
+      : []),
     ...(sampleDetailStatus === "VOIDED"
       ? [{ label: statusLabel("VOIDED"), value: sampleDetailRound?.voidedAt ? new Date(sampleDetailRound.voidedAt).toLocaleString() : "已作废", done: true, current: true, danger: true }]
       : [])
@@ -1481,7 +1533,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                 const nextActions = sampleStatusActions(itemStatus);
                 const canCreateResampleDraft = Boolean(item.currentRoundId)
                   && item.currentRound?.feedbackResult === "RESAMPLE_REQUIRED"
-                  && SAMPLE_AFTER_FEEDBACK_STATUSES.includes(itemStatus)
+                  && item.currentRound?.status !== "VOIDED"
                   && !(item.rounds ?? []).some((round) => round.previousRoundId === item.currentRound?.id);
                 return (
                   <tr key={item.id}>
@@ -1775,12 +1827,6 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                     </select>
                   </div>
                   <div className="form-field">
-                    <label>{t("sampleFields.responsibility")}</label>
-                    <select value={feeItem.responsibility} onChange={(e) => setCreateFeeForms(createFeeForms.map((item, currentIndex) => currentIndex === index ? { ...item, responsibility: e.target.value as SampleFeeForm["responsibility"] } : item))}>
-                      {FEE_RESPONSIBILITIES.map((item) => <option key={item.value} value={item.value}>{t(item.labelKey)}</option>)}
-                    </select>
-                  </div>
-                  <div className="form-field">
                     <label>{t("sampleFields.paymentStatus")}</label>
                     <select value={feeItem.paymentStatus} onChange={(e) => setCreateFeeForms(createFeeForms.map((item, currentIndex) => currentIndex === index ? { ...item, paymentStatus: e.target.value as SampleFeeForm["paymentStatus"] } : item))}>
                       {PAYMENT_STATUSES.map((item) => <option key={item.value} value={item.value}>{t(item.labelKey)}</option>)}
@@ -1793,7 +1839,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                 </div>
               </div>
             ))}
-            {createFeeMessage ? <div className="error-state">{createFeeMessage}</div> : null}
+            {createFeeMessage ? <div className="error-state">{t(createFeeMessage)}</div> : null}
           </div>
         </div>
       </Dialog>
@@ -1839,7 +1885,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
         v2
         className={`crm-action-dialog sample-dialog ${detailMode === "sample" ? "sample-detail-dialog" : "quote-detail-dialog"}`}
         title={detailMode === "sample" ? `样品详情 · ${activeDetailSample?.productSummary ?? ""}` : `报价详情 · ${detailQuote?.quoteNo ?? activeDetailSample?.quote?.quoteNo ?? ""}`}
-        width="min(1040px, calc(100vw - 48px))"
+        width={detailMode === "sample" ? "min(1280px, calc(100vw - 32px))" : "min(1040px, calc(100vw - 48px))"}
         visible={detailOpen}
         onClose={() => setDetailOpen(false)}
         footer={
@@ -1875,6 +1921,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                 {(activeDetailSample?.rounds ?? []).map((round) => {
                   const cost = activeDetailSample?.costSummary?.byRound.find((item) => item.roundId === round.id)?.currencies
                     .map((item) => `${item.currency} ${item.totalActualCost.toFixed(2)}`).join(" / ") || "暂无费用";
+                  const roundDisplayStatus = sampleRoundDisplayStatus(round) ?? round.status;
                   return (
                     <button className={round.id === sampleDetailRound?.id ? "quote-revision-chain__item is-current" : "quote-revision-chain__item"} key={round.id} onClick={() => setDetailRoundId(round.id)} type="button">
                       <span className="quote-revision-chain__identity">
@@ -1882,7 +1929,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                         <span>{round.resampleReason || (round.roundNo === 1 ? "首轮样品" : "重打草稿")}</span>
                       </span>
                       <span className="quote-revision-chain__meta">
-                        <span className={sampleStatusPillClass(round.status)}>{statusLabel(round.status)}</span>
+                        <span className={sampleStatusPillClass(roundDisplayStatus)}>{statusLabel(roundDisplayStatus)}</span>
                         <strong>{cost}</strong>
                       </span>
                     </button>
@@ -1986,7 +2033,7 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                     {activeDetailSample.fees.map((fee) => (
                       <div className="detail-list-item" key={fee.id}>
                         <strong>{feeTypeLabel(fee.feeType, t)} · {formatMoney(Number(fee.amount), fee.currency)} · {sampleRoundLabel(activeDetailSample, fee.sampleRoundId)}</strong>
-                        <span>{costNatureLabel(fee.costNature, t)} · {responsibilityLabel(fee.responsibility, t)} · {paymentStatusLabel(fee.paymentStatus, t)} · {new Date(fee.incurredAt).toLocaleDateString(locale)} {fee.note ? `· ${fee.note}` : ""}</span>
+                        <span>{sampleFeeDetailMeta(fee, t, locale)}</span>
                       </div>
                     ))}
                   </div>
@@ -2510,12 +2557,6 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                 <label>{t("sampleFields.costNature")}</label>
                 <select value={feeForm.costNature} onChange={(e) => setFeeForm({ ...feeForm, costNature: e.target.value as SampleFeeForm["costNature"], paymentStatus: e.target.value === "CUSTOMER_CHARGE" && feeForm.paymentStatus === "NOT_APPLICABLE" ? "PENDING" : feeForm.paymentStatus })}>
                   {COST_NATURES.map((item) => <option key={item.value} value={item.value}>{t(item.labelKey)}</option>)}
-                </select>
-              </div>
-              <div className="form-field">
-                <label>{t("sampleFields.responsibility")}</label>
-                <select value={feeForm.responsibility} onChange={(e) => setFeeForm({ ...feeForm, responsibility: e.target.value as SampleFeeForm["responsibility"] })}>
-                  {FEE_RESPONSIBILITIES.map((item) => <option key={item.value} value={item.value}>{t(item.labelKey)}</option>)}
                 </select>
               </div>
               <div className="form-field">

@@ -1,0 +1,1 @@
+ALTER TYPE "SampleHistoryAction" ADD VALUE IF NOT EXISTS 'DISPOSED';

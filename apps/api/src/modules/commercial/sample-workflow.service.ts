@@ -40,7 +40,7 @@ const requestInclude = Prisma.validator<Prisma.SampleRequestInclude>()({
 const EDITABLE_SAMPLE_ROUND_STATUSES = ["DRAFT", "APPROVAL_REJECTED"] as const;
 
 type SampleRequestRecord = Prisma.SampleRequestGetPayload<{ include: typeof requestInclude }>;
-type HistoryAction = "CREATED" | "UPDATED" | "STATUS_CHANGED" | "FEE_ADDED" | "FEE_UPDATED" | "FEE_DELETED" | "QUOTE_LINKED" | "RETAINED" | "SHIPPED" | "DELIVERED" | "FEEDBACK_RECORDED" | "RESAMPLE_CREATED" | "CUSTOMER_KEPT" | "RETURNED" | "VOIDED" | "CLOSED";
+type HistoryAction = "CREATED" | "UPDATED" | "STATUS_CHANGED" | "FEE_ADDED" | "FEE_UPDATED" | "FEE_DELETED" | "QUOTE_LINKED" | "RETAINED" | "SHIPPED" | "DELIVERED" | "FEEDBACK_RECORDED" | "RESAMPLE_CREATED" | "CUSTOMER_KEPT" | "RETURNED" | "DISPOSED" | "VOIDED" | "CLOSED";
 
 @Injectable()
 export class SampleWorkflowService {
@@ -240,6 +240,11 @@ export class SampleWorkflowService {
           await tx.sampleRequest.update({ where: { id: round.sampleRequestId }, data: { closedAt: new Date(), currentRoundId: null } });
         }
         await this.writeHistory(tx, round.sampleRequestId, roundId, "FEEDBACK_RECORDED", { feedbackResult: dto.feedbackResult, dispositionStatus: dto.dispositionStatus, feedback: dto.feedback.trim() }, actorName, user, "已记录客户反馈");
+        if (!isPendingDisposition) {
+          const dispositionAction = dto.dispositionStatus as "RETURNED" | "CUSTOMER_KEPT" | "DISPOSED";
+          const dispositionComments: Record<typeof dispositionAction, string> = { RETURNED: "已归还", CUSTOMER_KEPT: "客户保留", DISPOSED: "已报废" };
+          await this.writeHistory(tx, round.sampleRequestId, roundId, dispositionAction, { feedbackResult: dto.feedbackResult, dispositionStatus: dto.dispositionStatus }, actorName, user, dispositionComments[dispositionAction]);
+        }
         return updated;
       });
   }
@@ -290,7 +295,8 @@ export class SampleWorkflowService {
       const updated = await tx.sampleRound.update({ where: { id: roundId }, data: { dispositionStatus: status, status: "COMPLETED", completedAt: new Date() } });
       await tx.sampleReturnRecord.create({ data: { sampleRequestId: round.sampleRequestId, sampleRoundId: roundId, dispositionStatus: status, receiverName: dto.receiverName?.trim(), destination: dto.destination?.trim(), note: dto.note?.trim(), recordedAt: dto.recordedAt ? new Date(dto.recordedAt) : new Date(), recordedById: user.id } });
       if (round.feedbackResult === "ACCEPTED") await tx.sampleRequest.update({ where: { id: round.sampleRequestId }, data: { closedAt: new Date(), currentRoundId: null } });
-      await this.writeHistory(tx, round.sampleRequestId, roundId, status === "RETURNED" ? "RETURNED" : status === "CUSTOMER_KEPT" ? "CUSTOMER_KEPT" : "UPDATED", { dispositionStatus: status }, actorName, user, status === "RETURNED" ? "已归还" : status === "CUSTOMER_KEPT" ? "客户保留" : "已更新样品处置");
+      const dispositionComments: Record<typeof status, string> = { RETURNED: "已归还", CUSTOMER_KEPT: "客户保留", DISPOSED: "已报废" };
+      await this.writeHistory(tx, round.sampleRequestId, roundId, status, { dispositionStatus: status }, actorName, user, dispositionComments[status]);
       return updated;
     });
   }
@@ -447,20 +453,25 @@ export class SampleWorkflowService {
     };
   }
 
-  private requestOutcome(request: { currentRoundId: string | null; terminationReason: string | null; rounds: Array<{ id: string; status: string; feedbackResult: string | null }> }) {
+  private requestOutcome(request: { currentRoundId: string | null; terminationReason: string | null; rounds: Array<{ id: string; status: string; feedbackResult: string | null; dispositionStatus: string }> }) {
     const currentRound = request.rounds.find((round) => round.id === request.currentRoundId) ?? request.rounds[request.rounds.length - 1] ?? null;
     if (request.terminationReason) return "TERMINATED";
     if (currentRound?.status === "VOIDED") return "VOIDED";
     if (currentRound?.feedbackResult === "CUSTOMER_REJECTED") return "TERMINATED";
-    if (currentRound?.feedbackResult === "ACCEPTED") return "PASSED";
+    if (currentRound?.feedbackResult === "ACCEPTED" && currentRound.dispositionStatus !== "PENDING") return "PASSED";
     return "IN_PROGRESS";
   }
 
-  private currentAction(requestOutcome: string, round: { roundNo: number; status: string } | null) {
-    if (requestOutcome === "PASSED") return "样品客户已通过";
+  private currentAction(requestOutcome: string, round: { roundNo: number; status: string; dispositionStatus: string } | null) {
+    if (!round) return "等待创建第 1 轮";
+    if (round.status === "COMPLETED") {
+      const dispositionLabels: Record<string, string> = { RETURNED: "已归还", CUSTOMER_KEPT: "客户保留", DISPOSED: "已报废" };
+      if (requestOutcome === "PASSED") return "样品客户已通过";
+      if (dispositionLabels[round.dispositionStatus]) return `第 ${round.roundNo} 轮${dispositionLabels[round.dispositionStatus]}`;
+    }
+    if (requestOutcome === "TERMINATED" && round.dispositionStatus === "PENDING") return `第 ${round.roundNo} 轮待处置`;
     if (requestOutcome === "TERMINATED") return "样品任务已终止";
     if (requestOutcome === "VOIDED") return "样品任务已作废";
-    if (!round) return "等待创建第 1 轮";
     const labels: Record<string, string> = { DRAFT: `第 ${round.roundNo} 轮草稿`, PENDING_APPROVAL: `第 ${round.roundNo} 轮待审批`, APPROVAL_REJECTED: `第 ${round.roundNo} 轮审批驳回`, PREPARING: round.roundNo > 1 ? `第 ${round.roundNo} 轮重新打样中` : "首轮打样中", RETAINED: `第 ${round.roundNo} 轮已留样`, SHIPPED: `第 ${round.roundNo} 轮已寄出`, DELIVERED: `第 ${round.roundNo} 轮已签收`, FEEDBACK_RECEIVED: `第 ${round.roundNo} 轮等待处置`, COMPLETED: `第 ${round.roundNo} 轮已完成`, VOIDED: `第 ${round.roundNo} 轮已作废` };
     return labels[round.status] ?? round.status;
   }
