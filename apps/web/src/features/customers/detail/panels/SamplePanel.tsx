@@ -56,8 +56,8 @@ function downloadBlob(blob: Blob, fileName: string) {
 }
 
 const COST_NATURES = [
-  { value: "ACTUAL_COST", label: "实际成本", labelKey: "sampleFields.actualCost" },
-  { value: "CUSTOMER_CHARGE", label: "客户收费", labelKey: "sampleFields.customerCharge" }
+  { value: "ACTUAL_COST", label: "公司承担", labelKey: "sampleFields.actualCost" },
+  { value: "CUSTOMER_CHARGE", label: "客户承担", labelKey: "sampleFields.customerCharge" }
 ] as const;
 
 const FEE_RESPONSIBILITIES = [
@@ -1800,13 +1800,13 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                 <div className="sample-fee-card__fields">
                   <div className="form-field">
                     <label>{t("sampleFields.feeType")}</label>
-                    <select value={feeItem.feeType} onChange={(e) => setCreateFeeForms(createFeeForms.map((item, currentIndex) => currentIndex === index ? { ...item, feeType: e.target.value } : item))}>
-                      {FEE_TYPES.map((item) => (
-                        <option key={item.value} value={item.value}>
-                          {t(item.labelKey)}
-                        </option>
-                      ))}
-                    </select>
+                    <AppSelect
+                      className="sample-fee-select"
+                      popupClassName="sample-fee-select-popup"
+                      value={feeItem.feeType}
+                      onChange={(value) => setCreateFeeForms(createFeeForms.map((item, currentIndex) => currentIndex === index ? { ...item, feeType: value } : item))}
+                      options={FEE_TYPES.map((item) => ({ value: item.value, label: t(item.labelKey) }))}
+                    />
                   </div>
                   <div className="form-field">
                     <label>{t("common.amount")}</label>
@@ -1822,15 +1822,23 @@ export function SamplePanel({ customerId }: { customerId: string }) {
                   </div>
                   <div className="form-field">
                     <label>{t("sampleFields.costNature")}</label>
-                    <select value={feeItem.costNature} onChange={(e) => setCreateFeeForms(createFeeForms.map((item, currentIndex) => currentIndex === index ? { ...item, costNature: e.target.value as SampleFeeForm["costNature"], paymentStatus: e.target.value === "CUSTOMER_CHARGE" && item.paymentStatus === "NOT_APPLICABLE" ? "PENDING" : item.paymentStatus } : item))}>
-                      {COST_NATURES.map((item) => <option key={item.value} value={item.value}>{t(item.labelKey)}</option>)}
-                    </select>
+                    <AppSelect
+                      className="sample-fee-select"
+                      popupClassName="sample-fee-select-popup"
+                      value={feeItem.costNature}
+                      onChange={(value) => setCreateFeeForms(createFeeForms.map((item, currentIndex) => currentIndex === index ? { ...item, costNature: value as SampleFeeForm["costNature"], paymentStatus: value === "CUSTOMER_CHARGE" && item.paymentStatus === "NOT_APPLICABLE" ? "PENDING" : item.paymentStatus } : item))}
+                      options={COST_NATURES.map((item) => ({ value: item.value, label: t(item.labelKey) }))}
+                    />
                   </div>
                   <div className="form-field">
                     <label>{t("sampleFields.paymentStatus")}</label>
-                    <select value={feeItem.paymentStatus} onChange={(e) => setCreateFeeForms(createFeeForms.map((item, currentIndex) => currentIndex === index ? { ...item, paymentStatus: e.target.value as SampleFeeForm["paymentStatus"] } : item))}>
-                      {PAYMENT_STATUSES.map((item) => <option key={item.value} value={item.value}>{t(item.labelKey)}</option>)}
-                    </select>
+                    <AppSelect
+                      className="sample-fee-select"
+                      popupClassName="sample-fee-select-popup"
+                      value={feeItem.paymentStatus}
+                      onChange={(value) => setCreateFeeForms(createFeeForms.map((item, currentIndex) => currentIndex === index ? { ...item, paymentStatus: value as SampleFeeForm["paymentStatus"] } : item))}
+                      options={PAYMENT_STATUSES.map((item) => ({ value: item.value, label: t(item.labelKey) }))}
+                    />
                   </div>
                 </div>
                 <div className="form-field wide-field sample-fee-card__note">
@@ -2526,13 +2534,13 @@ export function SamplePanel({ customerId }: { customerId: string }) {
             <div className="sample-fee-card__fields">
               <div className="form-field">
                 <label>{t("sampleFields.feeType")}</label>
-                <select value={feeForm.feeType} onChange={(e) => setFeeForm({ ...feeForm, feeType: e.target.value })}>
-                  {FEE_TYPES.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {t(item.labelKey)}
-                    </option>
-                  ))}
-                </select>
+                <AppSelect
+                  className="sample-fee-select"
+                  popupClassName="sample-fee-select-popup"
+                  value={feeForm.feeType}
+                  onChange={(value) => setFeeForm({ ...feeForm, feeType: value })}
+                  options={FEE_TYPES.map((item) => ({ value: item.value, label: t(item.labelKey) }))}
+                />
               </div>
               <div className="form-field">
                 <label>{t("common.amount")}</label>
@@ -2548,22 +2556,36 @@ export function SamplePanel({ customerId }: { customerId: string }) {
               </div>
               <div className="form-field">
                 <label>{t("sampleFields.feeRound")}</label>
-                <select value={feeForm.sampleRoundId} onChange={(e) => setFeeForm({ ...feeForm, sampleRoundId: e.target.value })}>
-                  <option value="">{t("sampleFields.sharedFee")}</option>
-                  {(feeSample?.rounds ?? []).map((round) => <option key={round.id} value={round.id}>R{round.roundNo}</option>)}
-                </select>
+                <AppSelect
+                  className="sample-fee-select"
+                  popupClassName="sample-fee-select-popup"
+                  value={feeForm.sampleRoundId}
+                  onChange={(value) => setFeeForm({ ...feeForm, sampleRoundId: value })}
+                  options={[
+                    { value: "", label: t("sampleFields.sharedFee") },
+                    ...(feeSample?.rounds ?? []).map((round) => ({ value: round.id, label: `R${round.roundNo}` }))
+                  ]}
+                />
               </div>
               <div className="form-field">
                 <label>{t("sampleFields.costNature")}</label>
-                <select value={feeForm.costNature} onChange={(e) => setFeeForm({ ...feeForm, costNature: e.target.value as SampleFeeForm["costNature"], paymentStatus: e.target.value === "CUSTOMER_CHARGE" && feeForm.paymentStatus === "NOT_APPLICABLE" ? "PENDING" : feeForm.paymentStatus })}>
-                  {COST_NATURES.map((item) => <option key={item.value} value={item.value}>{t(item.labelKey)}</option>)}
-                </select>
+                <AppSelect
+                  className="sample-fee-select"
+                  popupClassName="sample-fee-select-popup"
+                  value={feeForm.costNature}
+                  onChange={(value) => setFeeForm({ ...feeForm, costNature: value as SampleFeeForm["costNature"], paymentStatus: value === "CUSTOMER_CHARGE" && feeForm.paymentStatus === "NOT_APPLICABLE" ? "PENDING" : feeForm.paymentStatus })}
+                  options={COST_NATURES.map((item) => ({ value: item.value, label: t(item.labelKey) }))}
+                />
               </div>
               <div className="form-field">
                 <label>{t("sampleFields.paymentStatus")}</label>
-                <select value={feeForm.paymentStatus} onChange={(e) => setFeeForm({ ...feeForm, paymentStatus: e.target.value as SampleFeeForm["paymentStatus"] })}>
-                  {PAYMENT_STATUSES.map((item) => <option key={item.value} value={item.value}>{t(item.labelKey)}</option>)}
-                </select>
+                <AppSelect
+                  className="sample-fee-select"
+                  popupClassName="sample-fee-select-popup"
+                  value={feeForm.paymentStatus}
+                  onChange={(value) => setFeeForm({ ...feeForm, paymentStatus: value as SampleFeeForm["paymentStatus"] })}
+                  options={PAYMENT_STATUSES.map((item) => ({ value: item.value, label: t(item.labelKey) }))}
+                />
               </div>
             </div>
             <div className="form-field wide-field sample-fee-card__note">

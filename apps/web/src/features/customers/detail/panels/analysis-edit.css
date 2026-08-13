@@ -108,6 +108,49 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.sample-fee-select.next-select {
+  width: 100%;
+}
+
+.sample-fee-select.next-select .next-select-inner {
+  padding-inline: 8px 2px;
+}
+
+.sample-fee-select.next-select .next-select-trigger .next-input-control {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 0;
+}
+
+.sample-fee-dialog .localized-date-picker .next-date-picker2-input .next-input-control {
+  right: 2px;
+}
+
+.sample-fee-dialog .localized-date-picker .next-date-picker2-input .next-input input,
+.sample-fee-dialog .localized-date-picker .next-date-picker2-input .next-input input:hover,
+.sample-fee-dialog .localized-date-picker .next-date-picker2-input .next-input input:focus {
+  padding-right: 20px !important;
+}
+
+.sample-fee-select-popup .next-select-menu .next-menu-icon-selected {
+  color: #0f766e;
+}
+
+.sample-fee-select-popup .next-select-menu .next-menu-item:hover,
+.sample-fee-select-popup .next-select-menu .next-menu-item-inner:hover,
+.sample-fee-select-popup .next-select-menu .next-select-menu-item:hover {
+  background: #f1f7f3;
+  color: #0f766e;
+}
+
+.sample-fee-select-popup .next-select-menu .next-selected,
+.sample-fee-select-popup .next-select-menu .next-menu-item.next-selected,
+.sample-fee-select-popup .next-select-menu .next-select-menu-item.next-selected {
+  background: #e8f3ef;
+  color: #0f766e;
+  font-weight: 700;
+}
+
 .sample-fee-card__note {
   margin-top: -2px;
 }
