@@ -122,7 +122,8 @@ async function apiMutationRequest<T>(
 
 async function apiRequest<T>(path: string, init: RequestInit, allowRefresh = true): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, init);
-  if (response.status === 401 && allowRefresh && path !== "/auth/login" && path !== "/auth/refresh") {
+  const canRefresh = allowRefresh && path !== "/auth/login" && path !== "/auth/refresh";
+  if ((response.status === 401 || response.status === 403) && canRefresh) {
     const refreshed = await refreshAccessToken();
     if (refreshed) {
       return apiRequest<T>(
@@ -131,7 +132,7 @@ async function apiRequest<T>(path: string, init: RequestInit, allowRefresh = tru
         false
       );
     }
-    clearSessionAndRedirect();
+    if (response.status === 401) clearSessionAndRedirect();
   }
 
   if (!response.ok) {
@@ -159,7 +160,8 @@ async function apiBlobRequest(
   allowRefresh = true
 ): Promise<{ blob: Blob; fileName?: string; contentType?: string }> {
   const response = await fetch(`${API_BASE}${path}`, init);
-  if (response.status === 401 && allowRefresh && path !== "/auth/login" && path !== "/auth/refresh") {
+  const canRefresh = allowRefresh && path !== "/auth/login" && path !== "/auth/refresh";
+  if ((response.status === 401 || response.status === 403) && canRefresh) {
     const refreshed = await refreshAccessToken();
     if (refreshed) {
       return apiBlobRequest(
@@ -168,7 +170,7 @@ async function apiBlobRequest(
         false
       );
     }
-    clearSessionAndRedirect();
+    if (response.status === 401) clearSessionAndRedirect();
   }
 
   if (!response.ok) {
