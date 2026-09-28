@@ -7,15 +7,15 @@ WHERE "status" = 'AWAITING_FEEDBACK';
 
 UPDATE "sample_rounds"
 SET "dispositionStatus" = 'PENDING'
-WHERE "dispositionStatus" IN ('RETURN_PENDING', 'LEGACY_UNRESOLVED');
+WHERE "dispositionStatus"::text IN ('RETURN_PENDING', 'LEGACY_UNRESOLVED');
 
 UPDATE "sample_return_records"
 SET "dispositionStatus" = 'PENDING'
-WHERE "dispositionStatus" IN ('RETURN_PENDING', 'LEGACY_UNRESOLVED');
+WHERE "dispositionStatus"::text IN ('RETURN_PENDING', 'LEGACY_UNRESOLVED');
 
 UPDATE "sample_rounds"
 SET "retentionEvidenceStatus" = 'PENDING'
-WHERE "retentionEvidenceStatus" = 'LEGACY_UNRECORDED';
+WHERE "retentionEvidenceStatus"::text = 'LEGACY_UNRECORDED';
 
 UPDATE "sample_histories"
 SET "before" = jsonb_set("before", '{dispositionStatus}', '"PENDING"'::jsonb, false)
